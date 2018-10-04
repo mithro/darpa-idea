@@ -1,0 +1,365 @@
+;OSX Packages
+jitpcb-pkgs :
+  filenames :
+    "../src/ir/ir-gen-macros.stanza"
+    "../src/utils/serialize-macros.stanza"
+    "../src/ir/rtm-ir.stanza"
+    "../src/ir/ir-gen.stanza"
+    "../src/ir/ir-printer.stanza"
+    "../src/ir/ir-serializer.stanza"
+    "../src/ir/ir-reader.stanza"
+    "../src/ir/ir-errors.stanza"
+    "../src/ir/ir-utils.stanza"
+    "../src/utils/errors.stanza"
+    "../src/utils/plugins.stanza"
+    "../src/utils/plugins-master.stanza"
+    "../src/utils/plugins-slave.stanza"
+    "../src/utils/serialize.stanza"
+    "../src/utils/dlopen.stanza"
+    "../src/utils/rtm-utils.stanza"
+    "../src/utils/structures.stanza"
+    "../src/main/flags.stanza"
+    "../src/main/errors.stanza"
+    "../src/main/driver-commands.stanza"
+    "../src/main/config.stanza"
+    "../src/main/jitpcb.stanza"
+    "../src/ir/part-solver.stanza"
+    "../src/ir/ir-check.stanza"
+    "../src/ir/ir-passes.stanza"
+    "../src/kicad/bd-ir.stanza"
+    "../src/kicad/board.stanza"
+    "../src/kicad/sch-ir.stanza"
+    "../src/kicad/schematic.stanza"
+    "../src/kicad/utils.stanza"
+    "../src/kicad/kicad-exporter.stanza"
+    "../src/ir/bom-gen.stanza"
+    "../stanza-utils/utils.stanza"
+    "../stanza-geom/geom.stanza"
+    "../stanza-geom/aabb-tree.stanza"
+    "../src/ir/pin-solver.stanza"
+    "../src/place/rtm-bounds.stanza"
+    "../src/place/board.stanza"
+    "../src/place/placer.stanza"
+    "../src/place/dsn.stanza"
+  pkg: "pkgs"
+  
+;OSX Fast Packages
+jitpcb-fpkgs :
+  filenames :
+    "../src/ir/ir-gen-macros.stanza"
+    "../src/utils/serialize-macros.stanza"
+    "../src/ir/rtm-ir.stanza"
+    "../src/ir/ir-gen.stanza"
+    "../src/ir/ir-printer.stanza"
+    "../src/ir/ir-serializer.stanza"
+    "../src/ir/ir-reader.stanza"
+    "../src/ir/ir-errors.stanza"
+    "../src/ir/ir-utils.stanza"
+    "../src/utils/errors.stanza"
+    "../src/utils/plugins.stanza"
+    "../src/utils/plugins-master.stanza"
+    "../src/utils/plugins-slave.stanza"
+    "../src/utils/serialize.stanza"
+    "../src/utils/dlopen.stanza"
+    "../src/utils/rtm-utils.stanza"
+    "../src/utils/structures.stanza"
+    "../src/main/flags.stanza"
+    "../src/main/errors.stanza"
+    "../src/main/driver-commands.stanza"
+    "../src/main/config.stanza"
+    "../src/main/jitpcb.stanza"
+    "../src/ir/part-solver.stanza"
+    "../src/ir/ir-check.stanza"
+    "../src/ir/ir-passes.stanza"
+    "../src/kicad/bd-ir.stanza"
+    "../src/kicad/board.stanza"
+    "../src/kicad/sch-ir.stanza"
+    "../src/kicad/schematic.stanza"
+    "../src/kicad/utils.stanza"
+    "../src/kicad/kicad-exporter.stanza"
+    "../src/ir/bom-gen.stanza"
+    "../stanza-utils/utils.stanza"
+    "../stanza-geom/geom.stanza"
+    "../stanza-geom/aabb-tree.stanza"
+    "../src/ir/pin-solver.stanza"
+    "../src/place/rtm-bounds.stanza"
+    "../src/place/board.stanza"
+    "../src/place/placer.stanza"
+    "../src/place/dsn.stanza"
+  pkg: "fpkgs"
+  optimize
+
+;OSX Core
+jitpcb-debug :
+  link: (jitpcb)
+  pkg: "pkgs"
+  o: "jitpcb-debug"
+  ccfiles: ("runtime/rtm-utils.c")
+  
+jitpcb :
+  link: (jitpcb)
+  pkg: "fpkgs"
+  o: "jitpcb"
+  ccfiles: ("runtime/rtm-utils.c")
+  optimize
+
+;OSX Plugins
+plugin-checker :
+  link: (rtm/ir-check)
+  pkg: "pkgs"
+  o: "plugins/checker.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+plugin-lower :
+  link: (rtm/ir-passes)
+  pkg: "pkgs"
+  o: "plugins/lower.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+plugin-export-kicad :
+  link: (kicad/exporter)
+  pkg: "pkgs"
+  o: "plugins/export_kicad.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+plugin-parts-list :
+  link: (rtm/bom-gen)
+  pkg: "pkgs"
+  o: "plugins/parts_list.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+plugin-placer :
+  link: (placer)
+  pkg: "pkgs"
+  o: "plugins/place.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+plugin-dsn :
+  link: (dsn)
+  pkg: "pkgs"
+  o: "plugins/dsn.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+
+;OSX Fast Plugins
+fplugin-checker :
+  link: (rtm/ir-check)
+  pkg: "fpkgs"
+  o: "fplugins/checker.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+  optimize
+fplugin-lower :
+  link: (rtm/ir-passes)
+  pkg: "fpkgs"
+  o: "fplugins/lower.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+  optimize
+fplugin-export-kicad :
+  link: (kicad/exporter)
+  pkg: "fpkgs"
+  o: "fplugins/export_kicad.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+  optimize
+fplugin-parts-list :
+  link: (rtm/bom-gen)
+  pkg: "fpkgs"
+  o: "fplugins/parts_list.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+  optimize
+fplugin-placer :
+  link: (placer)
+  pkg: "fpkgs"
+  o: "fplugins/place.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+  optimize
+fplugin-dsn :
+  link: (dsn)
+  pkg: "fpkgs"
+  o: "fplugins/dsn.plugin"
+  ccfiles: ("runtime/rtm-utils.c")
+  ccflags: "-shared"
+  optimize
+
+;============================================================
+;======================== Linux =============================
+;============================================================
+
+linux-jitpcb-pkgs :
+  filenames :
+    "../src/ir/ir-gen-macros.stanza"
+    "../src/utils/serialize-macros.stanza"
+    "../src/ir/rtm-ir.stanza"
+    "../src/ir/ir-gen.stanza"
+    "../src/ir/ir-printer.stanza"
+    "../src/ir/ir-serializer.stanza"
+    "../src/ir/ir-reader.stanza"
+    "../src/ir/ir-errors.stanza"
+    "../src/ir/ir-utils.stanza"
+    "../src/utils/errors.stanza"
+    "../src/utils/plugins.stanza"
+    "../src/utils/plugins-master.stanza"
+    "../src/utils/plugins-slave.stanza"
+    "../src/utils/serialize.stanza"
+    "../src/utils/dlopen.stanza"
+    "../src/utils/rtm-utils.stanza"
+    "../src/utils/structures.stanza"
+    "../src/main/flags.stanza"
+    "../src/main/errors.stanza"
+    "../src/main/driver-commands.stanza"
+    "../src/main/config.stanza"
+    "../src/main/jitpcb.stanza"
+    "../src/ir/part-solver.stanza"
+    "../src/ir/ir-check.stanza"
+    "../src/ir/ir-passes.stanza"
+    "../src/kicad/bd-ir.stanza"
+    "../src/kicad/board.stanza"
+    "../src/kicad/sch-ir.stanza"
+    "../src/kicad/schematic.stanza"
+    "../src/kicad/utils.stanza"
+    "../src/kicad/kicad-exporter.stanza"
+    "../src/ir/bom-gen.stanza"
+    "../stanza-utils/utils.stanza"
+    "../stanza-geom/geom.stanza"
+    "../stanza-geom/aabb-tree.stanza"
+    "../src/ir/pin-solver.stanza"
+    "../src/place/rtm-bounds.stanza"
+    "../src/place/board.stanza"
+    "../src/place/placer.stanza"
+    "../src/place/dsn.stanza"
+  pkg: "pkgs"
+  platform: linux
+  
+linux-jitpcb-fpkgs :
+  filenames :
+    "../src/ir/ir-gen-macros.stanza"
+    "../src/utils/serialize-macros.stanza"
+    "../src/ir/rtm-ir.stanza"
+    "../src/ir/ir-gen.stanza"
+    "../src/ir/ir-printer.stanza"
+    "../src/ir/ir-serializer.stanza"
+    "../src/ir/ir-reader.stanza"
+    "../src/ir/ir-errors.stanza"
+    "../src/ir/ir-utils.stanza"
+    "../src/utils/errors.stanza"
+    "../src/utils/plugins.stanza"
+    "../src/utils/plugins-master.stanza"
+    "../src/utils/plugins-slave.stanza"
+    "../src/utils/serialize.stanza"
+    "../src/utils/dlopen.stanza"
+    "../src/utils/rtm-utils.stanza"
+    "../src/utils/structures.stanza"
+    "../src/main/flags.stanza"
+    "../src/main/errors.stanza"
+    "../src/main/driver-commands.stanza"
+    "../src/main/config.stanza"
+    "../src/main/jitpcb.stanza"
+    "../src/ir/part-solver.stanza"
+    "../src/ir/ir-check.stanza"
+    "../src/ir/ir-passes.stanza"
+    "../src/kicad/bd-ir.stanza"
+    "../src/kicad/board.stanza"
+    "../src/kicad/sch-ir.stanza"
+    "../src/kicad/schematic.stanza"
+    "../src/kicad/utils.stanza"
+    "../src/kicad/kicad-exporter.stanza"
+    "../src/ir/bom-gen.stanza"
+    "../stanza-utils/utils.stanza"
+    "../stanza-geom/geom.stanza"
+    "../stanza-geom/aabb-tree.stanza"
+    "../src/ir/pin-solver.stanza"
+    "../src/place/rtm-bounds.stanza"
+    "../src/place/board.stanza"
+    "../src/place/placer.stanza"
+    "../src/place/dsn.stanza"
+  pkg: "fpkgs"
+  optimize
+  platform: linux
+
+linux-jitpcb-debug :
+  link: (jitpcb)
+  pkg: "pkgs"
+  s: "jitpcb-debug.s"
+  ccfiles: ("runtime/rtm-utils.c")
+  platform: linux
+  
+linux-jitpcb :
+  link: (jitpcb)
+  pkg: "fpkgs"
+  s: "jitpcb.s"
+  ccfiles: ("runtime/rtm-utils.c")
+  optimize
+  platform: linux
+
+linux-plugin-checker :
+  link: (rtm/ir-check)
+  pkg: "pkgs"
+  s: "plugins/checker.plugin.s"
+  platform: linux
+linux-plugin-lower :
+  link: (rtm/ir-passes)
+  pkg: "pkgs"
+  s: "plugins/lower.plugin.s"
+  platform: linux
+linux-plugin-export-kicad :
+  link: (kicad/exporter)
+  pkg: "pkgs"
+  s: "plugins/export_kicad.plugin.s"
+  platform: linux
+linux-plugin-parts-list :
+  link: (rtm/bom-gen)
+  pkg: "pkgs"
+  s: "plugins/parts_list.plugin.s"
+  platform: linux
+linux-plugin-placer :
+  link: (placer)
+  pkg: "pkgs"
+  s: "plugins/place.plugin.s"
+  platform: linux
+linux-plugin-dsn :
+  link: (dsn)
+  pkg: "pkgs"
+  s: "plugins/dsn.plugin.s"
+  platform: linux
+
+;OSX Fast Plugins
+linux-fplugin-checker :
+  link: (rtm/ir-check)
+  pkg: "fpkgs"
+  s: "fplugins/checker.plugin.s"
+  optimize
+  platform: linux
+linux-fplugin-lower :
+  link: (rtm/ir-passes)
+  pkg: "fpkgs"
+  s: "fplugins/lower.plugin.s"
+  optimize
+  platform: linux
+linux-fplugin-export-kicad :
+  link: (kicad/exporter)
+  pkg: "fpkgs"
+  s: "fplugins/export_kicad.plugin.s"
+  optimize
+  platform: linux
+linux-fplugin-parts-list :
+  link: (rtm/bom-gen)
+  pkg: "fpkgs"
+  s: "fplugins/parts_list.plugin.s"
+  optimize
+  platform: linux
+linux-fplugin-placer :
+  link: (placer)
+  pkg: "fpkgs"
+  s: "fplugins/place.plugin.s"
+  optimize
+  platform: linux
+linux-fplugin-dsn :
+  link: (dsn)
+  pkg: "fpkgs"
+  s: "fplugins/dsn.plugin.s"
+  optimize
+  platform: linux

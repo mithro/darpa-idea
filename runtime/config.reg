@@ -1,0 +1,2 @@
+defregistry rtm-runtime :
+  file "rtm-utils.c"

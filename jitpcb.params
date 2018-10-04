@@ -1,0 +1,36 @@
+;The following is an example of the parameter file for JitPCB. 
+;
+;lower :
+;  post-power-generation = false
+;
+;place :
+;  margin = 20.0
+;  via-diameter = 24.0
+;  via-drill = 12.0
+;  desired-rate = 4.0
+;  print-progress = true
+;  overlap-fac = 300.0
+;  overlap-offset = 100.0
+;  net-fac = 100.0
+;  short-trace-fac = 150.0
+;  center-fac = 0.0
+;  area-fac = 0.0
+;  num-iters = 1
+;  max-retries = 4
+;  power-trace-width = 20.0
+;
+;place (tight-tolerances) :
+;  margin = 40.0
+;
+;kicad :
+;  preplaced = false
+;
+;prune :
+;  prune-for = schematic
+;
+;bom :
+;  vendors = ("Digi-Key" "Mouser")
+;  select = ".select"
+;
+;drc :
+;  yaml = true
