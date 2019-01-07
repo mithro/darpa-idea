@@ -1,0 +1,120 @@
+defpackage interfaces :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-utils
+
+#use-added-syntax(ir-gen)
+
+;==== Bundles ==================================================================
+
+pcb-bundle power :
+  pin pos
+  pin neg
+
+pcb-bundle iv-sense :
+  pin v-in
+  pin v-out
+
+pcb-bundle shunt :
+  pin i-in
+  pin i-out
+
+pcb-bundle uart :
+  pin rx
+  pin tx
+
+; these are indeed called "A" and "B" or "D-" and "D+" as a secondary option
+; https://en.wikipedia.org/wiki/RS-485
+pcb-bundle rs485 :
+  pin d-
+  pin d+
+
+pcb-bundle can :
+  pin rx
+  pin tx
+
+pcb-bundle i2c :
+  pin sda
+  pin scl
+
+pcb-bundle spi :
+  pin mosi
+  pin miso
+  pin sck
+  pin ss
+
+pcb-bundle usb-2 :
+  pin dat-
+  pin dat+
+
+pcb-bundle swd :
+  pin swdio
+  pin swclk
+  pin reset
+  pin swo
+
+pcb-bundle diff-pair :
+  pin D_P
+  pin D_N
+
+pcb-bundle edp :
+  port power-3v3 : power
+  port power-19v0 : power
+  port aux-ch0 : diff-pair
+  port d0 : diff-pair
+  port d1 : diff-pair
+  pin hpd0
+  pin lcd-bl-en
+  pin lcd-bl-pwm
+
+;==== Capabilities =============================================================
+
+public val CAPABILITY-TABLE = HashTable<Symbol, Symbol>()
+CAPABILITY-TABLE[`power-3v0-source] = `power
+CAPABILITY-TABLE[`power-3v0] = `power
+CAPABILITY-TABLE[`power-3v3-source] = `power
+CAPABILITY-TABLE[`power-3v3] = `power
+CAPABILITY-TABLE[`power-5v0-source] = `power
+CAPABILITY-TABLE[`power-5v0] = `power
+CAPABILITY-TABLE[`power-7v4-source] = `power
+CAPABILITY-TABLE[`power-7v4] = `power
+CAPABILITY-TABLE[`power-12v0-source] = `power
+CAPABILITY-TABLE[`power-12v0] = `power
+CAPABILITY-TABLE[`power-48v0-source] = `power
+CAPABILITY-TABLE[`power-48v0] = `power
+CAPABILITY-TABLE[`power-batt-source] = `power
+CAPABILITY-TABLE[`power-batt] = `power
+CAPABILITY-TABLE[`power-ref-source] = `power
+CAPABILITY-TABLE[`power-ref] = `power
+CAPABILITY-TABLE[`power-source] = `power
+CAPABILITY-TABLE[`power] = `power
+
+CAPABILITY-TABLE[`adc] = `pin
+CAPABILITY-TABLE[`dac] = `pin
+CAPABILITY-TABLE[`pwm] = `pin
+CAPABILITY-TABLE[`dio] = `pin
+CAPABILITY-TABLE[`reset] = `pin
+CAPABILITY-TABLE[`ext-int] = `pin
+CAPABILITY-TABLE[`edio] = `pin
+CAPABILITY-TABLE[`iv-sense] = `iv-sense
+CAPABILITY-TABLE[`pass] = `pin
+CAPABILITY-TABLE[`uart] = `uart
+;CAPABILITY-TABLE[`rs485] = `rs485
+CAPABILITY-TABLE[`can] = `can
+CAPABILITY-TABLE[`i2c] = `i2c
+CAPABILITY-TABLE[`i2c-0] = `i2c
+CAPABILITY-TABLE[`spi] = `spi
+CAPABILITY-TABLE[`usb-2] = `usb-2
+CAPABILITY-TABLE[`swd] = `swd
+CAPABILITY-TABLE[`diff-pair] = `diff-pair
+CAPABILITY-TABLE[`edp] = `edp
+; Dummy capabiltiy for crossbar use
+CAPABILITY-TABLE[`bar-pin] = `pin
+
+for e in CAPABILITY-TABLE do :
+  if value(e) == `pin :
+    pcb-capability {Ref(key(e))} : pin
+  else :
+    pcb-capability {Ref(key(e))} : {Ref(value(e))}

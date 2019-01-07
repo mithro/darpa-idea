@@ -1,0 +1,43 @@
+bin/
+analysis/
+
+# Generated input files
+*.oi
+*.si
+*.ti
+
+# Package files
+*.pkg
+
+# ESIR design files
+*.esir
+
+# Error files
+*.errors
+
+# Process lock files
+.*.lock
+
+# Electra files
+*.dsn
+*.do
+*.rts
+*.log
+*.rte
+
+# Param/BOM files
+*.params
+*.bom
+*.select*
+*.csv
+
+# Output files/directories
+*.kicad
+
+# Timestamp files
+*.start
+*.continue
+
+# Report files
+*.yaml
+

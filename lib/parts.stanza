@@ -1,0 +1,1350 @@
+defpackage parts :
+  import core
+  import collections
+  import math
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-utils
+  import footprints
+
+#use-added-syntax(ir-gen)
+
+; ====== Standard Tolerances and Logarithmic Values ======
+
+val std-tols = to-list([20.0, 10.0, 5.0, 2.0, 1.0])
+val std-vals = HashTable<Double, List<Double>>()
+
+std-vals[20.0] = to-list([
+  1.00,1.50,2.20,3.30,4.70,6.80
+])
+
+std-vals[10.0] = to-list([
+  1.20,1.80,2.70,3.90,5.60,8.20
+])
+
+std-vals[5.0] = to-list([
+  1.10,1.30,1.60,2.00,2.40,3.00,
+  3.60,4.30,5.10,6.20,7.50,9.10
+])
+
+std-vals[2.0] = to-list([
+  1.05,1.15,1.21,1.27,1.33,1.40,1.47,1.54,1.62,
+  1.69,1.78,1.87,1.96,2.05,2.15,2.26,2.37,2.49,
+  2.61,2.74,2.87,3.01,3.16,3.32,3.48,3.65,3.83,
+  4.02,4.22,4.42,4.64,4.87,5.11,5.36,5.62,5.90,
+  6.19,6.49,6.81,7.15,7.87,8.25,8.66,9.09,9.53
+])
+
+std-vals[1.0] = to-list([
+  1.02,1.07,1.13,1.18,1.24,1.37,1.43,1.58,1.65,
+  1.74,1.82,1.91,2.10,2.21,2.32,2.43,2.55,2.67,
+  2.80,2.94,3.09,3.24,3.40,3.57,3.74,3.92,4.12,
+  4.32,4.53,4.75,4.99,5.23,5.49,5.76,6.04,6.34,
+  6.65,6.98,7.32,7.68,8.06,8.45,8.87,9.31,9.76
+])
+
+defn union-std-vals (tol:Double) :
+  val union = Vector<Double>()
+  for std-tol in std-tols do :
+    if std-tol >= tol :
+      add-all(union, std-vals[std-tol])
+  to-list(qsort(union))
+
+val cumulative-std-vals = HashTable<Double, List<Double>>()
+
+for tol in std-tols do :
+  cumulative-std-vals[tol] = union-std-vals(tol)
+
+public defn closest-std-val (v:Double, tol:Double) :
+  val expon = floor(log10(v))
+  val signif = v / (pow(10.0,expon))
+  
+  var match-diff = 100.0
+  var match-val = -1.0
+
+  if key?(cumulative-std-vals, tol) :
+    for std-val in cumulative-std-vals[tol] do :
+      val diff = abs(signif - std-val)
+      if diff < match-diff :
+        match-diff = diff
+        match-val = std-val
+  else :
+    fatal("Tolerance %_ not found in standard tolerances." % [tol])
+
+  match-val * pow(10.0, expon)
+
+; ====== Yageo RC Thick Film Chip Resistor Family ======
+
+defn yageo-res-str (res:Double) :
+  val expon = (to-int(floor(log10(res))) / 3) * 3
+  val signif = res / pow(10.0, to-double(expon))
+  
+  val sig-str = to-string("%_" % [signif])
+
+  val sig-parts = to-tuple(split(sig-str, ".", 2))
+  val sig-int = sig-parts[0]
+  val sig-frac = append(sig-parts[1], "0")
+
+  val exp-str = switch(expon) :
+    0 : "R"
+    3 : "K"
+    6 : "M"
+    else : fatal("Incorrect Yageo resistance exponent %_." % [expon])
+  
+  var frac-end = 2 - length(sig-int)
+
+  while frac-end >= 0 and sig-frac[frac-end] == '0' :
+    frac-end = frac-end - 1
+
+  val sig-frac-trim = if frac-end == -1 :
+    ""
+  else :
+    get(sig-frac, 0 through frac-end)
+
+  to-string("%_%_%_" % [sig-int, exp-str, sig-frac-trim])
+
+public pcb-part yageo-res-prt (res:Double, tol:Double, pkg:String) :
+  manufacturer = "Yageo"
+  
+  val pwr = switch(pkg) :
+    "0402" :
+      package = RESC1005X35
+      0.0625
+    "0603" : 
+      package = RESC1608X45
+      0.1
+    "0805" : 
+      package = RESC2012X50
+      0.125
+    "1206" : 
+      package = RESC3216X55
+      0.25
+    else : fatal("Incorrect Yageo resistor package %_." % [pkg])
+  
+  val tol-str = switch(tol) :
+    1.0 : "F"
+    5.0 : "J"
+    else : fatal("Incorrect Yageo resistor tolerance value %_." % [tol])
+
+  mpn = to-string("RC%_%_R-07%_L" % [pkg, tol-str, yageo-res-str(res)])
+  
+  emodel = Resistor(res, tol, pwr)
+
+; r-min, r-max, tol, pkg
+val yageo-res-ranges = [
+  [0.1, 1.0, 1.0, "0402"]
+  [1.0, 22000000.0, 5.0, "0402"]
+  [1.0, 10000000.0, 1.0, "0402"]
+;  [1.0, 22000000.0, 5.0, "0603"]
+;  [1.0, 10000000.0, 1.0, "0603"]
+;  [1.0, 100000000.0, 5.0, "0805"]
+;  [1.0, 10000000.0, 1.0, "0805"]
+;  [1.0, 100000000.0, 5.0, "1206"]
+;  [1.0, 10000000.0, 1.0, "1206"]
+]
+
+defn yageo-res-range (r-min:Double, r-max:Double, tol:Double, pkg:String) :
+  val exp-min = to-int(floor(log10(r-min)))
+  val exp-max = to-int(floor(log10(r-max)))
+
+  val vals = cumulative-std-vals[tol]
+
+  for e in exp-min through exp-max do :
+    for v in vals do :
+      val r = v * pow(10.0, to-double(e))
+      if r >= r-min and r <= r-max :
+        yageo-res-prt(r, tol, pkg)
+
+;for [r-min, r-max, tol, pkg] in yageo-res-ranges do :
+;  yageo-res-range(r-min, r-max, tol, pkg)
+
+;pcb-part-server yageo-res-server (part-req) :
+;  match(emodel(part-req)) :
+;    (r-mod:Resistor) :
+;      match(resistance(r-mod), tolerance(r-mod)) :
+;        (res-req:Double, tol-req:Double) :
+;          for [r-min, r-max, tol, pkg] in yageo-res-ranges do :
+;            if tol <= tol-req / 2.0 and r-min <= res-req and res-req <= r-max :
+;              val res-std = closest-std-val(res-req, tol)
+;              serve-part(yageo-res-prt(res-std, tol, pkg))
+;        (r,t) : false
+;    (o-mod) : false
+;serves :
+;  emodels = (Resistor())
+
+public pcb-part littlefuse-2090L-prt (i-hold:Double) :
+  manufacturer = "Littelfuse Inc."
+  mpn = switch(i-hold) :
+    0.5 : "2920L050DR"
+    5.0 : "2920L500/16MR"
+    else : fatal("Unrecognized i-hold for Littlefuse 2090L:%_" % [i-hold])
+  package = FUSC7351X160
+
+pcb-part bourns-SRU1028-100Y-prt :
+  manufacturer = "Bourns"
+  mpn = "SRU1028-100Y"
+  package = INDM10001000X280
+
+pcb-part murata-ind-2nh7-prt :
+  manufacturer = "Murata"
+  mpn = "LQP15MN5N6B02D"
+  package = INDC1005X55
+
+pcb-part murata-ind-3nh9-prt :
+  manufacturer = "Murata"
+  mpn = "LQP15MN3N9B02D"
+  package = INDC1005X55
+
+public pcb-part yageo-RL0805FR-7W0RXL-prt (r:Double) :
+  manufacturer = "Yageo"
+  mpn = to-string("RL0805FR-7W0R%_L" % [to-int(r * 10.0)])
+  package = RESC2012X50
+
+pcb-part samsung-CIC31P151NE-prt :
+  manufacturer = "Samsung"
+  mpn = "CIC31P151NE"
+  package = RESC3216X55
+
+pcb-part bourns-res-0ohm100-prt :
+  manufacturer = "Bourns"
+  mpn = "CRA2512-FZ-R100ELF"
+  package = RESC6332X35
+
+pcb-part bourns-res-0ohm03-prt :
+  manufacturer = "Bourns"
+  mpn = "CRA2512-FZ-R030ELF"
+  package = RESC6332X35
+
+pcb-part bourns-res-0ohm01-prt :
+  manufacturer = "Bourns"
+  mpn = "CRA2512-FZ-R010ELF"
+  package = RESC6332X35
+
+pcb-part panasonic-res-220ohm-prt :
+  manufacturer = "Panasonic"
+  mpn = "ERJ-3EKF2200V"
+  package = RESC1608X45
+
+pcb-part panasonic-res-array-prt :
+  manufacturer = "Panasonic Electronic Components"
+  mpn = "EXB-18V102JX"
+  package = panasonic-res-array-pkg
+
+; ====== Yageo CC Ceramic Chip Capacitor Family ======
+
+defn yageo-cap-str (cap:Double) :
+  val pf = cap * 1000000.0
+  val expon = floor(log10(pf)) - 1.0
+  val signif = to-int(floor(pf / pow(10.0, expon)))
+  to-string("%_%_" % [signif, to-int(expon)])
+
+public pcb-part yageo-cap-prt (cap:Double, tol:Double, max-v:Double, pkg:String, temp:String, reel:String) :
+  manufacturer = "Yageo"
+
+  switch(pkg) :
+    "0402" : package = CAPC1005X55
+    "0603" : package = CAPC1608X80
+    "0805" : package = CAPC2012X125
+    "1206" : package = CAPC3216X160
+    else : fatal("Incorrect Yageo capacitor package %_." % [pkg])
+
+  val tol-str = switch(tol) :
+    5.0 : "J"
+    10.0 : "K"
+    20.0 : "M"
+    ; Filthy hack - collapse 40: 20
+    40.0 : "M"
+    else : fatal("Incorrect Yageo capacitor tolerance %_." % [tol])
+
+  val volt-str = if max-v > 100.0 :
+    fatal("Incorrect Yageo capacitor max voltage %_." % [max-v])
+  else if max-v > 50.0 : "X"
+  else if max-v > 25.0 : "9"
+  else if max-v > 16.0 : "8"
+  else if max-v > 10.0 : "7"
+  else if max-v > 6.3 : "6"
+  else : "5"
+  
+  if not contains?(["X5R","X7R"], temp) :
+    fatal("Incorrect Yageo capacitor temperature coefficient %_." % [temp])
+  
+  if not contains?(["K","R"], reel) :
+    fatal("Incorrect Yageo capacitor reel type %_." % [reel])
+
+  mpn = to-string("CC%_%_%_%_%_BB%_" % [pkg, tol-str, reel, temp, volt-str, yageo-cap-str(cap)])
+
+  emodel = Capacitor(cap, tol, max-v, false, false, to-symbol(temp), `ceramic)
+;CC1206KKX7R0BB105
+; c-min, c-max, max-v, pkg, temp-coeff, reel-type
+; This series only progresses in 20% tolerance value increments
+; It is also impossible to find several of these values from vendors even
+; though they are called out in the datasheet
+val yageo-cap-ranges = [
+  ;[1.0, 10.0, 50.0, "1206", "X5R", "K"]
+  [1.0, 22.0, 25.0, "1206", "X5R", "K"]
+  ;[1.0, 47.0, 10.0, "1206", "X5R", "K"]
+  
+  [0.47, 10.0, 50.0, "0805", "X5R", "K"]
+  [0.47, 22.0, 25.0, "0805", "X5R", "K"]
+  [0.47, 47.0, 10.0, "0805", "X5R", "K"]
+  
+  ;[0.22, 2.2, 50.0, "0603", "X5R", "R"]
+  ;[0.22, 10.0, 25.0, "0603", "X5R", "R"]
+  ;[0.22, 22.0, 10.0, "0603", "X5R", "R"]
+  
+  [0.022, 0.22, 50.0, "0402", "X5R", "R"]
+  [0.022, 0.22, 25.0, "0402", "X5R", "R"]
+  [0.022, 10.0, 10.0, "0402", "X5R", "R"]
+  
+  ;[0.00022, 4.7, 50.0, "1206", "X7R", "K"]
+  ;[0.00022, 10.0, 25.0, "1206", "X7R", "K"]
+  ;[0.00022, 22.0, 10.0, "1206", "X7R", "K"]  
+  
+  ;[0.00022, 2.2, 50.0, "0805", "X7R", "K"]
+  ;[0.00022, 4.7, 25.0, "0805", "X7R", "K"]
+  ;[0.00022, 10.0, 10.0, "0805", "X7R", "K"]
+
+  ;[0.0001, 0.22, 50.0, "0603", "X7R", "R"]
+  ;[0.0001, 1.0, 25.0, "0603", "X7R", "R"]
+  ;[0.0001, 2.2, 10.0, "0603", "X7R", "R"]
+  
+  [0.0001, 0.047, 50.0, "0402", "X7R", "R"]
+  [0.0001, 0.1, 25.0, "0402", "X7R", "R"]
+  [0.0001, 0.1, 10.0, "0402", "X7R", "R"]
+
+  ; untested
+  ;[0.0001, 0.02, 50.0, "0603", "X7R", "R"]
+  ;[0.1, 10.0, 100.0, "1206", "X7R", "K"]
+]
+
+defn yageo-cap-range (c-min:Double, c-max:Double, max-v:Double, pkg:String, temp:String, reel:String) :
+  val exp-min = to-int(floor(log10(c-min)))
+  val exp-max = to-int(floor(log10(c-max)))
+  
+  val vals = cumulative-std-vals[20.0]
+
+  for e in exp-min through exp-max do :
+    for v in vals do :
+      val c = v * pow(10.0, to-double(e))
+      if c-min <= c and c <= c-max :
+        yageo-cap-prt(c, 10.0, max-v, pkg, temp, reel)
+
+;for [c-min, c-max, max-v, pkg, temp, reel] in yageo-cap-ranges do :
+;  yageo-cap-range(c-min, c-max, max-v, pkg, temp, reel)
+
+;pcb-part-server yageo-cap-server (part-req) :
+;  match(emodel(part-req)) :
+;    (c-mod:Capacitor) :
+;      match(capacitance(c-mod), tolerance(c-mod), max-voltage(c-mod)) :
+;        (cap-req:Double, tol-req:Double, volt-req:Double) :
+;          if 20.0 <= tol-req / 2.0 : 
+;            for [c-min, c-max, max-v, pkg, temp, reel] in yageo-cap-ranges do :
+;              if c-min <= cap-req and cap-req <= c-max and volt-req <= max-v :
+;                val cap-std = closest-std-val(cap-req, 20.0)
+;                val cap-serve = yageo-cap-prt(cap-std, 20.0, max-v, pkg, temp, reel)
+;                serve-part(cap-serve)
+;          else : false
+;        (c,t,v) : false
+;    (o-mod) : false
+;serves :
+;  emodels = (Capacitor())
+
+pcb-part kemet-C1206C106M8PACTU-prt :
+  manufacturer = "KEMET"
+  mpn = "C1206C106M8PACTU"
+  package = CAPC3216X160
+
+; Murata GRM capacitors
+pcb-part murata-cap-0pf5-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1HR50WA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-1pf0-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H1R0WA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-6pf0-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H6R0WA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-8pf2-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H8R2DA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-10pf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H100GA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-12pf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H120GA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-15pf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1E150JA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-27pf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1E270JA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-33pf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H330GA01D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-0uf15-prt :
+  manufacturer = "Murata"
+  mpn ="GRM155R71C154KA12D"
+  package = CAPC1005X55
+
+pcb-part murata-cap-0uf47-prt :
+  manufacturer = "Murata"
+  mpn ="GRM155R61A474KE15J"
+  package = CAPC1005X55
+
+pcb-part murata-cap-2uf2-prt :
+  manufacturer = "Murata"
+  mpn ="GRM21BR71C225KA12L"
+  package = CAPC2012X125
+
+pcb-part murata-cap-4uf7-prt :
+  manufacturer = "Murata"
+  mpn ="GRM219C81A475KE34D"
+  package = CAPC2012X125
+
+pcb-part murata-cap-10uf0-prt :
+  manufacturer = "Murata"
+  mpn ="GRM188R61C106MAALD"
+  package = CAPC1608X80
+
+pcb-part murata-cap-22uf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM219R60J226ME47D"
+  package = CAPC2012X125
+
+pcb-part murata-cap-22uf-25v-prt :
+  manufacturer = "Murata"
+  mpn ="GRT21BR61E226ME13L"
+  package = CAPC2012X125
+
+pcb-part murata-cap-22pf-prt :
+  manufacturer = "Murata"
+  mpn ="GRM1555C1H220GA01D"
+  package = CAPC1005X55
+
+;tdk capacitors
+pcb-part tdk-C3216X5R1E106K085AC-prt :
+  manufacturer = "TDK Corporation"
+  mpn = "C3216X5R1E106K085AC"
+  package = CAPC3216X125
+
+pcb-part tdk-cap-100pf-prt :
+  manufacturer = "TDK"
+  mpn = "CGJ3E2C0G1H101J080AA"
+  package = CAPC1608X80
+
+pcb-part tdk-cap-560pf-prt :
+  manufacturer = "TDK"
+  mpn = "CGA3E2C0G1H561J080AA"
+  package = CAPC1608X80
+
+pcb-part tdk-cap-4nf7-prt :
+  manufacturer = "TDK"
+  mpn = "C1608X8R1H472K080AA"
+  package = CAPC1608X80
+
+pcb-part tdk-cap-0uf1-prt :
+  manufacturer = "TDK"
+  mpn = "CGA3E2X7R1H104K080AA"
+  package = CAPC1608X80
+
+pcb-part tdk-cap-1uf0-prt :
+  manufacturer = "TDK"
+  mpn = "C1608X7R1C105K080AC"
+  package = CAPC1608X80
+
+pcb-part tdk-cap-2uf2-prt :
+  manufacturer = "TDK"
+  mpn = "C1608X5R1C225K080AB"
+  package = CAPC1608X80
+
+;panasonic capacitors
+pcb-part panasonic-EEE-1EA101XP-prt :
+  manufacturer = "Panasonic"
+  mpn = "EEE-1EA101XP"
+  package = CAPAE6300X7700
+
+pcb-part panasonic-EEE-FK0J152P-prt :
+  manufacturer = "Panasonic"
+  mpn = "EEE-FK0J152P"
+  package = CAPAE10000X10500
+
+pcb-part panasonic-cap-4uf7-prt:
+  manufacturer = "Panasonic"
+  mpn = "EEE1VA4R7SR"
+  package = CAPAE4300X5400
+
+pcb-part panasonic-cap-47uf-prt:
+  manufacturer = "Panasonic"
+  mpn = "EEE1EA470WP"
+  package = PANASONIC-CAP-SIZE-D
+
+pcb-part panasonic-cap-220uf-prt:
+  manufacturer = "Panasonic"
+  mpn = "EEE1VA221UP"
+  package = CAPAE8000X10200
+
+pcb-part panasonic-cap-100uf-prt:
+  manufacturer = "Panasonic"
+  mpn = "EEEFPE101XAP"
+  package = CAPAE6300X7700
+
+pcb-part panasonic-cap-1500uf-prt:
+  manufacturer = "Panasonic"
+  mpn = "EEVFK1V152M"
+  package = CAPAE16000X16500
+
+; ====== Inductors - Murata LQM series  ======
+pcb-part murata-ind-4uh7-prt :
+  manufacturer = "Murata"
+  mpn = "LQM2HPN4R7MGCL"
+  package = INDC2520X100
+
+pcb-part taiyo-ind-10uh-prt :
+  manufacturer = "Taiyo Yuden"
+  mpn = "LBR2518T100K"
+  package = INDC2518X200
+
+pcb-part abracon-ind-2uh2-prt :
+  manufacturer = "Abracon"
+  mpn = "ASPI-0530HI-2R2M-T2"
+  package = INDM560520X300
+
+pcb-part bourns-ind-68uh-prt :
+  manufacturer = "Bourns"
+  mpn = "SRP1770TA-680M"
+  package = INDM16901690X670
+
+pcb-part tdk-CLF7045T-471M-D-prt :
+  manufacturer = "TDK"
+  mpn = "CLF7045T-471M-D"
+  package = tdk-CLF7045T-471M-D-fp
+
+pcb-part coilcraft-LPS4018-103MRB-prt :
+  manufacturer = "Coilcraft"
+  mpn = "LPS4018-103MRB"
+  package = coilcraft-LPS4018-fp
+
+pcb-part coilcraft-CLF6045-151M-prt :
+  manufacturer = "Coilcraft"
+  mpn = "CLF6045-151M"
+  package = coilcraft-CLF6045-fp
+
+; ====== Diodes ========
+; TODO: update with color spec
+pcb-part gen-led-prt :
+  manufacturer = "Lite-On"
+  mpn = "LTST-C190GKT"
+  package = LEDSC16080X80
+
+pcb-part vishay-VLMKG3400-prt :
+  manufacturer = "Vishay"
+  mpn = "VLMKG3400-GS08"
+  package = PLCC-4
+
+pcb-part dfl-DFLS1100-prt :
+  manufacturer = "Diodes Incorporated"
+  mpn = "DFLS1100"
+  package = DFLS1100-fp
+
+pcb-part dialight-5511109F-prt :
+  manufacturer = "Dialight"
+  mpn = "5511109F"
+  package = LED-5511109F-pkg
+
+pcb-part on-SMBJ14A-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "SMBJ14A"
+  package = DIOM-5436X220
+
+pcb-part on-SMBJ24A-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "SMBJ24A"
+  package = DIOM-5436X220
+
+pcb-part on-SD05T1G-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "SD05T1G"
+  package = DIOM-1713X90
+
+pcb-part on-BAS16SL-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "BAS16SL"
+  package = SOD923x40
+
+pcb-part mcc-SK88L-TP-prt :
+  manufacturer = "MCC"
+  mpn = "SK88L-TP"
+  package = DIOM-7162X200
+
+pcb-part nexperia-PESD1CAN-UX-prt :
+  manufacturer = "Nexperia"
+  mpn = "PESD1CAN-UX"
+  package = SOT65P235X100-3N
+
+; ====== Ferrite beads ======
+pcb-part tdk-fb-1k5-prt :
+  manufacturer = "TDK"
+  mpn = "MMZ1005Y152CT000"
+  package = RESC1005X35
+
+; ====== Chokes =======
+pcb-part bourns-DR331-513AE-prt :
+  manufacturer = "Bourns"
+  mpn = "DR331-513AE"
+  package = bourns-DR331-513AE-pkg
+
+; ====== Crystals  ======
+pcb-part ABM7-8MHZ-D2Y-T-prt :
+  manufacturer = "Abracon"
+  mpn = "ABM7-8.000MHZ-D2Y-T"
+  package = ABM7-8MHZ-D2Y-T-pkg
+  
+pcb-part epson-MC-146-prt :
+  manufacturer = "Epson"
+  mpn = "MC-146 32.7680KA-A0:ROHS"
+  package = XTAL-MC-146
+
+pcb-part epson-TSX-3225-prt :
+  manufacturer = "Epson"
+  mpn = "TSX-3225 16.0000MF09Z-AC0"
+  package = XTAL-TSX-3225
+
+pcb-part abracon-ABM12-32-B2X-T3-prt :
+  manufacturer = "Abracon"
+  mpn = "ABM12-32.000MHZ-B2X-T3"
+  package = XTAL-ABM12-pkg
+
+; ====== Transistors ========
+pcb-part nxp-PMBT3904-prt :
+  manufacturer = "Nexperia"
+  mpn = "PMBT3904,235"
+  package = SOT95P280X100-3N
+
+pcb-part nxp-2n7002p-prt :
+  manufacturer = "Nexperia"
+  mpn = "2N7002P,215"
+  package = SOT95P280X100-3N
+
+pcb-part di-2N7002A-7-prt :
+  manufacturer = "Diodes Incorporated"
+  mpn = "2N7002A-7"
+  package = SOT95P280X100-3N
+
+pcb-part di-DMG1012UW-7-prt :
+  manufacturer = "Diodes Incorporated"
+  mpn = "DMG1012UW-7"
+  package = SOT65P235X100-3N
+
+pcb-part di-ZXMN6A09GTA-prt :
+  manufacturer = "Diodes Incorporated"
+  mpn = "ZXMN6A09GTA"
+  package = SOT230P700X180-4N
+
+pcb-part vishay-SQ4850EY-T1-GE3-prt :
+  manufacturer = "Vishay"
+  mpn = "SQ4850EY-T1-GE3"
+  package = SOIC127P600X175-8N
+
+pcb-part infineon-IPD50N04S4L08ATMA1-prt :
+  manufacturer = "Infineon Technologies"
+  mpn = "IPD50N04S4L08ATMA1"
+  package = TO228P970X238-3-pkg
+
+; ====== Miscellaneous Parts ======
+pcb-part torex-XC6206P302MR-G-prt :
+  manufacturer = "Torex Semiconductor"
+  mpn = "XC6206P302MR-G"
+  package = SOT23-3N 
+  
+pcb-part microchip-MCP73831-prt :
+  manufacturer = "Microchip"
+  mpn = "MCP73831T-2DCI/OT"
+  package = SOT23-5N
+
+pcb-part st-LIS3DH-prt :
+  manufacturer = "ST Mircro"
+  mpn = "LIS3DHTR"
+  package = LGA50P300X300X100-16
+
+pcb-part johanson-2450FM07A0029-prt :
+  manufacturer = "Johanson Technology"
+  mpn = "2450FM07A0029T"
+  package = johanson-2450FM07A0029-pkg
+
+pcb-part johanson-2450AT18A100-prt :
+  manufacturer = "Johanson Technology"
+  mpn = "2450AT18A100E"
+  package = johanson-2450AT18A100-pkg
+
+pcb-part mcp-MCP23S17T-E-SS-prt :
+  manufacturer = "Microchip Technology"
+  mpn = "MCP23S17T-E/SS"
+  package = SOP65P780X200-28N
+
+pcb-part analog-AD7949-prt :
+  manufacturer = "Analog Devices"
+  mpn = "AD7949BCPZ"
+  package = QFN50P400X400X100-20N
+
+pcb-part linear-LTC2656-prt :
+  manufacturer = "Linear Technology"
+  mpn = "LTC2656IFE-L12#PBF"
+  package = SOP65P640X120-21N
+
+pcb-part mps-MPM3630-prt :
+  manufacturer = "Monolithic Power Systems Inc."
+  mpn = "MPM3630GQV-P"
+  package = mps-MPM3630-pkg
+
+pcb-part microchip-MIC5225YM5-TR-prt :
+  manufacturer = "Microchip"
+  mpn = "MIC5225YM5-TR"
+  package = SOT95P280X145-5N
+
+pcb-part ti-LP38501TSX-ADJ-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "LP38501TSX-ADJ/NOPB"
+  package = DDPAK-TO263-pkg
+
+pcb-part linear-LT3082EST-prt :
+  manufacturer = "Linear Technology"
+  mpn = "LT3082EST#PBF"
+  package = SOT230P700X180-4N
+
+pcb-part microchip-MCP1824T-ADJE-DC-prt :
+  manufacturer = "Microchip"
+  mpn = "MCP1824T-ADJE/DC"
+  package = SOT230P700X180-6N
+
+pcb-part on-NCP45524IMNTWG-H-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "NCP45524IMNTWG-H"
+  package = on-NCP45524IMNTWG-H-pkg
+
+public pcb-part analog-AD5160BRJZX-RL7-prt (r-val:Double) :
+  manufacturer = "Analog Devices"
+  if not contains?([5.0 10.0 50.0 100.0], r-val) :
+    fatal("Invalid resistance value for AD5160BRJZX:%_" % [r-val])
+  mpn = to-string("AD5160BRJZ%_-RL7" % [to-int(r-val)])
+  package = SOT65P280X145-8N
+
+pcb-part mcp-MCP23017T-E_SO-prt :
+  manufacturer = "Microchip Technology"
+  mpn = "MCP23017T-E/SO"
+  package = SOIC127P1030X265-28N
+
+pcb-part ixys-CPC1709J-prt :
+  manufacturer = "IXYS Integrated Circuits Division"
+  mpn = "CPC1709J"
+  package = ixys-CPC1709J-pkg
+
+pcb-part st-VNQ5E160AKTR-E-prt :
+  manufacturer = "STMicroelectronics"
+  mpn = "VNQ5E160AKTR-E"
+  package = SOP80P1030X245-25N
+
+pcb-part microchip-MCP2561T-E/SN-prt :
+  manufacturer = "Microchip Technology"
+  mpn = "MCP2561T-E/SN"
+  package = SOIC127P600X175-8N
+
+public pcb-part ti-LMV3XX-prt (n:Int) :
+  manufacturer = "Texas Instruments"
+  
+  switch(n) :
+    1: 
+      mpn = "LMV321IDBVR"
+      package = SOT95P280X145-5N 
+    2:
+      mpn = "LMV358ID"
+      package = SOIC127P600X175-8N
+    4:
+      mpn = "LMV324IDR"
+      package = SOIC127P600X175-14N
+    else : fatal("Unsupported package N for TI LMV3XX:$_.")
+
+pcb-part ti-OPA365AQDBVRQ1-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "OPA365AQDBVRQ1"
+  package = SOT95P280X145-5N
+
+pcb-part ti-OPA374AIDBVR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "OPA374AIDBVR"
+  package = SOT95P280X145-5N
+
+pcb-part maxim-MAX9638AVB+-prt :
+  manufacturer = "Maxim Integrated"
+  mpn = "MAX9638AVB+"
+  package = UTQFN40P140X180X50-10
+
+pcb-part maxim-MAX9637AXA+-prt :
+  manufacturer = "Maxim Integrated"
+  mpn = "MAX9637AXA+T"
+  package = SC70-8N-pkg
+
+pcb-part ti-SN74LS07DR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "SN74LS07DR"
+  package = SOIC127P600X175-14N
+
+pcb-part raspi-3B+-prt :
+  manufacturer = "Raspberry Pi"
+  mpn = "Raspberry Pi 3 Model B+"
+  package = raspi-3B+-pkg
+
+pcb-part nxp-PCA9685-prt :
+  manufacturer = "NXP"
+  mpn = "PCA9685PW"
+  package = SOP65P640X110-28N
+
+pcb-part inf-BTS6133D-prt :
+  manufacturer = "Infineon"
+  mpn = "BTS6133DAUMA1"
+  package = TO228P970X238-5-pkg
+
+pcb-part particle-electron-prt :
+  manufacturer = "Particle"
+  mpn = "particle-electon"
+  package = particle-electron-pkg
+
+pcb-part nordic-nRF52832-prt :
+  manufacturer = "Nordic Semiconductor"
+  mpn ="nRF52832-QFAA-R7"
+  package = QFN40P600X600X85-48
+
+public pcb-part pjrc-teensy-3-2-prt (pinout:Symbol):
+  manufacturer = "PJRC"
+  mpn = to-string("Teensy-3.2-%_" % [pinout])
+  package = {pjrc-teensy-3-2-pkg(pinout)}
+
+pcb-part stmicro-STM32F405RG-prt :
+  manufacturer = "STMicroelectronics"
+  mpn = "STM32F405RG"
+  ; TODO: ensure this is correct
+  package = LQFP64
+
+pcb-part stmicro-STM32F303K8T6-prt :
+  manufacturer = "STMicroelectronics"
+  mpn = "STM32F303K8T6"
+  package = QFP80P900X900X160-32
+
+pcb-part stmicro-STM32L011D4-prt :
+  manufacturer = "STMicroelectronics"
+  mpn = "STM32L011D4"
+  package = TSSOP-14
+
+pcb-part csr-CSR1010A05-IQQM-R-prt :
+  manufacturer = "Cambridge Silicon Radio"
+  mpn = "CSR1010A05-IQQM-R"
+  package = QFN50P500X500X55-32
+
+pcb-part mbed-nucleo-prt :
+  manufacturer = "STMicroelectronics"
+  mpn = "NUCLEO-F303K8"
+  package = mbed-nucleo-pkg
+
+pcb-part arduino-pro-mini-prt :
+  manufacturer = "Sparkfun"
+  ; 5V version
+  mpn = "DEV-11113"
+  package = arduino-pro-mini-pkg
+
+pcb-part TC2030-MCP-NL-prt :
+  manufacturer = "Tag-Connect"
+  mpn = "TC2030-MCP-NL"
+  package = TC2030-MCP-NL-pkg
+
+pcb-part XT-60-prt :
+  manufacturer = "HexTronics"
+  mpn = "XT-60"
+  package = XT-60-female-pkg
+
+pcb-part B3U-1000P-prt :
+  manufacturer = "Omron"
+  mpn = "B3U-1000P"
+  package = SW_B3U-1000P
+
+pcb-part ck-JS102011SAQN-prt :
+  manufacturer = "C&K"
+  mpn = "JS102011SAQN"
+  package = SW-JS102011SAQN-pkg
+
+pcb-part knowles-SPH1642HT5H-1-prt :
+  manufacturer = "Knowles Acoustics"
+  mpn = "SPH1642HT5H-1"
+  package = knowles-SPH1642HT5H-1-pkg
+
+pcb-part ge-SHHD003A0A41-SRZ-prt :
+  manufacturer = "General Electric"
+  mpn = "SHHD003A0A41-SRZ"
+  package = ge-SHHD003A0A41-SRZ-pkg
+
+pcb-part avago-AEAT-6600-T16-prt :
+  manufacturer = "Avago"
+  mpn = "AEAT-6600-T16"
+  package = TSSOP-16
+
+pcb-part ti-LM5166-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "LM5166"
+  package = VSON-10
+
+pcb-part ti-TLV702-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "TLV702"
+  package = SOT23-5N
+
+pcb-part ti-TPS62177-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "TPS62177"
+  package = WSON-10-TPS62177
+
+pcb-part ti-LM5008-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "LM5008"
+  package = VSSOP-8
+
+pcb-part ti-LP2985-33DBVR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "LP2985-33DBVR"
+  package = SOT95P280X145-5N
+
+public pcb-part stm-LDK130MXXRY-prt (voltage:Double) : 
+  manufacturer = "STMicroelectronics"
+  val part-name = if contains?([1.5, 1.8, 2.8, 3.3], voltage) :
+    to-string("stm-LDK130M%_RY" % [to-int(voltage * 10.0)])
+  else :
+    fatal("Invalid voltage for LDK130MXXRY:%_" % [voltage])
+  mpn = part-name
+  package = SOT95P280X145-5N
+
+pcb-part ti-TPS610981-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "TPS610981"
+  package = SON50P150X150X80-6
+
+pcb-part ti-TLV62130A-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "TLV62130A"
+  package = QFN50P300X300X100-16
+
+pcb-part ti-INA3221AIRGVR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "INA3221AIRGVR"
+  package = QFN65P400X400X100-16
+
+pcb-part allegro-ACS781LLRTR-050U-T-prt :
+  manufacturer = "Allegro MicroSystems, LLC"
+  mpn = "ACS781LLRTR-050U-T"
+  package = allegro-ACS781LLRTR-050U-T-pkg
+
+pcb-part ti-LM74610QDGKRQ1-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "LM74610QDGKRQ1"
+  package = SOP65P300X300-8N
+
+pcb-part murata-UEI30-120-Q12P-C-prt :
+  manufacturer = "Murata"
+  mpn = "UEI30-120-Q12P-C"
+  package = murata-UEI30-pkg
+
+pcb-part murata-UEI15-050-Q12-prt :
+  manufacturer = "Murata"
+  mpn = "UEI15-050-Q12"
+  package = murata-UEI15-pkg
+
+pcb-part murata-UQQ-24-4-Q12PB-C-prt :
+  manufacturer = "Murata"
+  mpn = "UQQ-24/4-Q12PB-C"
+  package = murata-UQQ-24-4-Q12PB-C-pkg
+
+pcb-part xp-power-QSB20024S24-prt :
+  manufacturer = "XP Power"
+  mpn = "QSB20024S24"
+  package = xp-power-QSB20024S24-pkg
+
+pcb-part recom-R-78E5-0-0-5-prt :
+  manufacturer = "Recom"
+  mpn = "R-78E5.0-0.5"
+  package = recom-R-78E-0-5-pkg
+
+pcb-part recom-R-78B5-0-1-0-prt :
+  manufacturer = "Recom"
+  mpn = "R-78B5.0-1.0"
+  package = recom-R-78B-1-0-pkg
+
+pcb-part omron-G3VM-61FR1-TR05-prt :
+  manufacturer = "Omron"
+  mpn = "G3VM-61FR1(TR05)"
+  package = omron-g3vm-pkg
+
+pcb-part melexis-MLX90363-prt :
+  manufacturer = "Melexis"
+  mpn = "MLX90363"
+  package = SOIC127P600X175-8N
+
+pcb-part isl-ISL32459E-prt :
+  manufacturer = "Renesas"
+  mpn = "ISL32459E"
+  package = SOIC127PO650X300-8N
+
+pcb-part sp-SP3485-prt :
+  manufacturer = "Sipex"
+  mpn = "SP3485"
+  package = SOIC127P600X175-8N
+
+pcb-part ti-LMP8640-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "LMP8640"
+  package = SOT23-6N
+
+pcb-part ti-INA4180-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "INA4180"
+  package = TSSOP-14
+
+pcb-part ti-INA240-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "INA240"
+  package = SOIC127P600X175-8N
+
+pcb-part ti-DRV8312-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "DRV8312"
+  package = HTSSOP-44
+
+pcb-part st-LSM6DS3US-prt :
+  manufacturer = "STMicroelectronics"
+  mpn = "LSM6DS3US"
+  package = LGA-14L
+
+pcb-part ti-SN74LVC1G07-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "SN74LVC1G07"
+  package = SOT95P280X145-5N
+
+pcb-part ad-ADXL345BCCZ-RL-prt :
+  manufacturer = "Analog Devices"
+  mpn = "ADXL345BCCZ-RL"
+  package = PQFN80P300X500X79-14
+
+pcb-part on-LE24512AQF-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "LE24512AQF-AH"
+  package = SON50P300X200X75-8
+
+public pcb-part ad-ADG330X-prt (n:Int) :
+  manufacturer = "Analog Devices"
+  mpn = to-string("ADG330%_BRUZ" % [n])
+  switch(n) :
+    4: package = SOP65P640X120-14N
+    8: package = SOP65P640X120-20N
+    else : fatal("Incorrect number of channels %_ for ADG330X-prt." % [n])
+
+pcb-part nxp-MPL3115A2-prt :
+  manufacturer = "NXP Semiconductors"
+  mpn = "MPL3115A2"
+  package = PSON125P300X500X120-8
+; TODO: SOP package options
+pcb-part microchip-MCP9809-prt :
+  manufacturer = "Microchip"
+  mpn = "MCP9808T-E/MC"
+  package = SON50P300X200X100-9N
+
+pcb-part microchip-MCP9700A-prt :
+  manufacturer = "Microchip Technology"
+  mpn = "MCP9700AT-E/TT"
+  package = SOT95P237X95-3
+
+pcb-part ti-DRV8825-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "DRV8825"
+  package = TSSOP65P640-28-HS 
+
+pcb-part ISSI-IS31FL3236-prt :
+  manufacturer = "Integrated Silicon Solution, Inc."
+  mpn = "IS31FL3236"
+  package = QFN40P500X500X80-44
+
+pcb-part BK-5033-prt :
+  manufacturer = "MPD"
+  mpn = "BK-5033"
+  package = J-MPD-BK-5033
+
+pcb-part rhom-SMLP34RGB-prt :
+  manufacturer = "RHOM Semiconductor"
+  mpn = "SMLP34RGB"
+  package = rhom-SMLP34RGB-fp
+
+pcb-part SX-3528-prt :
+  manufacturer = "Songxin Light"
+  mpn = "SX-3528"
+  package = PLCC-4
+
+pcb-part rohm-MSL0104RGB-prt :
+  manufacturer = "ROHM Semiconductor"
+  mpn = "MSL0104RGBU"
+  package = D-MSL0104RGB-pkg
+
+pcb-part ti-SN74LVC1G66DCKR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "SN74LVC1G66DCKR"
+  package = SOT23-5N
+
+pcb-part SW-58010P-prt :
+  manufacturer = "Bailing Electronics"
+  mpn = "SW-58010P"
+  package = SW-58010P
+
+pcb-part mcp-MCP9808-prt :
+  manufacturer = "Microchip"
+  mpn = "MCP9808"
+  package = MSOP-8
+
+pcb-part watterott-tmc2130-prt :
+  manufacturer = "Watterott"
+  mpn = "20160027"
+  package = watterott-TMC2130-pkg
+
+pcb-part ti-ULN2803ADWR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "ULN2803ADWR"
+  package = SOIC127P1030X265-18N
+
+; ====== Connectors ======
+
+public pcb-part test-point-pads-prt (pad-r: Double, mask-r: Double, point-locs: List<[Double,Double]>, bounding-courtyard:True|False) :
+  manufacturer = "NONE"
+  mpn = "NONE"
+  package = {test-point-pads-pkg(pad-r, mask-r, point-locs, bounding-courtyard)}
+
+public pcb-part plated-hole-prt (drill-r:Double, pad-r: Double, mask-r:Double) :
+  manufacturer = "NONE"
+  mpn = "NONE"
+  package = {plated-hole-pkg(drill-r, pad-r, mask-r)}
+
+public pcb-part solder-jumper-prt (n:Int) :
+  manufacturer = "NONE"
+  mpn = "NONE"
+  package = {solder-jumper-pkg(n)}
+
+; TODO: figure out how to have parts that are not TE latching connectors
+public pcb-part pin-header-prt (n-pin: Int, n-row: Int, pin-pitch:Double, row-pitch:Double) :
+  manufacturer = "TE Connectivity"
+  mpn = switch(n-pin) :
+    10: "5499922-1"
+    14: "5499922-2"
+    16: "5499922-3"
+    20: "5499922-4"
+    24: "5499922-5"
+    26: "5499922-6"
+    30: "5499922-7"
+    34: "5499922-8"
+    40: "5499922-9"
+    50: "1-5499922-0"
+    60: "1-5499922-1"
+    64: "1-5499922-2"
+    else: to-string("Gen. %_-pin %_R header" % [n-pin, n-row])
+  package = {pin-header-pkg(n-pin, n-row, pin-pitch, row-pitch)}
+
+; Amphenol Delta D D-Sub connectors
+public pcb-part amphenol-delta-d-prt (n:Int) :
+  manufacturer = "Amphenol"
+  mpn = switch(n) :
+    9:  "D09P24A6GV00LF"
+    15: "D15P24A6GV00LF"
+    25: "D25P24A6GV00LF"
+    37: "D37P24A6GV00LF"
+    else: fatal("Incorrect n-pin for Amphenol D-Sub connector %_." % [n])
+  package = {amphenol-delta-d-pkg(n)}
+
+public pcb-part JST-PH-prt (n:Int) :
+  manufacturer = "JST"
+  mpn = switch(n) :
+    2 :"B2B-PH-K-S"
+    3 :"B3B-PH-K-S"
+    4 :"B4B-PH-K-S"
+    5 : "B5B-PH-K-S"
+    6 : "B6B-PH-K-S"
+    7 : "B7B-PH-K-S"
+    8 : "B8B-PH-K-S"
+    9 : "B9B-PH-K-S"
+    10 : "B10B-PH-K-S"
+    11 : "B11B-PH-K-S"
+    12 : "B12B-PH-K-S"
+    13 : "B13B-PH-K-S"
+    14 : "B14B-PH-K-S"
+    15 : "B15B-PH-K-S"
+    16 : "B16B-PH-K-S"
+    else: fatal("Incorrect n-pin for JST PH connector %_." % [n])
+  package = {JST-PH-pkg(n)}
+
+; Amphenol LD D-Sub connector
+public pcb-part amphenol-LD-prt (n:Int, male?:True|False) :
+  manufacturer = "Amphenol"
+  val gender-str = if male? : "P" else : "S"
+  val pn-str = switch(n) :
+    9:  "LD09%_13A4GX00LF"
+;    15: "LD15%_13A4GX00LF"
+;    25: "LD25%_13A4GX00LF"
+;    37: "LD37%_13A4GX00LF"
+    else: fatal("Incorrect n-pin for Amphenol D-Sub connector %_." % [n])
+  mpn = to-string(pn-str % [gender-str])
+  package = {amphenol-LD-pkg(n, male?)}
+
+; TE m12 connector
+pcb-part te-4-2172079-2-prt :
+  manufacturer = "TE Connectivity"
+  mpn = "4-2172079-2"
+  package = te-4-2172079-2-pkg
+
+pcb-part keystone-5011-prt :
+  manufacturer = "Keystone Electronics"
+  mpn = "5011"
+  package = keystone-5011-pkg
+
+public pcb-part molex-microfit-3-prt (n:Int) :
+  manufacturer = "Molex"
+  if n < 2 or n > 10 :
+    fatal("Incorrect n-pin for Molex Micro-Fit 3.0 43650  %_." % [n])
+  mpn = to-string("043650041%_" % [n])
+  package = {molex-microfit-3-pkg(n)}
+
+pcb-part molex-5025700893-prt :
+  manufacturer = "Molex"
+  mpn = "5025700893"
+  package = molex-5025700893-pkg
+
+pcb-part molex-0476420001-prt :
+  manufacturer = "Molex"
+  mpn = "0476420001"
+  package = molex-0476420001-pkg
+
+pcb-part te-1551892-1-prt :
+  manufacturer = "TE Connectivity"
+  mpn = "1551892-1"
+  package = te-1551892-1-pkg
+
+pcb-part te-1551920-2-prt :
+  manufacturer = "TE Connectivity"
+  mpn = "1551920-2"
+  package = te-1551920-2-pkg
+
+public pcb-part samtec-qth-prt (n-row:Int) :
+  manufacturer = "Samtec"
+  mpn = to-string("QTH-0%_-01-L-D-A" % [n-row])
+  package = {samtec-qth-pkg(n-row)}
+
+public pcb-part samtec-qsh-prt (n-row:Int) :
+  manufacturer = "Samtec"
+  mpn = to-string("QSH-0%_-01-L-D-A" % [n-row])
+  package = {samtec-qsh-pkg(n-row)}
+
+pcb-part cui-PJ-002BH-SMT-TR-prt :
+  manufacturer = "CUI"
+  mpn = "PJ-002BH-SMT-TR"
+  package = cui-PJ-002BH-SMT-TR-pkg
+
+public pcb-part samtec-tsm-prt (n-pin:Int) :
+  manufacturer = "Samtec"
+  if n-pin > 10 :
+    mpn = to-string("TSM-1%_-01-T-DV" % [n-pin])
+  else :
+    mpn = to-string("TSM-10%_-01-T-DV" % [n-pin])
+  package = {samtec-tsm-pkg(n-pin)}
+
+public pcb-part ipex-cabline-vs-prt (n:Int) :
+  manufacturer = "I-PEX"
+  mpn = to-string("20455-0%_E-#2" % [n])
+  package = {ipex-cabline-vs-pkg(n)}
+
+pcb-part amphenol-10118192-0001LF-prt :
+  manufacturer = "Amphenol"
+  mpn = "10118192-0001LF"
+  package = amphenol-10118192-0001LF-pkg
+
+public pcb-part phoenix-combicon-mc-prt (n:Int) :
+  manufacturer = "Phoenix"
+  mpn = switch(n) :
+    2 : "1803277"
+    3 : "1803280"
+    4 : "1803293"
+    5 : "1803303"
+    6 : "1803316"
+    7 : "1803329"
+    8 : "1803332"
+    9 : "1803345"
+    10 : "1803358"
+    11 : "1803361"
+    12 : "1803374"
+    13 : "1803387"
+    14 : "1803390"
+    15 : "1803400"
+    16 : "1803413"
+    18 : "1841297"
+    20 : "1841271"
+    else : fatal("Incorrect n-pin for Phoenix Connector %_" % [n])
+  package = {phoenix-combicon-mc-pkg(n)}
+
+;TODO model family
+pcb-part phoenix-1778683-prt :
+  manufacturer = "Phoenix"
+  mpn = "1778683"
+  package = phoenix-1778683-pkg
+
+pcb-part phoenix-1778803-prt :
+  manufacturer = "Phoenix"
+  mpn = "1778803"
+  package = phoenix-1778803-pkg
+
+pcb-part harwin-M20-7812045-prt :
+  manufacturer = "Harwin"
+  mpn = "M20-7812045"
+  package = harwin-M20-7812045-pkg
+
+public pcb-part molex-pico-clasp-prt (n:Int) :
+  manufacturer = "Molex"
+  if n < 6 or n > 15 :
+    fatal("Incorrect n-pin for Molex Pico Clasp %_." % [n])
+  mpn = to-string("501331%_%_07" % [n / 10, n % 10])
+  package = {molex-pico-clasp-pkg(n)}
+
+pcb-part cui-pj-202bh-prt :
+  manufacturer = "CUI"
+  mpn = "PJ-202BH"  
+  package = cui-pj-202bh-pkg
+
+pcb-part molex-732511350-prt :
+  manufacturer = "Molex"
+  mpn = "0732511350"
+  package = molex-732511350-pkg
+
+pcb-part johnson-142-0701-801-prt :
+  manufacturer = "Cinch Connectivity Solutions Johnson"
+  mpn = "142-0701-801"
+  package = johnson-142-0701-801-pkg
+
+pcb-part ironwood-C17829-socket-prt :
+  manufacturer = "Ironwood"
+  mpn = "C17829"
+  package = ironwood-C17829-socket-pkg

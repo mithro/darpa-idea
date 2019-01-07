@@ -1,0 +1,77 @@
+#use-added-syntax(serializer)
+
+defpackage plugins :
+  import core
+  import collections
+  import rtm/errors
+  import serialize
+
+;============================================================
+;======================= PluginResult =======================
+;============================================================
+
+public defstruct PluginResult :
+  result
+  seed: Long
+  errors: ErrorReport
+
+public defstruct PluginInit :
+  version: [Int Int Int]
+  seed: Long
+  output-stream: OutputStream
+  errors: ErrorReport
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  plugins/PluginResult :
+    result:?
+    seed: Long
+    errors: ErrorReport
+  plugins/PluginInit :
+    version: [Int Int Int]
+    seed: Long
+    output-stream: OutputStream
+    errors: ErrorReport
+
+;============================================================
+;================== ByteInputStream =========================
+;============================================================
+
+public lostanza deftype ByteInputStream <: InputStream :
+  length: int
+  data: ptr<byte>
+
+lostanza defmethod get-byte (b:ref<ByteInputStream>) -> ref<Byte|False> :
+  if b.length > 0 :
+    val x = b.data[0]
+    b.length = b.length - 1
+    b.data = b.data + 1
+    return new Byte{x}
+  else :
+    return false
+
+defmethod get-char (b:ByteInputStream) -> Char|False :
+  match(get-byte(b)) :
+    (b:Byte) : to-char(b)
+    (b:False) : false
+
+public lostanza defn ByteInputStream (b:ref<ByteBuffer>) -> ref<ByteInputStream> :
+  return new ByteInputStream{length(b).value, data(b)}
+
+public defn to-ByteInputStream (obj) -> ByteInputStream :
+  val b = ByteBuffer()
+  serialize(b, obj)
+  ByteInputStream(b)
+
+public defn to-ByteInputStream (obj1, obj2) -> ByteInputStream :
+  val b = ByteBuffer()
+  serialize(b, obj1)
+  serialize(b, obj2)
+  ByteInputStream(b)
+
+public lostanza defn to-ptr (b:ref<ByteInputStream>) -> ptr<ByteInputStream> :
+  val p:ptr<ByteInputStream> = call-c clib/malloc(sizeof(ByteInputStream))
+  [p] = ByteInputStream{b.length, b.data}
+  return p
+
+public lostanza defn to-ref (b:ptr<ByteInputStream>) -> ref<ByteInputStream> :
+  return new ByteInputStream{b.length, b.data}

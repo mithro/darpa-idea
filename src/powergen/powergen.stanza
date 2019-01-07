@@ -1,0 +1,689 @@
+defpackage powergen :
+  import core
+  import collections
+  import stz/algorithms
+  import treegen
+  import csolver
+  import result-seq
+
+;============================================================
+;======================== Modeling ==========================
+;============================================================
+
+public deftype Regulator
+public defmulti id (r:Regulator) -> Int
+public defmulti description (r:Regulator) -> String|False
+public defmulti tjmax (r:Regulator) -> Double
+public defmulti thetaja (r:Regulator) -> Double
+public defmulti min-voltage-in (r:Regulator) -> Double
+public defmulti max-voltage-in (r:Regulator) -> Double
+public defmulti min-voltage-out (r:Regulator) -> Double
+public defmulti max-voltage-out (r:Regulator) -> Double
+public defmulti min-current-out (r:Regulator) -> Double
+public defmulti max-current-out (r:Regulator) -> Double
+
+public defstruct LDO <: Regulator :
+  id: Int with: (as-method => true)
+  noise: Double
+  voltage-dropout: Double
+  tjmax: Double with: (as-method => true)
+  thetaja: Double with: (as-method => true)
+  min-voltage-in: Double with: (as-method => true)
+  max-voltage-in: Double with: (as-method => true)
+  min-voltage-out: Double with: (as-method => true)
+  max-voltage-out: Double with: (as-method => true)
+  min-current-out: Double with: (as-method => true)
+  max-current-out: Double with: (as-method => true)
+  description: String|False with: (default => false, as-method => true)
+with :
+  printer => true
+
+public defstruct SwitchReg <: Regulator :
+  id: Int with: (as-method => true)
+  max-dcycle: Double
+  noise: Double|SwitchedNoise
+  efficiency: Double
+  tjmax: Double with: (as-method => true)
+  thetaja: Double with: (as-method => true)
+  min-voltage-in: Double with: (as-method => true)
+  max-voltage-in: Double with: (as-method => true)
+  min-voltage-out: Double with: (as-method => true)
+  max-voltage-out: Double with: (as-method => true)
+  min-current-out: Double with: (as-method => true)
+  max-current-out: Double with: (as-method => true)
+  description: String|False with: (default => false, as-method => true)
+with :
+  printer => true
+
+public defstruct SwitchedNoise :
+  switch-freq: Double
+  inductor: Double
+  capacitor: Double
+with :
+  printer => true
+
+public defstruct Load :
+  id: Int with: (updater => sub-id)
+  voltage: Double
+  current: Double
+  noise: Double
+  description: String|False with: (default => false)
+with :
+  printer => true
+
+;============================================================
+;================== Regulator Tree Generation ===============
+;============================================================
+
+public defstruct Env :
+  src-voltage: Double
+  tamb: Double
+with :
+  printer => true
+
+defstruct DRange :
+  lo: Double
+  hi: Double
+with :
+  printer => true
+
+defstruct RailRange :
+  voltage: DRange with: (updater => sub-voltage)
+  current: DRange with: (updater => sub-current)
+  noise: DRange with: (updater => sub-noise)
+with :
+  printer => true
+
+defstruct RegTree :
+  input: RailRange
+  reg: Regulator
+  load: Load|False
+  children: Tuple<RegTree>
+with :
+  printer => true
+
+public defstruct RegList :
+  env: Env
+  regs: Tuple<RegNode>
+  loads: Tuple<LoadNode>
+  rails: Tuple<KeyValue<Int,RailProps>> with: (default => [], updater => sub-rails)
+with:
+  printer => true
+public defstruct RegNode :
+  n: Int
+  input: Int
+  reg: Regulator
+with:
+  printer => true
+public defstruct LoadNode :
+  n: Int
+  input: Int
+  load: Load
+with:
+  printer => true
+public defstruct RailProps :
+  voltage: Double
+  current: Double
+  noise: Double
+with:
+  printer => true
+
+defn gen-reg-list (t:Tree, env:Env, loads:Tuple<Load>, regulators:Tuple<Regulator>) ->
+                   RegList|False :
+  ;Convert the given tree into a regulator tree by choosing
+  ;appropriate concrete parts.
+  defn conv (t:Tree, input-rail:RailRange) -> RegTree|False :
+    attempt :
+      ;Without knowing the concrete part, this is what we know
+      ;about the output rail of this regulator.
+      val output-rail = match(load(t)) :
+        (l:Int) :
+          val load = loads[l]
+          if voltage(load) > hi(voltage(input-rail)) :        ;Something went wrong.
+            fatal("Rail does not support load")
+          RailRange(
+            DRange(voltage(load), voltage(load))              ;Voltage is known.
+            DRange(current(load), DOUBLE-POSITIVE-INFINITY),  ;Current is enough to supply load.
+            DRange(0.0, noise(load)))                         ;Noise is below load requirements.
+        (l:False) :    
+          RailRange(
+            DRange(0.0, hi(voltage(input-rail)))    ;Voltage always goes down.
+            DRange(0.0, DOUBLE-POSITIVE-INFINITY),  ;Current is unknown.
+            DRange(0.0, DOUBLE-POSITIVE-INFINITY))  ;Noise is unknown.
+
+      ;Recursively convert the children of the tree.
+      val single-current-path? =
+        length(children(t)) == 1 and
+        load(t) is False
+      val child-rail = 
+        if single-current-path? :
+          ;If there is exactly one path for current, then its input
+          ;rail is equivalent to our output rail.
+          output-rail
+        else :
+          ;Otherwise, we don't know the lower bound
+          ;on the current contributions because we don't know
+          ;the current flowing into each child
+          val current* = DRange(0.0, hi(current(output-rail)))
+          sub-current(output-rail, current*)
+      val children* = for c in children(t) map :
+        conv(c, child-rail) as? RegTree
+
+      ;Refine the output rail now that we have chosen
+      ;concrete parts for the children.
+      val output-rail* = RailRange(voltage*, current*, noise*) where :
+        val voltage* = intersect(vs) as? DRange where :
+          val vs = cat([voltage(output-rail)],
+                       seq(voltage{input(_)}, children*))
+        val noise* = intersect! $
+          cat([noise(output-rail)]
+              seq(noise{input(_)}, children*))
+        val current* = sum(all-currents) where :
+          val child-currents = seq(current{input(_)}, children*)
+          val all-currents = match(load(t)) :
+            (l:Int) : cat([DRange(current(loads[l]), current(loads[l]))], child-currents)
+            (l:False) : child-currents        
+
+      ;Select a concrete part for this regulator.
+      val regulators* = to-tuple $
+        for r in regulators filter :
+          suitable?(r, input-rail, output-rail*)
+      fail() when empty?(regulators*)        
+      val regulator = regulators*[rand(length(regulators*))]
+
+      ;Refine the output and input rail now that we have chosen
+      ;a concrete part for this regulator.
+      val input-rail* = refine-rails(regulator, input-rail, output-rail*)
+
+      ;Return the newly created regulator tree
+      val load? = match(load(t)) :
+        (l:Int) : loads[l]
+        (l:False) : false
+      RegTree(input-rail*, regulator, load?, children*)
+
+  ;Compute the input environment: only voltage is known.
+  val input-rail = RailRange(
+                    DRange(src-voltage(env), src-voltage(env))
+                    DRange(0.0, DOUBLE-POSITIVE-INFINITY)
+                    DRange(0.0, DOUBLE-POSITIVE-INFINITY))
+  val children* = map(conv{_, input-rail}, children(t))
+  if all?({_ is RegTree}, children*) :
+    to-reg-list(children* as Tuple<RegTree>, env)
+
+;Returns true if the given regulator is appropriate in the given context.
+defn suitable? (r:Regulator, input:RailRange, output:RailRange) -> True|False :
+  label<True|False> return :
+    defn ensure-overlaps! (a:DRange, b:DRange) :
+      return(false) when not overlaps?(a,b)
+    defn ensure-less! (a:Double, b:Double) :
+      return(false) when a > b
+      
+    ;Basic bounds
+    ensure-overlaps!(DRange(min-voltage-in(r), max-voltage-in(r)), voltage(input))
+    ensure-overlaps!(DRange(min-voltage-out(r), max-voltage-out(r)), voltage(output))
+    ensure-overlaps!(DRange(min-current-out(r), max-current-out(r)), current(output))
+
+    ;Noise bounds
+    match(r) :
+      (r:LDO) :
+        ;Noise bound
+        ensure-less!(noise(r), hi(noise(output)))
+      (r:SwitchReg) :
+        ;Noise bound
+        match(noise(r)) :
+          (n:Double) :
+            ensure-less!(n, hi(noise(output)))
+          (n:SwitchedNoise) :
+            val vin-min = lo(voltage(input))
+            val vout-max = hi(voltage(output))
+            val fs = switch-freq(n)
+            val L = inductor(n)
+            val C = capacitor(n)
+            val theta = 1.0 / (8.0 * fs * fs * L * C)
+            val max-vout-div-vin = min(vout-max / vin-min, max-dcycle(r))
+            val min-noise = theta * (1.0 - max-vout-div-vin) * vout-max
+            ensure-less!(min-noise, hi(noise(output)))
+
+    ;Return true for now if basic bounds pass
+    true
+
+;Given the concrete part assigned as the regulator, refine
+;the approximated output rail properties.
+defn refine-rails (r:Regulator, input:RailRange, output:RailRange) -> RailRange :
+  ;Retrieve parameters
+  var vin-min:Double = lo(voltage(input))
+  var vin-max:Double = hi(voltage(input))
+  var vout-min:Double = lo(voltage(output))
+  var vout-max:Double = hi(voltage(output))
+  var iin-min:Double = lo(current(input))
+  var iin-max:Double = hi(current(input))
+  var iout-min:Double = lo(current(output))
+  var iout-max:Double = hi(current(output))
+  var nin-min:Double = lo(noise(input))
+  var nin-max:Double = hi(noise(input))
+  var nout-min:Double = lo(noise(output))
+  var nout-max:Double = hi(noise(output))
+
+  ;Impose basic bounds
+  vin-min = max(vin-min, min-voltage-in(r))
+  vin-max = min(vin-max, max-voltage-in(r))
+  vout-min = max(vout-min, min-voltage-out(r))
+  vout-max = min(vout-max, max-voltage-out(r))
+  iout-min = max(iout-min, min-current-out(r))
+  iout-max = min(iout-max, max-current-out(r))
+
+  ;Regulator specific bounds
+  match(r) :
+    (r:LDO) :
+      ;iin = iout
+      iin-min = max(iin-min, iout-min)
+      iin-max = min(iin-max, iout-max)
+    (r:SwitchReg) :
+      ;vout <= vin * dcycle
+      ;>  max(vout) <= max(vin) * dcycle
+      ;>  min(vin) >= min(vout) / dcycle
+      vout-max = min(vout-max, vin-max * max-dcycle(r))
+      vin-min = max(vin-min, vout-min / max-dcycle(r))
+
+      ;iin = (1 / nu) * (vout / vin) * iout
+      ;>  iin <= dcycle / nu * max(iout)
+      ;>  iin >= (1 / nu) * min(vout) / max(vin) * min(iout)
+      iin-max = min(iin-max, max-dcycle(r) / efficiency(r) * iout-max)
+      iin-min = max(iin-min, vout-min * iout-min / vin-max / efficiency(r))
+
+  ;Return refined input rail
+  RailRange(
+    DRange(vin-min, vin-max)
+    DRange(iin-min, iin-max)
+    DRange(nin-min, nin-max))
+
+defn to-reg-list (t:Tuple<RegTree>, env:Env) :
+  val regs = Vector<RegNode>()
+  val loads = Vector<LoadNode>()
+  val rcounter = to-seq(1 to false)
+  val lcounter = to-seq(0 to false)
+  defn loop (t:RegTree, input:Int) :
+    val n = next(rcounter)
+    add(regs, RegNode(n, input, reg(t)))
+    match(load(t)) :
+      (l:Load) : add(loads, LoadNode(next(lcounter), n, l))
+      (l:False) : false
+    do(loop{_, n}, children(t))
+  do(loop{_, 0}, t)
+  RegList(env, to-tuple(regs), to-tuple(loads))
+
+defn contains? (r:DRange, x:Double) :
+  x >= lo(r) and x <= hi(r)
+
+defn overlaps? (a:DRange, b:DRange) :
+  hi(a) >= lo(b) and hi(b) >= lo(a)
+
+defn intersect (a:DRange, b:DRange) -> DRange|False :
+  if overlaps?(a, b) :
+    DRange(max(lo(a), lo(b)), min(hi(a), hi(b)))
+
+defn intersect! (a:DRange, b:DRange) :
+  intersect(a,b) as DRange
+
+defn intersect (rs:Seqable<DRange>) :
+  defn intersect? (a:DRange|False, b:DRange|False) :
+    match(a:DRange, b:DRange) : intersect(a,b)
+  reduce(intersect?, rs)
+
+defn intersect! (rs:Seqable<DRange>) :
+  reduce(intersect!, rs)
+
+defn sum (rs:Seqable<DRange>) :
+  var lo-accum:Double = 0.0
+  var hi-accum:Double = 0.0
+  for r in rs do :
+    lo-accum = lo-accum + lo(r)
+    hi-accum = hi-accum + hi(r)
+  DRange(lo-accum, hi-accum)
+
+;============================================================
+;================= Sort Descending Voltage ==================
+;============================================================
+
+defn sort-descending-voltage (loads:Tuple<Load>) :
+  defn neg-voltage (l:Load) : (- voltage(l))
+  qsort(neg-voltage, loads)
+
+;============================================================
+;======================= Analysis ===========================
+;============================================================
+;<CONSTRAINTS>
+Use a variable to represent the output voltage of each regulator: rail-n-vout
+
+Check: The output voltage of each regulator must be within the
+specified tolerance of the regulator.
+
+  rail-n-vout <= max-voltage-out(r)
+  rail-n-vout >= min-voltage-out(r)
+
+Check: The input voltage of each regulator must be within the
+specified tolerance of the regulator.
+
+  rail-n-vin <= max-voltage-in(r)
+  rail-n-vin >= min-voltage-in(r)
+
+The input voltage of each regulator is calculated from the regulator's
+input node.
+
+  rail-n-vin = rail-vout(input(r))
+
+LDO Check: The voltage must be less than the input minus the dropout voltage.
+
+  rail-n-vout <= rail-n-vin - voltage-dropout
+
+LDO Check: The voltage must be less than the input minus the noise level.
+
+  rail-n-vout <= rail-n-vin - noise / 2
+;<CONSTRAINTS>
+
+defn solve-nodes (rl:RegList) -> Seq<RegList> :
+  ;println("===== Generating constraints ======")
+  ;println(rl)
+  
+  ;Determine children of each node
+  val children = IntTable<List<RegNode|Load>>(List())
+  for r in regs(rl) do :
+    update(children, cons{r, _}, input(r))
+  for l in loads(rl) do :
+    update(children, cons{load(l), _}, input(l))
+
+  ;Create variables
+  val var-names = Vector<String>()
+  defn make-var (name) :
+    add(var-names, to-string(name))
+    length(var-names) - 1
+
+  ;Create constraints
+  val constraints = Vector<Constraint>()
+  defn ConstExp (v:Double) :
+    Exp<Double>({v}, [], to-string(v))
+  defn PlusExp (x:Int, v:Double) :
+    Exp<Double>({_[x] + v}, [x], to-string("V%_ + %_" % [x,v]))
+  defn DivExp (x:Int, v:Double) :
+    Exp<Double>({_[x] / v}, [x], to-string("V%_ / %_" % [x,v]))
+  defn SumExp (ys:Tuple<Int>, v:Double) :
+    defn vstr (x:Int) : "V%_" % [x]
+    defn eval (xs:Array<Double>) : sum(seq({xs[_]}, ys)) + v
+    Exp<Double>(eval, ys, to-string("sum(%,) + %_" % [seq(vstr,ys), v]))
+  defn LE (x:Int, v:Double) :
+    add(constraints, LEConstraint(x, ConstExp(v)))
+  defn GE (x:Int, v:Double) :
+    add(constraints, GEConstraint(x, ConstExp(v)))
+  defn LE (x:Int, y:Int, v:Double) :
+    add(constraints, LEConstraint(x, PlusExp(y,v)))
+  defn GE (x:Int, y:Int, v:Double) :
+    add(constraints, GEConstraint(x, PlusExp(y,v)))
+  defn GE-div (x:Int, y:Int, v:Double) :
+    add(constraints, GEConstraint(x, DivExp(y,v)))
+  defn EQ (x:Int, v:Double) :
+    add(constraints, EQConstraint(x, ConstExp(v), true))
+  defn EQ (x:Int, y:Int, v:Double) :
+    add(constraints, EQConstraint(x, PlusExp(y,v), true))
+  defn EQ (x:Int, f:Array<Double> -> Double, vars:Tuple<Int>, name) :
+    add(constraints, EQConstraint(x, Exp<Double>(f, vars, to-string(name))))
+  defn SUM (x:Int, ys:Tuple<Int>, v:Double) :
+    if empty?(ys) : EQ(x,v)
+    else : add(constraints, EQConstraint(x, SumExp(ys,v), true))
+  defn CHK (f:Array<Double> -> True|False, vars:Tuple<Int>, name) :
+    add(constraints, CheckConstraint(Exp<True|False>(f, vars, to-string(name))))
+
+  ;Create voltage/current variables
+  val rail-voltages = IntTable<Int>()
+  val rail-currents = IntTable<Int>()
+  val input-currents = IntTable<Int>()
+  val rail-noises = IntTable<Int>()
+  for r in regs(rl) do :
+    rail-voltages[n(r)] = make-var("rail-%_-vout" % [n(r)])
+    input-currents[n(r)] = make-var("reg-%_-iin" % [n(r)])
+    rail-currents[n(r)] = make-var("rail-%_-iout" % [n(r)])
+    rail-noises[n(r)] = make-var("rail-%_-noise" % [n(r)])
+  rail-voltages[0] = make-var("src-vout")
+  rail-currents[0] = make-var("src-iout")
+
+  ;Generate constraints from regulators
+  for r in regs(rl) do :
+    ;Retrieve parameters
+    val vout = rail-voltages[n(r)]
+    val iin = input-currents[n(r)]
+    val iout = rail-currents[n(r)]
+    val vin = rail-voltages[input(r)]
+    val rnoise = rail-noises[n(r)]
+
+    ;General voltage/current constraints
+    LE(vout, max-voltage-out(reg(r)))
+    GE(vout, min-voltage-out(reg(r)))
+    LE(vin, max-voltage-in(reg(r)))
+    GE(vin, min-voltage-in(reg(r)))
+    LE(iout, max-current-out(reg(r)))
+    GE(iout, min-current-out(reg(r)))
+
+    ;Regulator specific constraints
+    match(reg(r)) :
+      (r:LDO) :
+        GE(vin, vout, voltage-dropout(r))
+        GE(vin, vout, noise(r) / 2.0)
+        EQ(rnoise, noise(r))
+        CHK(f, [vin, vout, iout], name) where :
+          defn f (xs:Array<Double>) :
+            (xs[vin] - xs[vout]) * xs[iout] * thetaja(r) <= tjmax(r) - tamb(env(rl))
+          val name = "(V%_ - V%_) * V%_ * thetaja <= (tjmax - tamb)" % [vin, vout, iout]
+        EQ(iin, iout, 0.0)
+      (r:SwitchReg) :
+        GE-div(vin, vout, max-dcycle(r))
+        match(noise(r)) :
+          (n:Double) :
+            EQ(rnoise, n)
+          (n:SwitchedNoise) :
+            EQ(rnoise, f, [vout, vin], name) where :
+              defn f (xs:Array<Double>) :
+                val fs = switch-freq(n)
+                val L = inductor(n)
+                val C = capacitor(n)
+                xs[vout] / (8.0 * fs * fs * L * C) * (1.0 - xs[vout] / xs[vin])
+              val name = "V%_ / (8.0 * fs * fs * L * C) * (1.0 - V%_ / V%_)" % [
+                vout, vout, vin]
+        CHK(f, [vin, vout, iout], name) where :
+          defn f (xs:Array<Double>) :
+            val nu = efficiency(r)
+            (xs[vin] - xs[vout]) * (1.0 / nu - 1.0) * xs[iout] * thetaja(r) <= tjmax(r) - tamb(env(rl))
+          val name = "(V%_ - V%_) * (1.0 / nu - 1.0) * V%_ * thetaja(r) <= tjmax(r) - tamb(pt)" % [vin, vout, iout]
+        EQ(iin, f, [vout, iout, vin], name) where :
+          defn f (xs:Array<Double>) :
+            val nu = efficiency(r)
+            xs[vout] * xs[iout] / (xs[vin] * nu)
+          val name = "V%_ * V%_ / (V%_ * nu)" % [vout, iout, vin]
+
+  ;Source voltage constraint
+  EQ(rail-voltages[0], src-voltage(env(rl)))
+
+  ;Generate current constraints
+  defn gen-current-constraint (node:Int) :
+    val iout = rail-currents[node]
+    SUM(iout, to-tuple(vars), loads) where :
+      val vars = Vector<Int>()
+      var loads:Double = 0.0
+      for c in children[node] do :
+        match(c) :
+          (c:RegNode) : add(vars, input-currents[n(c)])
+          (c:Load) : loads = loads + current(c)
+  gen-current-constraint(0)
+  do(gen-current-constraint{n(_)}, regs(rl))
+
+  ;Generate constraints from loads
+  for l in loads(rl) do :
+    EQ(rail-voltages[input(l)], voltage(load(l)))
+    LE(rail-noises[input(l)], noise(load(l)))
+
+  ;println("Generated constraints:")
+  ;within indented() :
+  ;  for (name in var-names, v in 0 to false) do :
+  ;    println("V%_ : %~" % [v, name])
+  ;  do(println, constraints)
+
+  ;Solve constraints
+  val solns = solve-constraints(length(var-names), constraints)
+  for soln in solns seq :
+    val rails = Vector<KeyValue<Int,RailProps>>()
+    defn add-rail (n:Int) :
+      val v = soln[rail-voltages[n]]
+      val i = soln[rail-currents[n]]
+      val ns = soln[rail-noises[n]] when n > 0
+         else 0.0
+      add(rails, n => RailProps(v, i, ns))
+    add-rail(0)
+    do(add-rail{n(_)}, regs(rl))
+    sub-rails(rl, to-tuple(rails))    
+
+;============================================================
+;================= GraphViz Exporter ========================
+;============================================================
+
+deftype GBox
+defmulti id (b:GBox) -> Int
+defstruct RootBox <: GBox :
+  id: Int with: (as-method => true)
+  voltage: Double
+  current: Double
+  noise: Double
+  children: Tuple<GBox>
+with:
+  printer => true
+defstruct RegBox <: GBox :
+  id: Int with: (as-method => true)
+  description: String
+  voltage: Double
+  current: Double
+  noise: Double
+  children: Tuple<GBox>
+with:
+  printer => true
+defstruct LoadBox <: GBox :
+  id: Int with: (as-method => true)
+  description: String
+  current: Double
+  noise: Double  
+with:
+  printer => true
+
+public defn export-graphviz (rl:RegList, filename:String) :
+  ;Initialize table
+  val table = IntTable<List<RegNode|LoadNode>>(List())
+  for r in regs(rl) do :
+    update(table, cons{r, _}, input(r))
+  for l in loads(rl) do :
+    update(table, cons{l, _}, input(l))
+  val rails = to-inttable<RailProps>(rails(rl))
+
+  ;Create boxes
+  val id-counter = to-seq(0 to false)
+  defn gbox (n:RegNode|LoadNode) :
+    match(n) :
+      (n:RegNode) :
+        val bid = next(id-counter)
+        val r = reg(n)
+        val description* = match(description(r)) :
+          (d:String) : d
+          (d:False) : to-string("Regulator %_" % [id(r)])
+        val rail = rails[/n(n)]
+        val children = to-tuple(seq(gbox, table[/n(n)]))
+        RegBox(bid, description*, voltage(rail), current(rail), noise(rail), children)
+      (n:LoadNode) :
+        val bid = next(id-counter)
+        val l = load(n)
+        val description* = match(description(l)) :
+          (d:String) : d
+          (d:False) : to-string("Load %_" % [id(l)])
+        LoadBox(bid, description*, current(l), noise(l))
+  defn rootbox () :
+    val bid = next(id-counter)
+    val rail = rails[0]
+    val children = to-tuple(seq(gbox, table[0]))
+    RootBox(bid, voltage(rail), current(rail), noise(rail), children)
+    
+  ;Print out a gbox
+  val crossing-counter = to-seq(0 to false)
+  defn print-box (o:OutputStream, b:GBox) :
+    match(b) :
+      (b:RootBox) :
+        println(o, \<S>N%_ [shape=rectangle,label="Power Source"];<S> % [id(b)])
+        print-edges(o, b, children(b))
+        do(print-box{o, _}, children(b))
+      (b:RegBox) :
+        println(o, \<S>N%_ [shape=rectangle,label=%~];<S> % [id(b), description(b)])
+        print-edges(o, b, children(b))
+        do(print-box{o, _}, children(b))
+      (b:LoadBox) :
+        println(o, \<S>N%_ [shape=rectangle,label="%_\nDraws: %_A\nRequires: %_V pk-pk"];<S> % [
+          id(b), description(b), current(b), noise(b)])
+  defn print-edges (o:OutputStream, p:RootBox|RegBox, cs:Tuple<GBox>) :
+    if length(cs) == 1 :
+      println(o, \<S>N%_ -> N%_ [label=" %_V \n %_A \n %_V pk-pk "];<S> % [
+        id(p), id(cs[0]), voltage(p), current(p), noise(p)])
+    else :
+      val crossing = next(crossing-counter)
+      println(o, \<S>i%_ [shape=point];<S> % [crossing])
+      println(o, \<S>N%_ -> i%_ [dir=none, label=" %_V \n %_A \n %_V pk-pk "];<S> % [
+        id(p), crossing, voltage(p), current(p), noise(p)])
+      for c in cs do :
+        println(o, "i%_ -> N%_;" % [crossing, id(c)])
+
+  ;Print everything
+  val item = new Printable :
+    defmethod print (o:OutputStream, this) :
+      println(o, "digraph powersys {")
+      val o2 = IndentedStream(o)
+      println(o2, "rankdir=TB;")
+      println(o2, "splines=line;")
+      print-box(o2, rootbox())
+      println(o, "}")
+  spit(filename, item)
+
+;============================================================
+;====================== Coordinator =========================
+;============================================================
+public defn gen-power-supplies (env:Env,
+                                loads0:Tuple<Load>,
+                                regulators:Tuple<Regulator>) -> Seq<RegList> :
+  val loads = sort-descending-voltage(loads0)
+  val nloads = length(loads)
+
+  val pass-count = to-seq(0 to false)
+  val tree-pass = new Pass :
+    defmethod max-iterations (this) : 1
+    defmethod max-solutions (this) : 5
+    defmethod max-retries (this) : INT-MAX
+    defmethod process (this, x:False) :
+      if next(pass-count) == 2 :
+        println("Loads:")
+        do(println, loads)
+        println("Regulators:")
+        do(println, regulators)
+        fatal("No solution found for power system")
+      Trees(nloads, nloads * 2)
+  val label-pass = new Pass :
+    defmethod max-iterations (this) : 1
+    defmethod max-solutions (this) : 2
+    defmethod max-retries (this) : 4
+    defmethod process (this, x:Tree) :
+      label-loads(x, nloads)
+  val reg-pass = new Pass :
+    defmethod max-iterations (this) : 100
+    defmethod max-solutions (this) : 2
+    defmethod max-retries (this) : 10
+    defmethod process (this, x:Tree) :
+      match(gen-reg-list(x, env, loads, regulators)) :
+        (r:RegList) : to-seq([r])
+        (r:False) : to-seq([])
+  val solve-pass = new Pass :
+    defmethod max-iterations (this) : 1
+    defmethod max-solutions (this) : 2
+    defmethod max-retries (this) : 1
+    defmethod process (this, x:RegList) :
+      solve-nodes(x)
+  process([tree-pass, label-pass, reg-pass, solve-pass], false)
+

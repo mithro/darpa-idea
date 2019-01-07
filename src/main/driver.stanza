@@ -1,0 +1,20 @@
+defpackage jitpcb/driver :
+  import core
+  import collections
+  import parser
+  import stz/arg-parser
+  import rtm/errors
+  import rtm/utils
+  import rtm/ir-gen
+  import pass-manager
+  import passes
+
+let :
+  val args = command-line-arguments()[1 to false]
+  try :
+    val c = process-esir-command(true)
+    parse-args([c], c, args)
+  catch (e) :
+    val error? = print-error-report(e)
+    exit(-1) when error?
+

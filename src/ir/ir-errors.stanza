@@ -1,0 +1,918 @@
+#use-added-syntax(serializer)
+
+defpackage rtm/ir/errors :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-utils
+  import rtm/errors
+  import rtm/utils
+
+;============================================================
+;======================= Utilities ==========================
+;============================================================
+
+defn written (x) : "%~" % [x]
+defn quotes (x) : "'%~'" % [x]
+defn and-seq (xs0:Seqable) :
+  val xs = to-vector<?>(xs0)
+  val n = length(xs)
+  for (x in xs, i in 0 to false) seq :
+    if i == 0 : "%~" % [x]
+    else if i < n - 1 : ", %~" % [x]
+    else : " and %~" % [x]
+
+defn an (x:String) :
+  val particle = 
+    if contains?(['a' 'e' 'i' 'o' 'u'], x[0]) : "an"
+    else : "a"
+  "%_ %_" % [particle, x]
+
+defn type-string (t:RefType) :
+  match(t) :
+    (t:PinBundle) : "a pin bundle"
+    (t:PinArray) : "a pin array"
+    (t:SinglePin) : "a pin"
+    (t:InstType) : "an instance"
+    (t:InstArray) : "an instance array"
+    (t:NetType) : "a net"
+
+;============================================================
+;======================= Errors =============================
+;============================================================
+
+public deftype ESIRError <: Exception
+
+public defstruct CyclicBundleError <: ESIRError :
+  names: List<Symbol>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/CyclicBundleError :
+    names: List<Symbol>
+defmethod print (o:OutputStream, e:CyclicBundleError) :
+  print{o, _} $
+    if empty?(tail(names(e))) : CB-MSG0 % [head(names(e))]
+    else : CB-MSG1 % [and-seq(seq(quotes,names(e)))]
+
+val CB-MSG0 = "The bundle type '%~' depends upon itself."
+val CB-MSG1 = "The bundle types %* cylically depend upon each other."
+
+public defstruct CyclicModuleError <: ESIRError :
+  names: List<Symbol>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/CyclicModuleError :
+    names: List<Symbol>
+defmethod print (o:OutputStream, e:CyclicModuleError) :
+  print{o, _} $
+    if empty?(tail(names(e))) : CM-MSG0 % [head(names(e))]
+    else : CM-MSG1 % [and-seq(seq(quotes,names(e)))]
+
+val CM-MSG0 = "The module '%~' contains an instance of itself."
+val CM-MSG1 = "The modules %* cyclically instantiate each other."
+
+public defstruct DuplicateDefinitionError <: ESIRError :
+  type: String
+  name: Symbol|Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DuplicateDefinitionError :
+    type: String
+    name: Symbol|Ref
+defmethod print (o:OutputStream, e:DuplicateDefinitionError) :
+  print(o, DUP-MSG0 % [name(e), type(e)])
+
+val DUP-MSG0 = "Duplicate definition: the '%~' %_ has already been defined."
+
+public defstruct DefinedDifferentlyError <: ESIRError :
+  type: String
+  name: Symbol|Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DefinedDifferentlyError :
+    type: String
+    name: Symbol|Ref
+defmethod print (o:OutputStream, e:DefinedDifferentlyError) :
+  print(o, DUP-MSG1 % [name(e), an(type(e))])
+
+val DUP-MSG1 = "Duplicate definition: '%~' has already been defined as %_."
+
+public defstruct UnresolvedReferenceError <: ESIRError :
+  type: String
+  name: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/UnresolvedReferenceError :
+    type: String
+    name: Symbol
+defmethod print (o:OutputStream, e:UnresolvedReferenceError) :
+  print(o, UR-MSG0 % [type(e), name(e)])
+  
+val UR-MSG0 = "Unresolved reference: there is no %_ defined named '%~'."
+
+public defstruct InappropriateReferenceError <: ESIRError :
+  expected-type: String
+  actual-type: String
+  name: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/InappropriateReferenceError :
+    expected-type: String
+    actual-type: String
+    name: Symbol
+defmethod print (o:OutputStream, e:InappropriateReferenceError) :
+  print(o, IR-MSG0 % [an(expected-type(e)), name(e), an(actual-type(e))])
+
+val IR-MSG0 = "Inappropriate reference: %_ is required here, but '%~' is defined as %_."
+
+public defstruct InaccessibleBindingError <: ESIRError :
+  ref:Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/InaccessibleBindingError :
+    ref:Ref
+defmethod print (o:OutputStream, e:InaccessibleBindingError) :
+  print(o, IAB-MSG % [ref(e)])
+val IAB-MSG = "Reference %_ is not accessible in this context."
+
+public defstruct BadInstFieldError <: ESIRError :
+  ref:FieldRef
+  component:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadInstFieldError :
+    ref:FieldRef
+    component:Symbol
+defmethod print (o:OutputStream, e:BadInstFieldError) :
+  print(o, BIF-MSG % [ref(ref(e)), component(e), name(ref(e))])
+
+val BIF-MSG = "The instance %_ of type '%~' has no field called '%~'."
+
+public defstruct BadFieldError <: ESIRError :
+  ref:FieldRef
+  type:RefType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadFieldError :
+    ref:FieldRef
+    type:RefType
+defmethod print (o:OutputStream, e:BadFieldError) :
+  print{o, _} $ match(type(e)) :
+    (t:PinBundle) : BF-MSG0 % [ref(ref(e)), name(t), name(ref(e))]
+    (t) : BF-MSG1 % [ref(ref(e)), type-string(t), name(ref(e))]
+    
+val BF-MSG0 = "Reference %_, with bundle type '%~', has no field called '%~'."
+val BF-MSG1 = "Reference %_ corresponds to %_ and thus has no field called '%~'."
+
+public defstruct IndexRefOutOfBoundsError <: ESIRError :
+  ref:IndexRef
+  type:PinArray|InstArray
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/IndexRefOutOfBoundsError :
+    ref:IndexRef
+    type:PinArray|InstArray
+defmethod print (o:OutputStream, e:IndexRefOutOfBoundsError) :
+  print(o, IROOB-MSG % [index(ref(e)), ref(ref(e)), type(e)])
+
+val IROOB-MSG = "Cannot access out-of-bounds index (%_) in reference %_ of array type %_."
+
+public defstruct BadIndexError <: ESIRError :
+  ref:IndexRef
+  type:RefType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadIndexError :
+    ref:IndexRef
+    type:RefType
+defmethod print (o:OutputStream, e:BadIndexError) :
+  print(o, BI-MSG % [ref(ref(e)), type-string(type(e)), ref(e)])
+
+val BI-MSG = "Reference %_ corresponds to %_ and thus %_ cannot be accessed."
+
+public defstruct NotASinglePin <: ESIRError :
+  stmt-type: String
+  ref: Ref
+  type: PinType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotASinglePin :
+    stmt-type: String
+    ref: Ref
+    type: PinType
+defmethod print (o:OutputStream, e:NotASinglePin) :
+  print(o, NASP-MSG % [stmt-type(e), ref(e), type(e)])
+  
+val NASP-MSG = "The %_ statement requires a reference to a single pin, but reference %_ has type %_."
+
+public defstruct NotASingleComponentPin <: ESIRError :
+  stmt-type: String
+  ref: Ref
+  inst: Ref
+  module: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotASingleComponentPin :
+    stmt-type: String
+    ref: Ref
+    inst: Ref
+    module: Symbol
+defmethod print (o:OutputStream, e:NotASingleComponentPin) :
+  print(o, NASCP-MSG % [stmt-type(e), ref(e), inst(e), module(e)])
+
+val NASCP-MSG = "The %_ statement requires a reference to a single pin of an instance of a component. The reference %_ refers to a pin from instance %_ of module '%~'."
+
+public defstruct NotAComponentPin <: ESIRError :
+  stmt-type: String
+  ref: Ref
+  inst: Ref
+  module: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotAComponentPin :
+    stmt-type: String
+    ref: Ref
+    inst: Ref
+    module: Symbol
+defmethod print (o:OutputStream, e:NotAComponentPin) :
+  print(o, NACP-MSG % [stmt-type(e), ref(e), inst(e), module(e)])
+
+val NACP-MSG = "The %_ statement requires a reference to a pin of an instance of a component. The reference %_ refers to a pin from instance %_ of module '%~'."
+
+public defstruct BadRequireBase <: ESIRError :
+  name: Symbol
+  capability: CapabilityType
+  base: Ref
+  ref: Ref
+  left?: True|False
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadRequireBase :
+    name: Symbol
+    capability: CapabilityType
+    base: Ref
+    ref: Ref
+    left?: True|False
+defmethod print (o:OutputStream, e:BadRequireBase) :
+  val side-str = "left" when left?(e) else "right"
+  print(o, BRB-MSG % [name(e), capability(e), side-str, base(e), ref(e)])
+
+val BRB-MSG = "Bad syntax for partial pin assignment for requirement %~ for capability %~. The %_-hand side of the mapping must have %~ as a base but received instead %_."
+
+public defstruct RequirePinsWithoutName <: ESIRError :
+  capability: CapabilityType
+  inst: Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/RequirePinsWithoutName :
+    capability: CapabilityType
+    inst: Ref
+defmethod print (o:OutputStream, e:RequirePinsWithoutName) :
+  print(o, RPWN-MSG % [capability(e), inst(e)])
+
+val RPWN-MSG = "Unnamed requirement for capability C from instance I cannot have a pin mapping."
+
+public defstruct UnsupportedInstSupports <: ESIRError :
+  inst: Ref
+  capability: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/UnsupportedInstSupports :
+    inst: Ref
+    capability: Symbol
+defmethod print (o:OutputStream, e:UnsupportedInstSupports) :
+  print(o, UIS-MSG % [inst(e), capability(e)])
+
+val UIS-MSG = "The statement 'inst %_ supports %~' is an internal IR construct created during lowering and is not accessible to the user."
+
+public defstruct ComponentSupportsWithRequires <: ESIRError :
+  capability: Symbol
+  component: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/ComponentSupportsWithRequires :
+    capability: Symbol
+    component: Symbol
+defmethod print (o:OutputStream, e:ComponentSupportsWithRequires) :
+  print(o, CSWR-MSG % [capability(e), component(e)])
+
+val CSWR-MSG = "The support for capability %~ in component %~ cannot have requirements."
+
+public defstruct DuplicateRequire <: ESIRError :
+  inst: Ref
+  requirement: Symbol 
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DuplicateRequire :
+    inst: Ref
+    requirement: Symbol 
+defmethod print (o:OutputStream, e:DuplicateRequire) :
+  print(o, DR-MSG % [inst(e), requirement(e)])
+
+val DR-MSG = "The instance %_ has multiple requirements named %~."
+
+public defstruct BadRequireType <: ESIRError :
+  requirement: Symbol
+  inst: Ref
+  ref1: Ref
+  type1: PinType
+  ref2: Ref
+  type2: PinType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadRequireType :
+    requirement: Symbol
+    inst: Ref
+    ref1: Ref
+    type1: PinType
+    ref2: Ref
+    type2: PinType
+defmethod print (o:OutputStream, e:BadRequireType) :
+  print(o, BRT-MSG % [requirement(e), inst(e), ref1(e), type1(e), ref2(e), type2(e)])
+
+val BRT-MSG = "Requirement '%~' from instance '%~' incorrectly maps pin %_ of type %_ to pin %_ of type %_."
+
+public defstruct BadRequirePin <: ESIRError :
+  requirement: Symbol
+  inst: Symbol
+  ref1: Ref
+  ref2: Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadRequirePin :
+    requirement: Symbol
+    inst: Symbol
+    ref1: Ref
+    ref2: Ref
+defmethod print (o:OutputStream, e:BadRequirePin) :
+  print(o, BRP-MSG % [requirement(e), inst(e), ref1(e), ref2(e)])
+
+val BRP-MSG = "Requirement '%~' of instance '%~' incorrectly maps pin %_ to non-existent pin %_."
+
+public defstruct UnmatchedSupportsTypeError <: ESIRError :
+  ref1:Ref
+  type1:PinType
+  ref2:Ref
+  type2:PinType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/UnmatchedSupportsTypeError :
+    ref1:Ref
+    type1:PinType
+    ref2:Ref
+    type2:PinType
+defmethod print (o:OutputStream, e:UnmatchedSupportsTypeError) :
+  print(o, UST-MSG % [ref1(e), type1(e), ref2(e), type2(e)])
+
+val UST-MSG = "Capability port %_ must be mapped to a port of type %_, but port %_ has type %_."
+
+public defstruct NoCapabilityMapping <: ESIRError :
+  capability:Symbol
+  type:PinType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoCapabilityMapping :
+    capability:Symbol
+    type:PinType
+defmethod print (o:OutputStream, e:NoCapabilityMapping) :
+  print(o, NCM-MSG % [capability(e), type(e)])
+
+val NCM-MSG = "Capability '%~' of type %_ has no mapping to ports."
+
+public defstruct IllegalCapabilityMapping <: ESIRError :
+  capability:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/IllegalCapabilityMapping :
+    capability:Symbol
+defmethod print (o:OutputStream, e:IllegalCapabilityMapping) :
+  print(o, ICM-MSG % [capability(e)])
+
+val ICM-MSG = "Capability '%~' cannot be mapped to component ports."
+
+public defstruct NoCapabilityPortMappingError <: ESIRError :
+  ref:Ref  
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoCapabilityPortMappingError :
+    ref:Ref  
+defmethod print (o:OutputStream, e:NoCapabilityPortMappingError) :
+  print(o, NCPM-MSG % [ref(e)])
+
+val NCPM-MSG = "Capability port %_ has not been mapped to a component pin."
+
+public defstruct UnsupportedCapability <: ESIRError :
+  inst:Ref
+  module:Symbol
+  capability:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/UnsupportedCapability :
+    inst:Ref
+    module:Symbol
+    capability:Symbol
+defmethod print (o:OutputStream, e:UnsupportedCapability) :
+  print(o, UC-MSG % [inst(e), module(e), capability(e)])
+
+val UC-MSG = "Instance %~ of module %~ does not support the %~ capability."
+
+public defstruct NoCapabilityPort <: ESIRError :
+  context:TContext
+  inst:Ref
+  capability:CapabilityType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoCapabilityPort :
+    context:TContext
+    inst:Ref
+    capability:CapabilityType
+defmethod print (o:OutputStream, e:NoCapabilityPort) :
+  print(o, NCP-MSG % [inst(e), context(e), capability(e)])
+
+val NCP-MSG = "Instance '%~' in %_ requires capability %_ but does not provide a name for the port it will be mapped to."
+
+public defstruct IllegalCapabilityPort <: ESIRError :
+  context:TContext
+  inst:Symbol
+  capability:CapabilityType
+  port-name:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/IllegalCapabilityPort :
+    context:TContext
+    inst:Symbol
+    capability:CapabilityType
+    port-name:Symbol
+defmethod print (o:OutputStream, e:IllegalCapabilityPort) :
+  print(o, ICP-MSG % [inst(e), context(e), capability(e), port-name(e)])
+
+val ICP-MSG = "Instance '%~' in %_ requires capability %_ on port '%~' but this capability cannot be exposed as a port."
+
+public defstruct AmbiguousMappingValue <: ESIRError :
+  key:Ref
+  value0:Ref
+  value1:Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/AmbiguousMappingValue :
+    key:Ref
+    value0:Ref
+    value1:Ref
+defmethod print (o:OutputStream, e:AmbiguousMappingValue) :
+  print(o, AMV-MSG % [key(e), value1(e), value0(e)])
+
+val AMV-MSG = "Cannot map pin %_ to %_ when it has already been mapped to pin %_."
+
+public defstruct AmbiguousMappingKey <: ESIRError :
+  key0:Ref
+  key1:Ref
+  value:Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/AmbiguousMappingKey :
+    key0:Ref
+    key1:Ref
+    value:Ref
+defmethod print (o:OutputStream, e:AmbiguousMappingKey) :
+  print(o, AMK-MSG % [key1(e), value(e), key0(e)])
+
+val AMK-MSG = "Cannot map pin %_ to pin %_ when pin %_ has already been mapped to it."
+
+public deftype SymbolContext
+public defstruct InstContext <: SymbolContext :
+  inst: Ref
+public defstruct ComponentContext <: SymbolContext :
+  component: Symbol
+defmethod print (o:OutputStream, c:SymbolContext) :
+  print{o, _} $ match(c) :
+    (c:InstContext) : "instance %_" % [inst(c)]
+    (c:ComponentContext) : "component %_" % [component(c)]
+
+public defstruct NoMapping <: ESIRError :
+  pin:Ref
+  context:SymbolContext
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoMapping :
+    pin:Ref
+    context:SymbolContext
+  rtm/ir/errors/InstContext :
+    inst: Ref
+  rtm/ir/errors/ComponentContext :
+    component: Symbol  
+defmethod print (o:OutputStream, e:NoMapping) :
+  print(o, NM-MSG % [pin(e), context(e)])
+val NM-MSG = "Pin %_ on %_ has not been mapped to a symbol pin."
+
+public defstruct BadPackagePad <: ESIRError :
+  package:Symbol
+  ref:Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadPackagePad :
+    package:Symbol
+    ref:Ref
+defmethod print (o:OutputStream, e:BadPackagePad) :
+  print(o, BPP-MSG % [package(e), ref(e)])
+
+val BPP-MSG = "PCB package '%~' does not have a pad named %_."
+
+public defstruct NotAPinOrInst <: ESIRError :
+  ref:Ref
+  type:RefType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotAPinOrInst :
+    ref:Ref
+    type:RefType
+defmethod print (o:OutputStream, e:NotAPinOrInst) :
+  print(o, NPoI-MSG % [ref(e), type-string(type(e))])
+
+val NPoI-MSG = "A reference to a pin or instance is expected here, but %_ refers to %_."
+
+public defstruct NotAPin <: ESIRError :
+  ref:Ref
+  type:RefType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotAPin :
+    ref:Ref
+    type:RefType
+defmethod print (o:OutputStream, e:NotAPin) :
+  print(o, NP-MSG % [ref(e), type-string(type(e))])
+
+val NP-MSG = "A reference to a pin is expected here, but %_ refers to %_."
+
+public defstruct NotAnInst <: ESIRError :
+  ref:Ref
+  type:RefType
+  array-allowed?:True|False with: (default => false)
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotAnInst :
+    ref:Ref
+    type:RefType
+    array-allowed?:True|False
+defmethod print (o:OutputStream, e:NotAnInst) :
+  val array-string = " or instance array" when array-allowed?(e) else ""
+  print(o, NI-MSG % [array-string, ref(e), type-string(type(e))])
+
+val NI-MSG = "A reference to an instance%_ is expected here, but %_ refers to %_."
+
+public defstruct NotAnInstComponent <: ESIRError :
+  ref:Ref
+  module:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotAnInstComponent :
+    ref:Ref
+    module:Symbol
+defmethod print (o:OutputStream, e:NotAnInstComponent) :
+  print(o, NIC-MSG % [ref(e), module(e)])
+
+val NIC-MSG = "Expected an instance of a component here, but reference %_ is an instance of module '%~'."
+
+public defstruct NotANet <: ESIRError :
+  ref:Ref
+  type:RefType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NotANet :
+    ref:Ref
+    type:RefType
+defmethod print (o:OutputStream, e:NotANet) :
+  print(o, NN-MSG % [ref(e), type-string(type(e))])
+
+val NN-MSG = "A reference to a net between single pins is expected here, but %_ refers to %_."
+
+public defstruct BadNetType <: ESIRError :
+  context:TContext
+  net:Symbol|False
+  ref0:Ref
+  type0:PinType
+  ref1:Ref
+  type1:PinType
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadNetType :
+    context:TContext
+    net:Symbol|False
+    ref0:Ref
+    type0:PinType
+    ref1:Ref
+    type1:PinType
+defmethod print (o:OutputStream, e:BadNetType) :
+  val net-str = match(net(e)) :
+    (net:Symbol) : "net '%~'" % [net]
+    (net:False) : "net"
+  print(o, BNT-MSG % [net-str, context(e), ref0(e), type0(e), ref1(e), type1(e)])
+
+val BNT-MSG = "Mismatched types in %_ in %_: reference %_ has type %_ but reference %_ has type %_."
+
+public defstruct BadNetRef <: ESIRError :
+  net:Symbol|False
+  ref:Ref
+  type:RefType
+defmethod print (o:OutputStream, e:BadNetRef) :
+  val net-str = match(net(e)) :
+    (n:Symbol) : " %~" % [n]
+    (n:False) : ""
+  print(o, BNR-MSG % [net-str, ref(e), type-string(type(e))])
+
+val BNR-MSG = "The net%_ contains an illegal reference to %_, which refers to %_."
+
+public defstruct BadSelector <: ESIRError :
+  ref:Ref
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadSelector :
+    ref:Ref
+defmethod print (o:OutputStream, e:BadSelector) :
+  print(o, BS-MSG % [ref(e)])
+
+val BS-MSG = "Expected a reference to a component here, but received %_."
+
+public defstruct BadTopLevelModule <: ESIRError :
+  module:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadTopLevelModule :
+    module:Symbol
+defmethod print (o:OutputStream, e:BadTopLevelModule) :
+  print(o, BTLM-MSG % [module(e)])
+
+val BTLM-MSG = "Module '%~' has pins defined and thus cannot be used as a top-level module."
+
+public defstruct NoAppropriatePart <: ESIRError :
+  inst:Symbol
+  component:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoAppropriatePart :
+    inst:Symbol
+    component:Symbol
+defmethod print (o:OutputStream, e:NoAppropriatePart) :
+  print(o, "Could not infer an appropriate part for instance '%~' of component '%~'." % [inst(e), component(e)])
+
+public defstruct NoMakeBoard <: ESIRError
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoMakeBoard
+defmethod print (o:OutputStream, e:NoMakeBoard) :
+  print(o, "Could not find a make-board statement.")
+
+public defstruct MultipleMakeBoard <: ESIRError
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/MultipleMakeBoard
+defmethod print (o:OutputStream, e:MultipleMakeBoard) :
+  print(o, "Top-level module is ambiguous. There are multiple make-board statements.")
+
+public defstruct UnsatisfiableRequirements <: ESIRError :
+  module: Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/UnsatisfiableRequirements :
+    module: Symbol
+defmethod print (o:OutputStream, e:UnsatisfiableRequirements) :
+  print(o, "Could not satisfy requested requirements for module %~." % [module(e)])
+
+public defstruct DuplicateCStmt <: ESIRError :
+  stmt:CStmt
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DuplicateCStmt :
+    stmt:CStmt
+defmethod print (o:OutputStream, e:DuplicateCStmt) :
+  defn msg1 (key:String, value) : print(o, DUPC-MSG1 % [key, value])
+  defn msg2 (key:String) : print(o, DUPC-MSG2 % [key])
+  match(stmt(e)) :
+    (s:DefaultPackageStmt) : msg1("default package", package(s))
+    (s:DefaultEModelStmt) : msg1("default electrical model", model(s))
+    (s:DefaultPartStmt) : msg1("default part", part(s))
+    (s:ReferencePrefixStmt) : msg1("reference prefix", prefix(s))
+
+val DUPC-MSG1 = "The %_ for this component has already been set as '%~'."
+val DUPC-MSG2 = "The %_ for this component has already been set."
+
+public defstruct DuplicateMStmt <: ESIRError :
+  stmt:MStmt
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DuplicateMStmt :
+    stmt:MStmt
+defmethod print (o:OutputStream, e:DuplicateMStmt) :
+  val [a, b, c] = match(stmt(e)) :
+    (s:PackageStmt) : ["A package", "instance", ref(s)]
+    (s:EModelStmt) : ["An electrical model", "instance", ref(s)]
+    (s:PartStmt) : ["A part", "instance", ref(s)]
+    (s:ReferenceStmt) : ["A reference", "instance", ref(s)]
+  print(o, DUPM-MSG % [a, b, c])
+
+val DUPM-MSG = "%_ has already been assigned to the %_ %_."
+
+public defstruct DuplicateReferenceDesignator <: ESIRError :
+  inst:Symbol
+  value:String
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DuplicateReferenceDesignator :
+    inst:Symbol
+    value:String
+defmethod print (o:OutputStream, e:DuplicateReferenceDesignator) :
+  print(o, DRD-MSG % [value(e), inst(e)])
+
+val DRD-MSG = "Reference designator already used: cannot assign reference designator %_ to instance '%~'."
+
+public defstruct IncompatibleEModel <: ESIRError :
+  ref:Ref
+  model:EModel
+  module:Symbol
+  module-ref:Ref
+  module-model:EModel
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/IncompatibleEModel :
+    ref:Ref
+    model:EModel
+    module:Symbol
+    module-ref:Ref
+    module-model:EModel
+defmethod print (o:OutputStream, e:IncompatibleEModel) :
+  print(o, IEM-MSG % [model-type-name(model(e)), ref(e), module(e), an(model-type-name(module-model(e))), module-ref(e)])
+
+val IEM-MSG = "Cannot assign %_ electrical model to reference %_. The module '%~' has already assigned %_ electrical model to reference %_."
+
+public defstruct IncompatibleDefaultEModel <: ESIRError :
+  ref:Ref
+  model:EModel
+  component:Symbol
+  default-model:EModel
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/IncompatibleDefaultEModel :
+    ref:Ref
+    model:EModel
+    component:Symbol
+    default-model:EModel
+defmethod print (o:OutputStream, e:IncompatibleDefaultEModel) :
+  print(o, IDEM-MSG % [model-type-name(model(e)), ref(e), component(e), model-type-name(default-model(e))])
+
+val IDEM-MSG = "Cannot assign %_ electrical model to reference %_. The component '%~' has a default %_ electrical model."
+
+public defstruct InappropriatePart <: ESIRError :
+  inst:Symbol|False
+  component:Symbol
+  package:Symbol|False
+  emodel:EModel|False
+  part:DefPart
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/InappropriatePart :
+    inst:Symbol|False
+    component:Symbol
+    package:Symbol|False
+    emodel:EModel|False
+    part:DefPart
+defmethod print (o:OutputStream, e:InappropriatePart) :
+  defn conflict?<T> (f:(T,T) -> True|False, a:T|False, b:T|False) :
+    a is-not False and b is-not False and not f(a as T, b as T)
+  val obj-str = "Instance" when inst(e) is Symbol else "Component"
+  match(inst(e):Symbol) :
+    print(o, IP-MSGA % [inst(e), component(e), name(part(e))])
+  else :
+    print(o, IP-MSGB % [component(e), name(part(e))])
+  if conflict?<Symbol>(equal?, component(e), component(part(e))) :
+    print(o, IP-MSG1 % [component(part(e))])
+  if conflict?<Symbol>(equal?, package(e), package(part(e))) :
+    print(o, IP-MSG2 % [obj-str, package(e), package(part(e))])
+  if conflict?<EModel>(match?, emodel(e), emodel(part(e))) :
+    print(o, IP-MSG3 % [obj-str, emodel(e), emodel(part(e))])  
+  
+val IP-MSGA = "Instance '%~' of component '%~' cannot be assigned part '%~':"
+val IP-MSGB = "Component '%~' cannot be assigned part '%~':"
+val IP-MSG1 = "\n  Part is only for component '%~'."
+val IP-MSG2 = "\n  %_ requires package '%~' but part has package '%~'."
+val IP-MSG3 = "\n  %_ requires electrical model %_ but part has electrical model %_."
+
+
+public defstruct InappropriateDefaultPart <: ESIRError :
+  inst:Symbol|False
+  component:Symbol
+  package:Symbol|False
+  emodel:EModel|False
+  part:DefPart
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/InappropriateDefaultPart :
+    inst:Symbol|False
+    component:Symbol
+    package:Symbol|False
+    emodel:EModel|False
+    part:DefPart
+defmethod print (o:OutputStream, e:InappropriateDefaultPart) :
+  defn conflict?<T> (f:(T,T) -> True|False, a:T|False, b:T|False) :
+    a is-not False and b is-not False and not f(a as T, b as T)
+  val obj-str = "Instance" when inst(e) is Symbol else "Component"
+  match(inst(e):Symbol) :
+    print(o, IP-MSGA % [inst(e), component(e), name(part(e))])
+  else :
+    print(o, IP-MSGB % [component(e), name(part(e))])
+  if conflict?<Symbol>(equal?, component(e), component(part(e))) :
+    print(o, IP-MSG1 % [component(part(e))])
+  if conflict?<Symbol>(equal?, package(e), package(part(e))) :
+    print(o, IP-MSG2 % [obj-str, package(e), package(part(e))])
+  if conflict?<EModel>(match?, emodel(e), emodel(part(e))) :
+    print(o, IP-MSG3 % [obj-str, emodel(e), emodel(part(e))])  
+
+public defstruct BadPruneForType <: ESIRError :
+  type:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadPruneForType :
+    type:Symbol
+defmethod print (o:OutputStream, e:BadPruneForType) :
+  print(o, "The -prune-for flag does not recognize the option '%~'." % [type(e)])
+
+public defstruct BadPruneAllType <: ESIRError :
+  type:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/BadPruneAllType :
+    type:Symbol
+defmethod print (o:OutputStream, e:BadPruneAllType) :
+  print(o, "The -prune-all flag does not recognize the option '%~'." % [type(e)])
+
+public defstruct NoPackageForInst <: ESIRError :
+  module:Symbol
+  inst:Symbol
+  component:Symbol
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoPackageForInst :
+    module:Symbol
+    inst:Symbol
+    component:Symbol
+defmethod print (o:OutputStream, e:NoPackageForInst) :
+  print(o, NPFI-MSG % [module(e), inst(e), component(e)])
+val NPFI-MSG = "In module '%~', instance '%~' of component '%~' has no associated package."
+  
+public defstruct MaxInliningDepthError <: ESIRError :
+  depth:Int
+  stack:Tuple<InlineCall>
+public defstruct InlineCall :
+  stmt: AttachStmt
+  context: TContext
+  
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/MaxInliningDepthError :
+    depth:Int
+    stack:Tuple<InlineCall>
+  rtm/ir/errors/InlineCall :
+    stmt: AttachStmt
+    context: TContext
+
+defmethod print (o:OutputStream, e:MaxInliningDepthError) :
+  print(o, MID-MSG % [depth(e)])
+  for c in stack(e) do :
+    print(o, '\n')
+    print(o, c)
+defmethod print (o:OutputStream, c:InlineCall) :
+  print(o, MID-MSG2 % [stmt(c), context(c)])
+val MID-MSG = "Maximum attachment inlining depth reached (%_):"
+val MID-MSG2 = "  while expanding '%_' from '%_'"
+
+public defstruct NoSuitableAttachment <: ESIRError :
+  attach:Symbol
+  args:List<Ref>
+  types:List<RefType>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/NoSuitableAttachment :
+    attach:Symbol
+    args:List<Ref>
+    types:List<RefType>
+defmethod print (o:OutputStream, e:NoSuitableAttachment) :
+  print(o, NSA-MSG % [attach(e), args(e), types(e)])
+val NSA-MSG = "There is no suitable attachment '%~' for expanding references (%,) of types (%,)."
+
+public defstruct MultipleSuitableAttachments <: ESIRError :
+  attach:Symbol
+  args:List<Ref>
+  types:List<RefType>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/MultipleSuitableAttachments :
+    attach:Symbol
+    args:List<Ref>
+    types:List<RefType>
+defmethod print (o:OutputStream, e:MultipleSuitableAttachments) :
+  print(o, MSA-MSG % [attach(e), args(e), types(e)])
+val MSA-MSG = "There are multiple suitable attachments '%~' for expanding references (%,) of types (%,)."
+
+public defstruct IllegalPortHead <: ESIRError :
+  ref:Ref
+  name:Symbol
+  args:List<Symbol>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/IllegalPortHead :
+    ref:Ref
+    name:Symbol
+    args:List<Symbol>
+defmethod print (o:OutputStream, e:IllegalPortHead) :
+  print(o, IPH-MSG % [ref(e), name(e), args(e)])
+val IPH-MSG = "The head of the port '%~' does not match any of the arguments for 'pcb-attach %~ (%,)'. "
+
+public defstruct DuplicateAttachArg <: ESIRError :
+  arg:Symbol
+  name:Symbol
+  args:List<Symbol>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/DuplicateAttachArg :
+    arg:Symbol
+    name:Symbol
+    args:List<Symbol>
+defmethod print (o:OutputStream, e:DuplicateAttachArg) :
+  print(o, DAA-MSG % [arg(e), name(e), args(e)])
+val DAA-MSG = "The argument '%~' appears more than once in the definition of 'pcb-attach %~ (%,)'."
+
+public defstruct CoveredPort <: ESIRError :
+  ref:Ref
+  ref0:Ref
+  name:Symbol
+  args:List<Symbol>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/CoveredPort :
+    ref:Ref
+    ref0:Ref
+    name:Symbol
+    args:List<Symbol>
+defmethod print (o:OutputStream, e:CoveredPort) :
+  print(o, CP-MSG % [ref(e), ref0(e), name(e), args(e)])
+val CP-MSG = "The port '%~' is covered by the existing port '%~' in the definition of 'pcb-attach %~ (%,)'. "
+
+;============================================================
+;=================== Contexts ===============================
+;============================================================
+
+public deftype TContext
+public defstruct ModuleContext <: TContext :
+  name: Symbol
+public defstruct AttachContext <: TContext :
+  name: Symbol
+  args: List<Symbol>
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/errors/ModuleContext :
+    name: Symbol
+  rtm/ir/errors/AttachContext :
+    name: Symbol
+    args: List<Symbol>
+defmethod print (o:OutputStream, c:TContext) :
+  print{o, _} $ match(c) :
+    (c:ModuleContext) : "module %~" % [name(c)]
+    (c:AttachContext) : "pcb-attach %~ (%,)" % [name(c), args(c)]
+

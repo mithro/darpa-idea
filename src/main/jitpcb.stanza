@@ -1,0 +1,182 @@
+defpackage jitpcb :
+  import core
+  import collections
+  import parser
+  import stz/main with :
+    prefix(COMPILE-COMMAND, BUILD-COMMAND, INSTALL-COMMAND, VERSION-COMMAND) => stz-
+  import stz/build
+  import stz/params
+  import stz/arg-parser
+  import rtm/ir
+  import rtm/ir-reader
+  import rtm/ir/errors
+  import rtm/errors
+  import jitpcb/errors
+  import jitpcb/config
+  import serialize-macros
+  import serialize
+  import rtm/ir-gen-macros
+  import plugins/master
+  import pass-manager
+  import passes
+  import rtm/utils
+
+;============================================================
+;====================== Version =============================
+;============================================================
+
+val ABOUT-MSG =
+\<MSG>
+             JitPCB Circuit Design Automation
+
+                     Version %_
+
+Copyright (c) 2017, JITX Inc. All Rights Reserved.
+<MSG>
+
+defn print-version () :
+  val version = string-join(jitpcb-version(), ".")
+  println(ABOUT-MSG % [version])
+
+val VERSION-COMMAND =
+  Command("version", [], print-version{})
+
+;============================================================
+;====================== Compilation =========================
+;============================================================
+
+defn compile (parsed:ParseResult) :
+  ;Verification
+  if empty?(args(parsed)) :
+    throw(NoJitPCBFiles())
+
+  ;Utilities files
+  val utils-c = norm-path("%_/runtime/rtm-utils.c" % [jitpcb-install-dir()])
+
+  ;Optional assembly file
+  val asm = One(single(parsed, "s")) when has-flag?(parsed, "s") else None()
+
+  ;New filenames
+  val filenames = to-list $ cat-all $ [
+    ["jitpcb/driver"],
+    args(parsed),
+    ["jitpcb/launcher"]]
+
+  ;Create job command
+  compile $ BuildJob(
+    filenames                      ;filenames
+    asm                            ;assembly
+    One(single(parsed, "o"))       ;output
+    None()                         ;platform
+    List(utils-c)                  ;ccfiles
+    None()                         ;ccflags
+    List()                         ;flags
+    None()                         ;pkg
+    has-flag?(parsed, "optimize")  ;optimize?
+    false)                         ;verbose?  
+
+val COMPILE-COMMAND =
+  Command("compile",
+   [SingleFlag("o", false)
+    SingleFlag("s", true)
+    MarkerFlag("optimize")]
+   compile)
+
+;============================================================
+;======================== Build =============================
+;============================================================
+
+defn build (parsed:ParseResult) :
+  ;Is this a link job
+  defn link? (job:BuildJob) :
+    assembly(job) is One or output(job) is One
+  ;Add auxiliary definitions to build job
+  defn add-aux (job:BuildJob) :
+    val filenames* = to-list $ cat-all $ [
+      ["jitpcb/driver"]
+      filenames(job)
+      ["jitpcb/launcher"]]
+    val utils-c = norm-path("%_/runtime/rtm-utils.c" % [jitpcb-install-dir()])
+    val ccfiles* = cons(utils-c, ccfiles(job))
+    BuildJob(
+      filenames*
+      assembly(job)
+      output(job)
+      platform(job)
+      ccfiles*
+      ccflags(job)
+      flags(job)
+      pkg(job)
+      optimize?(job)
+      verbose?(job))
+  
+  val target = `main when empty?(args(parsed))
+          else to-symbol(head(args(parsed)))
+  within job = build(target) :
+    compile $
+      if link?(job) : add-aux(job)
+      else : job
+
+val BUILD-COMMAND = Command("build", [], build)
+
+;============================================================
+;======================= Installation =======================
+;============================================================
+
+defn install (parsed:ParseResult) :
+  write-config-file()
+
+val INSTALL-COMMAND =
+  Command("install", [], install)
+
+;============================================================
+;===================== Debug Serializers ====================
+;============================================================
+
+defn print-serializers (parsed:ParseResult) :
+  ;No arguments accepted
+  if not empty?(args(parsed)) :
+    throw(CommandCannotTakeArgs("print-serializers", args(parsed)))
+
+  ;Print all registered serializers
+  println("Registered Serializers:")
+  for s in registered-serializers() do :
+    println("  %~ (tag = %_)" % [name(s), tag(s)])
+
+val PRINT-SERIALIZERS-COMMAND = Command("print-serializers", [], print-serializers)
+
+;============================================================
+;==================== Read JitPCB Exps ======================
+;============================================================
+
+defn read-jitpcb-exps (parsed:ParseResult) :
+  ;Verification
+  if empty?(args(parsed)) :
+    throw(NoJitPCBFiles())
+
+  ;Retrieve filename to parse
+  val filename = head(args(parsed))
+
+  ;Call the parser plugin
+  val result = call(Plugin("parsers"), `read-jitpcb-exps, [filename, false])
+
+  ;Write result to screen
+  write(current-output-stream(), result)
+
+val READ-JITPCB-EXPS-COMMAND = Command("read-jitpcb-exps", [], read-jitpcb-exps)
+  
+;============================================================
+;========================== Main ============================
+;============================================================
+
+defn main () :
+  val args = command-line-arguments()[1 to false]
+  val cs = [COMPILE-COMMAND, BUILD-COMMAND, INSTALL-COMMAND, VERSION-COMMAND, PRINT-SERIALIZERS-COMMAND,
+            READ-JITPCB-EXPS-COMMAND, process-esir-command(false)]
+  try :
+    parse-args(cs, COMPILE-COMMAND, args)
+  catch (e) :
+    val error? = print-error-report(e)
+    exit(-1) when error?
+
+main()

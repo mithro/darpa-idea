@@ -1,0 +1,357 @@
+defpackage pass-manager :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-reader
+  import rtm/utils
+  import param-manager
+  import rtm/errors
+  import jitpcb/config
+  import stz/arg-parser
+  import jitpcb/errors
+  import jitpcb/flags
+  import rtm/ir-gen
+  import serialize
+
+;============================================================
+;=================== Argument Parsing =======================
+;============================================================
+
+#for (num-arg in [int-arg, long-arg, float-arg, double-arg]
+      num-arg? in [int-arg?, long-arg?, float-arg?, double-arg?]
+      to-num in [to-int, to-long, to-float, to-double]
+      Num in [Int, Long, Float, Double]) :
+
+  public defn num-arg (parsed:ParseResult, flag:String) :
+    val str = single(parsed, flag)
+    match(to-num(str)) :
+      (v:Num) : v
+      (v:False) : throw(FlagNotANumber(flag, str))  
+
+  public defn num-arg?<?T> (parsed:ParseResult, flag:String, default:?T) :
+    if has-flag?(parsed, flag) : num-arg(parsed, flag)
+    else : default
+
+;============================================================
+;================= Command Line Option ======================
+;============================================================
+
+public val LAUNCH-FNS = Vector<(() -> ?)>()
+
+public defn process-esir-command (generator?:True|False) :
+  ;Set the seed
+  defn set-seed (parsed:ParseResult) :
+    ;Retrieve the seed
+    val seed = long-arg?(parsed, "seed", current-time-us())
+    ;Set the seed
+    srand(seed)
+    ;Output the seed
+    match(single?(parsed, "seed-out", false)) :
+      (file:String) : spit(file, seed)
+      (str:False) : false  
+
+  ;Process the ESIR
+  defn process-esir (parsed:ParseResult) :
+    if generator? :
+      ;No arguments accepted
+      if not empty?(args(parsed)) :
+        throw(CommandCannotTakeArgs("process", args(parsed)))
+    else :
+      ;Single argument accepted
+      throw(NoESIRFiles("process")) when empty?(args(parsed))
+      throw(TooManyESIRFiles("process")) when length(args(parsed)) > 1
+
+    ;Parse flags
+    if generator? :
+      parse-flags(multiple?(parsed, "flags", List()))
+
+    ;Pass Main function
+    defn run-flow () :
+      ;Construct argument
+      val pass-arg = 
+        if generator? :
+          val filename = command-line-arguments()[0]
+          GenArg(filename, ir-statements())
+        else :
+          val filename = head(args(parsed))
+          FileArg(filename)
+      ;Grab all list of symbol arguments
+      defn symbol-args (name:String) :
+        map(to-symbol, multiple?(parsed, name, List()))
+      set-seed(parsed)
+      run-passes(pass-arg,
+                 single?(parsed, "o", false)
+                 single?(parsed, "params", false)
+                 symbol-args("passes"),
+                 symbol-args("start-from"),
+                 symbol-args("configs"))
+      val er = error-report()
+      throw(Warning(er)) when not empty?(er)    
+
+    ;Either launch the main function now or later
+    if generator? : add(LAUNCH-FNS, run-flow)
+    else : run-flow()
+
+  ;Determine whether to include the "flags" flag or not
+  if generator? :
+    Command("process",
+      [MultipleFlag("passes", false)
+       MultipleFlag("start-from", true)
+       MultipleFlag("configs", true)
+       SingleFlag("seed", true)
+       SingleFlag("seed-out", true)
+       MultipleFlag("flags", true)
+       SingleFlag("o", true)
+       SingleFlag("params", true)]
+      process-esir)
+  else :
+    Command("process",
+      [MultipleFlag("passes", false)
+       MultipleFlag("start-from", true)
+       MultipleFlag("configs", true)
+       SingleFlag("seed", true)
+       SingleFlag("seed-out", true)
+       SingleFlag("o", true)
+       SingleFlag("params", true)]
+      process-esir)
+
+;============================================================
+;====================== Driver ==============================
+;============================================================
+
+public deftype PassArg
+public defmulti filename (a:PassArg) -> String
+
+public defstruct FileArg <: PassArg :
+  filename:String with: (as-method => true)
+public defstruct GenArg <: PassArg :
+  filename:String with: (as-method => true)
+  prog:Collection<TStmt>
+
+defn run-passes (arg:PassArg,
+                 output:String|False,
+                 param-filename:String|False,
+                 commands:List<Symbol>,
+                 start-commands:List<Symbol>,
+                 configs:List<Symbol>) -> False :
+  ;Check that passes exist
+  val pt = PassTable()
+  for c in cat(start-commands, commands) do :
+    if not command?(pt,c) :
+      report-error(NoPass(c))
+  end-if-errors()
+
+  ;Plan pass sequence
+  val [start-passes, passes] = match(pass-path(pt, start-commands, commands)) :
+    (x:[List<Pass>, List<Pass>]) : x
+    (f:False) : throw(NoPassPath(append(start-commands, commands)))
+
+  ;Retrieve the input directory and input project name
+  val [in-dir, in-proj-name] = split-filepath(filename(arg))
+
+  ;Retrieve the output directory and output project name
+  val [dir, proj-name] =
+    match(output:String) : split-filepath(output)
+    else : [in-dir, in-proj-name]
+
+  ;Retrieve the parameter file
+  val params = read-params(over-file, base-file, configs) where :
+    val over-file =
+      match(param-filename:String) :
+        param-filename
+      else :
+        val path = norm-path("%_%_.params" % [in-dir, in-proj-name])
+        path when file-exists?(path)
+    val base-file = norm-path("%_/jitpcb.params" % [jitpcb-install-dir()])
+    throw(NoParamFile()) when not file-exists?(base-file)
+
+  ;Serialize state of errors
+  defn read-errors (filename:String) :
+    val file = FileInputStream(filename)
+    report-error(deserialize(file) as ErrorReport)
+    close(file)
+  defn write-errors (filename:String) :
+    val file = FileOutputStream(filename)
+    serialize(file, ErrorReport(error-buffer()))
+    close(file)
+  
+  ;Retrieve the filename of the ESIR following a pass
+  defn pass-result-filename (p:Pass) :
+    norm-path("%_%_.%_.esir" % [dir, proj-name, name(p)])  
+  defn pass-error-filename (p:Pass) :
+    norm-path("%_%_.%_.errors" % [dir, proj-name, name(p)])
+
+  ;Retrieve the initial program and error listing
+  var prog:Collection<TStmt> = match(empty?(start-passes), arg) :
+    (mt:True, arg:FileArg) : parse-rtm(string-join([filename(arg) ".esir"]))
+    (mt:True, arg:GenArg) : prog(arg)
+    (mt:False, arg) :
+      val last-pass = find!(save-output?, reverse(start-passes))
+      read-errors(pass-error-filename(last-pass))
+      parse-rtm(pass-result-filename(last-pass))      
+
+  ;Execute passes
+  for p in passes do :
+    prog = run(p, dir, proj-name, prog, params)
+    spit(pass-result-filename(p), "%n" % [prog]) when save-output?(p)
+    write-errors(pass-error-filename(p)) when save-output?(p)
+
+defn truncate (s:String, n:Int) :
+  val l = length(s)
+  s[0 to l - n]
+    
+;============================================================
+;================== Pass Definition =========================
+;============================================================
+public deftype Pass
+public defmulti name (p:Pass) -> Symbol
+public defmulti command (p:Pass) -> Symbol
+public defmulti save-output? (p:Pass) -> True|False
+public defmulti optional? (p:Pass) -> True|False
+public defmulti run (p:Pass, dir:String, name:String,
+                     input:Collection<TStmt>, params:Params) -> Collection<TStmt>
+
+;Command is the same as name by default
+defmethod command (p:Pass) : name(p)
+
+val PASSES = Vector<Pass>()
+val PATHS = Vector<KeyValue<Symbol,Symbol>>()
+
+public defn add-pass (p:Pass) :
+  add(PASSES, p)
+  
+public defn add-path (src:Symbol, dst:Symbol) :
+  add(PATHS, src => dst)
+
+defmethod print (o:OutputStream, p:Pass) :
+  print(o, "Pass(name = %~, command= %~, save-output? = %~, optional? = %~)" % [
+    name(p), command(p), save-output?(p), optional?(p)])
+
+;============================================================
+;=================== PassTable ==============================
+;============================================================
+
+deftype PassTable
+defmulti command? (t:PassTable, command:Symbol) -> True|False
+defmulti get (t:PassTable, name:Symbol) -> Pass
+defmulti starting-pass (t:PassTable) -> Pass
+defmulti successors (t:PassTable, pass:Pass) -> Seqable<Pass>
+defmulti predecessors (t:PassTable, pass:Pass) -> Seqable<Pass>
+
+defn PassTable () :
+  ;Construct pass table
+  val pass-table = to-hashtable<Symbol,Pass> $
+    for p in PASSES seq :
+      name(p) => p
+  val succ-table = group-by(key, value, PATHS)
+  val pred-table = group-by(value, key, PATHS)
+  val command-set = to-hashset<Symbol>(seq(command, PASSES))
+
+  ;Verify paths
+  for passes in kvs(PATHS) do :
+    for pass in passes do :
+      fatal("Invalid pass: %_" % [pass]) when not key?(pass-table, pass)
+
+  ;Compute starting node
+  val starting-pass = find!(empty?{get?(pred-table, name(_), List())}, PASSES)
+
+  ;Create new pass table
+  new PassTable :
+    defmethod command? (this, command:Symbol) :
+      command-set[command]
+    defmethod get (this, name:Symbol) :
+      pass-table[name]
+    defmethod starting-pass (this) :
+      starting-pass
+    defmethod successors (this, pass:Pass) :
+      seq({pass-table[_]}, get?(succ-table, name(pass), List()))
+    defmethod predecessors (this, pass:Pass) :
+      seq({pass-table[_]}, get?(pred-table, name(pass), List()))
+
+;============================================================
+;===================== Path Planner =========================
+;============================================================
+
+defstruct ExPass :
+  pass: Pass
+  mandatory?: True|False with: (updater => sub-mandatory?)
+with: (printer => true)
+
+;Returns the list of passes to execute, and the last pass to be executed
+;if there was one.
+defn pass-path (pt:PassTable, start:List<Symbol>, end:List<Symbol>) -> [List<Pass>, List<Pass>]|False :
+  ;Find segment through pass table
+  val path-queue = Queue<List<ExPass>>()
+  defn find-segment (pass0:ExPass, end-command:Symbol) -> False|List<ExPass> :
+    ;Initialize queue
+    add(path-queue, List(pass0))
+    let loop () :
+      if not empty?(path-queue) :
+        val path = pop(path-queue)
+        val expass = head(path)
+        if command(pass(expass)) == end-command :
+          clear(path-queue)
+          cons(sub-mandatory?(expass, true), tail(path))
+        else :
+          for p in successors(pt, pass(expass)) do :
+            add(path-queue, cons(ExPass(p,false), path))
+          loop()
+
+  ;Find path
+  defn find-path (pass:Pass, commands:List<Symbol>) -> False|List<ExPass> :
+    let loop (path:List<ExPass> = List(ExPass(pass,false)),
+              commands:List<Symbol> = commands) :
+      if empty?(commands) :
+        path
+      else :
+        match(find-segment(head(path), head(commands))) :
+          (segment:List<ExPass>) :
+            loop(append(segment,tail(path)), tail(commands))
+          (f:False) :
+            false
+
+  ;Postprocess path
+  defn postprocess (path:List<ExPass>, keep-first?:True|False) :
+    defn remove-optional (path:Seqable<ExPass>) :
+      for p in path filter :
+        mandatory?(p) or not optional?(pass(p))    
+    defn unwrap (path:Seqable<ExPass>) : seq(pass, path)
+    defn tail? (path:List<ExPass>) : path when keep-first? else tail(path)
+    to-list $ unwrap $ remove-optional $ tail? $ reverse $ path
+
+  ;Compute starting pass and pass sequence
+  if empty?(start) :
+    match(find-path(starting-pass(pt), end)) :
+      (p:List<ExPass>) : [List(), postprocess(p,true)]
+      (p:False) : false
+  else :
+    attempt :
+      val starting-path = find-path(starting-pass(pt), start) as? List<ExPass>
+      match(find-path(pass(head(starting-path)), end)) :
+        (p:List<ExPass>) : [postprocess(starting-path,true), postprocess(p,false)]
+        (p:False) : false
+
+;============================================================
+;===================== Errors ===============================
+;============================================================
+
+public defstruct PassError <: Exception :
+  message: String
+with :
+  constructor => #PassError
+
+defmethod print (o:OutputStream, e:PassError) :
+  print(o, message(e))
+
+defn PassError (msg) :
+  #PassError(to-string(msg))
+
+defn NoPass (command:Symbol) :
+  PassError("The given pass '%~' is not a valid pass." % [command])
+
+defn NoPassPath (commands:List<Symbol>) :
+  PassError("The passes (%,) is not a valid ordering of passes." % [commands])
+
+defn NoParamFile () :
+  PassError("Could not locate a 'jitpcb.params' parameter file.")
+

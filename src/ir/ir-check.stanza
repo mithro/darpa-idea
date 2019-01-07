@@ -1,0 +1,801 @@
+defpackage rtm/ir-check :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/utils
+  import rtm/ir-utils
+  import rtm/ir-printer
+  import rtm/ir-reader
+  import rtm/ir/errors
+  import rtm/errors
+  import stz/algorithms
+  import plugins/slave
+
+;============================================================
+;====================== Type Cycles =========================
+;============================================================
+
+defn check-type-cycles (stmts:Seqable<TStmt>) :
+  ;Retrieve the base of a pintype
+  defn base? (t:PinType) :
+    match(t) :
+      (t:PinBundle) : One(name(t))
+      (t:SinglePin) : None()
+      (t:PinArray) : base?(type(t))
+
+  ;Retrieve a list of all bases of a bundle
+  defn bases? (d:DefBundle) :
+    to-list(seq?(base?{type(_)}, pins(d)))
+
+  ;Compute connected components
+  val graph = strong-components $
+    for d in filter-by<DefBundle>(stmts) seq :
+      name(d) => bases?(d)
+
+  ;Output errors
+  for c in graph do :
+    match(c) :
+      (c:List<Symbol>) : report-error(CyclicBundleError(c))
+      (c:Symbol) : false
+
+;============================================================
+;================== Instance Cycles =========================
+;============================================================
+
+defn check-module-cycles (tstmts:Seqable<TStmt>) :
+  ;Retrieve references
+  defn reference? (s:MStmt) :
+    match(s:InstStmt) : One(name(base(type(s))))
+    else : None()
+  defn references? (s:DefModule) :
+    to-list(seq?(reference?, stmts(s)))
+
+  ;Compute connected components
+  val graph = strong-components $
+    for d in filter-by<DefModule>(tstmts) seq :
+      name(d) => references?(d)
+
+  ;Output errors
+  for c in graph do :
+    match(c) :
+      (c:List<Symbol>) : report-error(CyclicModuleError(c))
+      (c:Symbol) : false
+
+;============================================================
+;====================== Resolve References ==================
+;============================================================
+
+deftype NS <: Hashable & Equalable
+defstruct BundleNS <: NS
+defstruct CapabilityNS <: NS
+defstruct PartNS <: NS
+defstruct ComponentNS <: NS
+defstruct PackageNS <: NS
+defstruct AttachNS <: NS
+defstruct LocalNS <: NS : (id:Int with: (init => genid()))
+
+defmethod hash (ns:NS) :
+  match(ns) :
+    (ns:BundleNS) : 0
+    (ns:CapabilityNS) : 1
+    (ns:PartNS) : 2
+    (ns:ComponentNS) : 3
+    (ns:PackageNS) : 5
+    (ns:AttachNS) : 11
+    (ns:LocalNS) : 12 + id(ns)
+
+defmethod equal? (a:NS, b:NS) :
+  match(a, b) :
+    (a:BundleNS, b:BundleNS) : true
+    (a:CapabilityNS, b:CapabilityNS) : true
+    (a:PartNS, b:PartNS) : true
+    (a:ComponentNS, b:ComponentNS) : true
+    (a:PackageNS, b:PackageNS) : true
+    (a:AttachNS, b:AttachNS) : true
+    (a:LocalNS, b:LocalNS) : id(a) == id(b)
+    (a, b) : false
+
+defstruct DefStmt :
+  ns: NS
+  tag: False|Symbol
+  name: Symbol|Ref
+
+defstruct RefStmt :
+  ns: NS
+  tag: False|Symbol|Tuple<Symbol>
+  name: Symbol
+
+defmethod print (o:OutputStream, ns:NS) :
+  print{o, _} $ match(ns) :
+    (ns:BundleNS) : "BundleNS"
+    (ns:CapabilityNS) : "CapabilityNS"
+    (ns:PartNS) : "PartNS"
+    (ns:ComponentNS) : "ComponentNS"
+    (ns:PackageNS) : "PackageNS"
+    (ns:AttachNS) : "AttachNS"
+    (ns:LocalNS) : "LocalNS(%_)" % [id(ns)]
+
+defmethod print (o:OutputStream, s:DefStmt) :
+  print(o, "Def(%_, %_, %_)" % [ns(s), tag(s), name(s)])
+defmethod print (o:OutputStream, s:RefStmt) :
+  print(o, "Ref(%_, %_, %_)" % [ns(s), tag(s), name(s)])
+
+defn gather-definitions (prog:Seqable<TStmt>) :
+  val def-stmts = Vector<DefStmt|RefStmt>()
+
+  ;Convenience definitions
+  defn +define (ns:NS, name:Symbol|Ref) :
+    add(def-stmts, DefStmt(ns, false, name))
+  defn +define (ns:NS, tag:Symbol, name:Symbol|Ref) :
+    add(def-stmts, DefStmt(ns, tag, name))
+  defn +refer (ns:NS, name:Symbol) :
+    add(def-stmts, RefStmt(ns, false, name))
+  defn +refer (ns:NS, tag:Symbol|Tuple<Symbol>, name:Symbol) :
+    add(def-stmts, RefStmt(ns, tag, name))
+
+  ;+Refer for References
+  defn +refer (ns:NS, r:Ref) :
+    +refer(ns, name(base(r)))
+  defn +refer (ns:NS, tags:Symbol|Tuple<Symbol>, r:Ref) :
+    +refer(ns, tags, name(base(r)))
+  defn +refer (p:PinType) :
+    attempt: +refer(BundleNS(), name(base(p) as? PinBundle))
+  defn +refer (t:CapabilityType) :
+    +refer(CapabilityNS(), name(base(t)))
+  defn +refer (t:ComponentType) :
+    +refer(ComponentNS(), [`module, `component], name(base(t)))
+  defn +refer (s:Shape) :
+    match(s) :
+      (s:Union) : do(+refer, shapes(s))
+      (s) : false
+
+  ;Scan module level statement
+  defn scan-mstmts (mns:NS, ss:Seqable<MStmt>) :
+    ;Check duplicate definitions
+    val defined = HashTable<[Symbol,Ref]|[Symbol,Ref,Int], MStmt>()
+    defn ensure-unique! (name:Symbol, r:Ref, s:MStmt) :
+      val k = [name, r]
+      if key?(defined, k) : report-error(DuplicateMStmt(defined[k]))
+      else : defined[k] = s
+    defn ensure-unique! (name:Symbol, r:Ref, unit:Int, s:MStmt) :
+      val k = [name, r, unit]
+      if key?(defined, k) : report-error(DuplicateMStmt(defined[k]))
+      else : defined[k] = s
+          
+    for ms in ss do :
+      match(ms) :
+        (ms:NetStmt) :
+          attempt: +define(mns, `net, name(ms) as? Symbol)
+          do(+refer{mns, [`pin, `inst], _} refs(ms))
+        (ms:InstStmt) :
+          +define(mns, `inst, name(ms))
+          +refer(type(ms))
+        (ms:NodeStmt) :
+          +define(mns, `pin, name(ms))
+          +refer(type(ms))
+        (ms:RequireStmt) :
+          +refer(capability(ms))
+          +refer(mns, `inst, inst(ms))
+          match(name(ms)) :
+            (n:Symbol) :
+              for [src, dst] in kvs(mappings(mapping(ms))) do :
+                if not base?(Ref(n), src) :
+                  report-error(BadRequireBase(n, capability(ms), Ref(n), src, true))
+                if not base?(inst(ms), dst) :
+                  report-error(BadRequireBase(n, capability(ms), inst(ms), dst, false))
+            (f:False) :
+              if not empty?(mapping(ms)) :
+                report-error(RequirePinsWithoutName(capability(ms), inst(ms)))          
+        (ms:SupportsStmt) :
+          +refer(CapabilityNS(), capability(ms))
+          val capns = LocalNS()
+          +define(capns, `port, capability(ms))
+          for option in options(ms) do :
+            scan-mstmts(mns, requires(option))
+            for [src, dst] in kvs(mappings(mapping(option))) do :
+              +refer(capns, `port, src)
+              +refer(mns, [`pin, `inst], dst)          
+        (ms:InstSupportsStmt) :
+          report-error(UnsupportedInstSupports(inst(ms), capability(ms)))
+        (ms:PackageStmt) :
+          let :
+            defn chk (type:Symbol) : ensure-unique!(type, ref(ms), ms)
+            if instance?(ms) :
+              chk(`package) when package(ms) is-not False
+            else :
+              chk(`packages) when package(ms) is-not False
+          match(instance?(ms)) :
+            (inst?:True) : +refer(mns, `inst, ref(ms))
+            (inst?:False) : +refer(ComponentNS(), [`component], ref(ms))
+          attempt:
+            val [name, mapping] = package(ms) as? [Symbol, Mapping]
+            +refer(PackageNS(), name)
+        (ms:EModelStmt) :
+          ensure-unique!(`emodel, ref(ms), ms)
+          +refer(mns, `inst, ref(ms))
+        (ms:PartStmt) :
+          ensure-unique!(`part, ref(ms), ms)
+          +refer(mns, `inst, ref(ms))
+          +refer(PartNS(), part(ms))
+        (ms:ReferenceStmt) :
+          ensure-unique!(`reference, ref(ms), ms)
+          +refer(mns, `inst, ref(ms))
+        (ms:AttachStmt) :
+          +refer(AttachNS(), attach(ms))
+          do(+refer{mns, [`pin, `inst], _}, args(ms))    
+    
+
+  ;Scan top level statements
+  for s in prog do :
+    match(s) :
+      (s:DefBundle) :
+        +define(BundleNS(), name(s))
+        val ns = LocalNS()
+        for p in pins(s) do :
+          +define(ns, `pin, name(p))
+          +refer(type(p))
+      (s:DefCapability) :
+        +define(CapabilityNS(), name(s))
+        attempt: +refer(type(s) as? PinType)
+      (s:DefPart) :
+        +define(PartNS(), name(s))
+        +refer(PackageNS(), package(s))
+        attempt: +refer(ComponentNS(), `component, component(s) as? Symbol)
+      (s:DefComponent) :
+        ;Check which statements already defined.
+        val defined = HashTable<Symbol,CStmt>()
+        defn ensure-unique! (type:Symbol, s:CStmt) :
+          if key?(defined, type) : report-error(DuplicateCStmt(defined[type]))
+          else : defined[type] = s
+
+        +define(ComponentNS(), `component, name(s))
+        val cns = LocalNS()
+        for p in pins(s) do :
+          +define(cns, `pin, name(p))
+          +refer(type(p))
+        for cs in stmts(s) do :
+          match(cs) :
+            (cs:DefaultPackageStmt) :
+              ensure-unique!(`DefaultPackage, cs)
+              +refer(PackageNS(), package(cs))
+              do(+refer{cns, `pin, key(_)}, mappings(mapping(cs)))
+            (cs:DefaultEModelStmt) :
+              ensure-unique!(`DefaultEModel, cs)
+            (cs:DefaultPartStmt) :
+              ensure-unique!(`DefaultPart, cs)
+              +refer(PartNS(), part(cs))
+            (cs:SupportsStmt) :
+              +refer(CapabilityNS(), capability(cs))
+              val capns = LocalNS()
+              +define(capns, `port, capability(cs))
+              if any?({not empty?(requires(_))}, options(cs)) :
+                report-error(ComponentSupportsWithRequires(capability(cs), name(s)))
+              for option in options(cs) do :
+                for [src, dst] in kvs(mappings(mapping(option))) do :
+                  +refer(capns, `port, src)
+                  +refer(cns, `pin, dst)
+            (cs:ReferencePrefixStmt) :
+              ensure-unique!(`ReferencePrefix, cs)
+      (s:DefPackage) :
+        +define(PackageNS(), name(s))
+        val pad-def-ns = LocalNS()
+        for p in pad-defs(s) do :
+          +define(pad-def-ns, `pad-def, name(p))
+          +refer(shape(p))
+        val pad-ns = LocalNS()
+        for p in pads(s) do :
+          +define(pad-ns, `pad, ref(p))
+          +refer(pad-def-ns, pad(p))
+      (s:DefModule) :
+        +define(ComponentNS(), `module, name(s))
+        val mns = LocalNS()
+        for p in pins(s) do :
+          +define(mns, `pin, name(p))
+          +refer(type(p))
+        scan-mstmts(mns, stmts(s))
+      (s:DefAttach) :
+        +define(AttachNS(), name(s))
+        val mns = LocalNS()
+        do(+define{mns, `pin, _}, args(s))
+        do(+refer{type(_)}, pins(s))
+        scan-mstmts(mns, stmts(s))
+      (s:MakeBoard) :
+        +refer(ComponentNS(), `module, module(s))
+
+  ;Return stmts
+  def-stmts
+
+defn check-definitions (prog:Seqable<TStmt>) :
+  ;Table for storing definitions
+  val nametable = HashTable<[NS, Symbol|Ref], False|Symbol>()
+
+  ;Check that a name has been defined
+  defn ensure-defined (s:RefStmt) :
+    val k = [ns(s), name(s)]
+    if not key?(nametable, k) :
+      report-error(NotDefined(ns(s), tag(s), name(s)))
+    else :
+      if not tag-match?(tag(s), nametable[k]) :
+        report-error(NoTagMatch(ns(s), tag(s), nametable[k], name(s)))
+
+  ;Check that the tag matches
+  defn tag-match? (a:False|Symbol|Tuple<Symbol>, b:False|Symbol) :
+    match(a, b) :
+      (a, b:False) : true
+      (a:False, b) : true
+      (a:Symbol, b:Symbol) : a == b
+      (a:Tuple<Symbol>, b:Symbol) : contains?(a, b)
+
+  ;Get stmts
+  val def-stmts = gather-definitions(prog)
+
+  ;First pass through stmts
+  for s in def-stmts do :
+    match(s) :
+      (s:DefStmt) :
+        val k = [ns(s), name(s)]
+        if key?(nametable, k) :
+          if ns(s) is-not AttachNS :
+            report-error(AlreadyDefined(ns(s), nametable[k], name(s)))
+        else :
+          nametable[k] = tag(s)
+      (s:RefStmt) :
+        ensure-defined(s) when ns(s) is LocalNS
+
+  ;Second pass through stmts
+  for s in def-stmts do :
+    match(s) :
+      (s:RefStmt) : ensure-defined(s) when ns(s) is-not LocalNS
+      (s) : false
+
+defn ns-name (ns:NS) :
+  match(ns) :
+    (ns:BundleNS) : "bundle"
+    (ns:CapabilityNS) : "capability"
+    (ns:PartNS) : "part"
+    (ns:ComponentNS) : "component"
+    (ns:PackageNS) : "package"
+    (ns:AttachNS) : "attachment"
+    (ns:LocalNS) : false
+
+defn ns-name (ns:NS, tag:False|Symbol|Tuple<Symbol>) :
+  match(ns, tag) :
+    (ns, tag:Symbol) :
+      to-string(tag)
+    (ns, tag:Tuple<Symbol>) :
+      string-join(tag, " or ")
+    (ns:LocalNS, tag:False) : "item"
+    (ns, tag:False) : ns-name(ns) as String
+
+defn NotDefined (ns:NS, tag:False|Symbol|Tuple<Symbol>, name:Symbol) :
+  UnresolvedReferenceError(ns-name(ns, tag), name)
+
+defn NoTagMatch (ns:NS, tag1:False|Symbol|Tuple<Symbol>, tag2:False|Symbol, name:Symbol) :
+  val tag1-str = match(tag1) :
+    (tag1:Symbol) : to-string(tag1)
+    (tag1:Tuple<Symbol>) : string-join(tag1, " or ")
+  InappropriateReferenceError(tag1-str, to-string(tag2), name)
+
+defn AlreadyDefined (ns:NS, tag:False|Symbol, name:Symbol|Ref) :
+  match(ns-name(ns,tag), tag) :
+    (ns-name:String, tag:Symbol) : DefinedDifferentlyError(to-string(tag), name)
+    (ns-name:String, tag:False) : DuplicateDefinitionError(ns-name, name)
+
+;============================================================
+;====================== Type Checking =======================
+;============================================================
+
+;             Electrical Model Setting
+;             ========================
+
+deftype EModelSetting
+defmulti model (e:EModelSetting) -> EModel
+defstruct ModuleEModelSetting <: EModelSetting :
+  module: Symbol
+  ref: Ref
+  model: EModel with: (as-method => true)
+defstruct ComponentEModelSetting <: EModelSetting :
+  component: Symbol
+  model: EModel with: (as-method => true)
+
+defn emodel-setting (ir-table:IRTable, mtable:MTable, ref:Ref) -> EModelSetting|False :
+  match(emodel?(mtable, ref)) :
+    (s:EModelStmt) : ModuleEModelSetting(module(mtable), ref, model(s))
+    (s:False) : prev-emodel-setting(ir-table, mtable, ref)
+
+defn prev-emodel-setting (ir-table:IRTable, mtable:MTable, ref:Ref) -> EModelSetting|False :
+  match(ref) :
+    (ref:VarRef) :
+      val c-name = component(inst(mtable, name(ref)))
+      match(default-emodel(ctable(ir-table, c-name))) :
+        (s:DefaultEModelStmt) : ComponentEModelSetting(c-name, model(s))
+        (s:False) : false
+    (ref:FieldRef) :
+      val inst-name = name(base(ref))
+      val inst-module = component(inst(mtable, inst-name))
+      emodel-setting(ir-table, /mtable(ir-table, inst-module), tail(ref))
+
+defn IncompatibleEModel (r:Ref, m:EModel, s:EModelSetting) :
+  match(s) :
+    (s:ModuleEModelSetting) : IncompatibleEModel(r, m, module(s), ref(s), model(s))
+    (s:ComponentEModelSetting) : IncompatibleDefaultEModel(r, m, component(s), model(s))
+
+;                Main Algorithm
+;                ==============
+
+defn type-check (prog:Collection<TStmt>) :
+  val ir-table = IRTable(prog)
+
+  ;Check that a reference is well-formed under a given type environment.
+  defn check-ref (env:TypeEnv, r:Ref) :
+    try: ensure-wellformed(env, r)
+    catch (e:Exception) : report-error(e)
+
+  ;Check that a reference refers to a pin
+  defn check-pin (env:TypeEnv, r:Ref) :
+    val t = check-ref(env, r)
+    match(t:PinType|False) : t
+    else : report-error(NotAPin(r, t as RefType))
+
+  ;Check that a reference refers to the pin of a component
+  defn check-single-pin (env:TypeEnv, r:Ref, stmt-type:String) :
+    match(check-pin(env, r)) :
+      (t:SinglePin) : t
+      (t:PinType) : report-error(NotASinglePin(stmt-type, r, t))
+      (t:False) : false
+
+  ;Check that reference refers to a single component pin
+  defn check-single-component-pin (env:TypeEnv, r:Ref, stmt-type:String) :
+    match(check-single-pin(env, r, stmt-type)) :
+      (t:SinglePin) :
+        val [inst, inst-t] = inst-base!(env,r)
+        if component?(ir-table, component(inst-t)) is False :
+          report-error(NotASingleComponentPin(stmt-type, r, inst, component(inst-t)))
+        else : t
+      (t:False) : false
+
+  ;Check that reference refers to a component pin
+  defn check-component-pin (env:TypeEnv, r:Ref, stmt-type:String) :
+    match(check-pin(env, r)) :
+      (t:PinType) :
+        val [inst, inst-t] = inst-base!(env,r)
+        if component?(ir-table, component(inst-t)) is False :
+          report-error(NotAComponentPin(stmt-type, r, inst, component(inst-t)))
+        else : t
+      (t:False) : false
+
+  ;Check that a reference refers to an instance
+  defn check-inst (env:TypeEnv, r:Ref) :
+    val t = check-ref(env, r)
+    match(t:InstType|False) : t
+    else : report-error(NotAnInst(r, t as RefType))
+
+  ;Check that a reference refers to an instance or instance array
+  defn check-inst-array (env:TypeEnv, r:Ref) :
+    val t = check-ref(env, r)
+    match(t:InstType|InstArray|False) : t
+    else : report-error(NotAnInst(r, t as RefType, true))
+
+  ;Check that a reference refers to an instance of a component
+  defn check-inst-of-component (env:TypeEnv, r:Ref) :
+    val t = check-ref(env, r)
+    match(t) :
+      (t:False) : false
+      (t:InstType) :
+        if component?(ir-table, component(t)) is DefComponent : t
+        else : report-error(NotAnInstComponent(r, component(t)))
+      (t:RefType) : report-error(NotAnInst(r, t))
+
+  ;Check that a reference refers to an instance
+  defn check-net (env:TypeEnv, r:Ref) :
+    val t = check-ref(env, r)
+    match(t) :
+      (t:NetType) : if type(t) is-not SinglePin : report-error(NotANet(r, t))
+      (t:RefType) : report-error(NotANet(r, t as RefType))
+      (t:False) : false
+
+  ;Retrieve the base instance type of the reference
+  defn inst-base! (env:TypeEnv, r:Ref) :
+    defn undot (r:Ref) : ref(r as IndexRef|FieldRef)
+    match(env[r]) :
+      (t:InstType) : [r,t]
+      (t:PinType) : inst-base!(env, undot(r))
+
+  ;Check that a package pad mapping is wellformed
+  defn check-pad-mapping (component-name:Symbol, package-name:Symbol, m:Mapping) :
+    val cenv = ComponentEnv(ir-table, component-name)
+    val defc = component(ir-table, component-name)
+    val mt = MappingTable(cenv, true, mentries) where :
+      val mentries = Vector<MapEntry>()
+      for p in pins(defc) do :
+        add(mentries, MapEntry(Ref(name(p)), Ref(name(p)), 0, 0))
+      for [pin-ref, pad] in kvs(mappings(m)) do :
+        add(mentries, MapEntry(pin-ref, pad))
+    val ptable = ptable(ir-table, package-name)
+    for e in mt do :
+      report-error(BadPackagePad(package-name, ref(e))) when pad?(ptable,ref(e)) is False
+
+  ;Check no redundant requires statements from instances
+  defn check-redundant-requires (mtable:MTable) :
+    val rset = HashSet<[Symbol, Ref]>()
+    for r in requires(mtable) do :    
+      val name = name(r)
+      match(name:Symbol) :
+        val key = [name, inst(r)]
+        if rset[key] :
+          report-error(DuplicateRequire(inst(r), name))
+        else : add(rset, key)
+    for option in seq-cat(options, supports(mtable)) do :
+      val oset = HashSet<[Symbol, Ref]>()
+      for r in requires(option) do :
+        val name = name(r)
+        match(name:Symbol) :
+          val key = [name, inst(r)]
+          if rset[key] or oset[key] :
+            report-error(DuplicateRequire(inst(r), name))
+          else : add(oset, key)
+
+  ;Check mstmts
+  defn check-mstmts (ctxt:TContext, env:TypeEnv, mtable:MTable, ss:Seqable<MStmt>) :
+    for ms in ss do :
+      match(ms) :
+        (ms:NetStmt) :
+          if not empty?(refs(ms)) :
+            val ts = map(check-pin{env, _}, refs(ms))
+            val r0 = head(refs(ms))
+            val t0 = head(ts)
+            for (t in tail(ts), r in tail(refs(ms))) do :
+              match(t0:PinType, t:PinType) :
+                if t != t0 :
+                  report-error(BadNetType(ctxt, name(ms), r0, t0, r, t))
+        (ms:InstStmt) :
+          false
+        (ms:NodeStmt) :
+          false
+        (ms:SupportsStmt) :
+          ;Check requirements are wellformed
+          for option in options(ms) do :
+            check-mstmts(ctxt, env, mtable, requires(option))
+                
+          ;1. Check that there is an appropriate mapping defined.
+          ;  1. If the capability requires pins, then a mapping must be given.
+          ;  2. If the capability does not support pins, then no mapping can be given.
+          ;2. Check that mappings are wellformed
+          ;  1. The left-hand-side refers to capability pins
+          ;  2. The right-hand-side refers to component pins
+          ;  3. The left-hand-side and right-hand-side have same type.
+          ;3. Check that mappings are complete and unambiguous
+          for option in options(ms) do :
+            val def = capability(ir-table, capability(ms))
+            match(type(def), empty?(mapping(option))) :
+              (t:PinType, e:True) :
+                report-error(NoCapabilityMapping(capability(ms), t))
+              (t:False, e:False) :
+                report-error(IllegalCapabilityMapping(capability(ms)))
+              (t:False, e:True) :
+                false
+              (t:PinType, e:False) :
+                ;Check mappings are wellformed
+                val cenv = CapabilityEnv(ir-table, Ref(capability(ms)), Capability(capability(ms)))
+                val senv = SupportOptionEnv(env, option)
+                val wellformed? = for [src, dst] in kvs(mappings(mapping(option))) all? :
+                  val t0 = check-pin(cenv, src)
+                  val t1 = check-pin(senv, dst)
+                  match(t0:PinType, t1:PinType) :                          
+                    if t0 == t1 : true
+                    else : report-error(UnmatchedSupportsTypeError(src, t0, dst, t1))
+                ;Check mappings are complete and unambiguous
+                if wellformed? :
+                  ;Construct mapping table
+                  val table = MappingTable{cenv, false, _} $
+                    for [src, dst] in kvs(mappings(mapping(option))) seq :
+                      MapEntry(src, dst)
+                  ;Check that every expanded ref is listed in mapping table
+                  for ref in expand(cenv, Ref(capability(ms))) do :
+                    if not key?(table,ref) :
+                      report-error(NoCapabilityPortMappingError(ref))
+        (ms:RequireStmt) :
+          ;1. Check that instance is defined as a single instance
+          ;2. Check that the instance actually supports that capability
+          ;3. Check that the requirement name is consistent with capability mapping
+          ;  1. If it has a name, then capability must have a type.
+          ;  2. If it has no name, then capability cannot have a type.
+          ;4. Check that all mappings are defined correctly:
+          ;  1. Left-hand mappings must be wellformed capability pin.
+          ;  2. Right-hand mappings must be wellformed module pin.
+          ;  3. Left-hand and right-hand mappings must have same type.
+          ;5. Check that mapping is unambiguous.
+
+          ;Staging errors
+          var errors? = false
+          defn report-error (e:ESIRError) :
+            /report-error(e)
+            errors? = true
+            
+          val inst-t = check-inst(env, inst(ms))
+          match(inst-t:InstType) :
+            let :
+              val cname = name(base(capability(ms)))
+              val supports = supports(cmtable(ir-table, component(inst-t)))
+              val capability-supported? = any?({capability(_) == cname}, supports)
+              if not capability-supported? :
+                report-error(UnsupportedCapability(inst(ms), component(inst-t), cname))
+            if not errors? :
+              val c = capability(ir-table, name(base(capability(ms))))
+              match(name(ms), type(c)) :
+                (port-name:False, type:PinType) :
+                  report-error(NoCapabilityPort(ctxt, inst(ms), capability(ms)))
+                (port-name:Symbol, type:False) :
+                  report-error(IllegalCapabilityPort(ctxt, port-name, capability(ms), port-name))
+                (port-name, type) : false
+            if not errors? :
+              val lhs-env = CapabilityEnv(ir-table, Ref(name(ms)), capability(ms))
+              for [src, dst] in kvs(mappings(mapping(ms))) do :
+                val src-t = check-pin(lhs-env, src)
+                val dst-t = check-pin(env, dst)
+                match(src-t:PinType, dst-t:PinType) :
+                  if src-t != dst-t :
+                    report-error(BadRequireType(name(ms) as Symbol, inst(ms), src, src-t, dst, dst-t))
+              if not errors? :
+                MappingTable{lhs-env, false, _} $
+                  for [src, dst] in kvs(mappings(mapping(ms))) seq :
+                    MapEntry(src, dst)
+        (ms:InstSupportsStmt) :
+          false
+        (ms:PackageStmt) :
+          val component = match(instance?(ms), ref(ms)) :
+            (i?:True, r:Ref) : attempt: component(check-inst(env, r) as? InstType)
+            (i?:False, r:VarRef) : name(r)
+            (i?:False, r:Ref) : report-error(BadSelector(r))
+          match(component, package(ms)) :
+            (component:Symbol, [name, mapping]:[Symbol,Mapping]) :
+              if component?(ir-table, component) is False :
+                report-error(NotAnInstComponent(ref(ms), component))
+              else : check-pad-mapping(component, name, mapping)
+            (component, nm) : false
+        (ms:EModelStmt) :
+          val t = check-inst-of-component(env, ref(ms))
+          match(t:InstType) :
+            ;Check compatibility
+            match(prev-emodel-setting(ir-table, mtable, ref(ms))) :
+              (s:EModelSetting) :
+                if not same-model-type?(model(ms), model(s)) :
+                  report-error(IncompatibleEModel(ref(ms), model(ms), s))
+              (s:False) : false
+        (ms:PartStmt) :
+          check-inst-of-component(env, ref(ms))
+        (ms:ReferenceStmt) :
+          check-inst-of-component(env, ref(ms))
+        (ms:AttachStmt) :
+          for arg in args(ms) do :
+            match(check-ref(env, arg)) :
+              (t:InstType|InstArray|PinType) : false
+              (t:RefType) : report-error(NotAPinOrInst(arg, t))
+              (t:False) : false
+
+  for s in prog do :
+    match(s) :
+      (s:DefModule) :
+        ;Check references under module environment
+        val env = ModuleEnv(ir-table, name(s))
+        val mtable = mtable(ir-table, name(s))
+        check-redundant-requires(mtable)
+        check-mstmts(ModuleContext(name(s)), env, mtable, stmts(s))        
+      (s:DefAttach) :
+        let :
+          check-pin-bases()
+          check-non-overlapping-pins()
+          val mtable = MTable(`no-module, List(), stmts(s))
+          val env = AttachEnv(ir-table, s, mtable)
+          check-redundant-requires(mtable)
+          check-mstmts(AttachContext(name(s), args(s)), env, mtable, stmts(s))
+        where :
+          ;Check that arguments are unique, and that pin bases are arguments
+          defn check-pin-bases () :
+            ;Create set of bases
+            val allowed-bases = HashSet<Symbol>()
+            for a in args(s) do :
+              if allowed-bases[a] :
+                report-error(DuplicateAttachArg(a, name(s), args(s)))
+              add(allowed-bases, a)
+            ;Check that each pin stems from argument
+            for p in pins(s) do :
+              if not allowed-bases[name!(base(ref(p)))] :
+                report-error(IllegalPortHead(ref(p), name(s), args(s)))
+                
+          ;Check that pins do not cover each other
+          defn check-non-overlapping-pins () :
+            val ref-table = HashTable<Ref,RPin>()
+            defn covered? (r:Ref) -> RPin|False :
+              val p = get?(ref-table, r)
+              match(p:RPin) :
+                p
+              else :
+                match(r) :
+                  (r:VarRef) : false
+                  (r:FieldRef) : covered?(ref(r))
+                  (r:IndexRef) : covered?(ref(r))
+            for p in lazy-qsort(length{ref(_)}, pins(s)) do :
+              val p0 = covered?(ref(p))
+              match(p0:RPin) :
+                report-error(CoveredPort(ref(p), ref(p0), name(s), args(s)))
+              else : ref-table[ref(p)] = p
+      (s:DefComponent) :
+        ;Check references under component environment
+        val env = ComponentEnv(ir-table, name(s))
+        for cs in stmts(s) do :
+          match(cs) :
+            (cs:DefaultPackageStmt) :
+              check-pad-mapping(name(s), package(cs), mapping(cs))
+            (cs:DefaultEModelStmt) :
+              false
+            (cs:DefaultPartStmt) :
+              val ctable = ctable(ir-table, name(s))
+              val package = attempt: package(default-package(ctable) as? DefaultPackageStmt)
+              val emodel = attempt: model(default-emodel(ctable) as? DefaultEModelStmt)
+              val req = PartRequest(`inst, name(s), package, emodel)
+              val defp = part(ir-table, part(cs))
+              if not weak-match?(defp, req) :
+                report-error(InappropriateDefaultPart(false, name(s), package, emodel, defp))
+            (cs:ReferencePrefixStmt) :
+              false
+            (cs:SupportsStmt) :
+              ;1. Check that there is an appropriate mapping defined.
+              ;  1. If the capability requires pins, then a mapping must be given.
+              ;  2. If the capability does not support pins, then no mapping can be given.
+              ;2. Check that mappings are wellformed
+              ;  1. The left-hand-side refers to capability pins
+              ;  2. The right-hand-side refers to component pins
+              ;  3. The left-hand-side and right-hand-side have same type.
+              ;3. Check that mappings are complete and unambiguous
+              for option in options(cs) do :
+                val def = capability(ir-table, capability(cs))
+                match(type(def), empty?(mapping(option))) :
+                  (t:PinType, e:True) :
+                    report-error(NoCapabilityMapping(capability(cs), t))
+                  (t:False, e:False) :
+                    report-error(IllegalCapabilityMapping(capability(cs)))
+                  (t:False, e:True) :
+                    false
+                  (t:PinType, e:False) :
+                    ;Check mappings are wellformed
+                    val cenv = CapabilityEnv(ir-table, Ref(capability(cs)), Capability(capability(cs)))
+                    val wellformed? = for [src, dst] in kvs(mappings(mapping(option))) all? :
+                      val t0 = check-pin(cenv, src)
+                      val t1 = check-pin(env, dst)
+                      match(t0:PinType, t1:PinType) :                          
+                        if t0 == t1 : true
+                        else : report-error(UnmatchedSupportsTypeError(src, t0, dst, t1))
+                    ;Check mappings are complete and unambiguous
+                    if wellformed? :
+                      ;Construct mapping table
+                      val table = MappingTable{cenv, false, _} $
+                        for [src, dst] in kvs(mappings(mapping(option))) seq :
+                          MapEntry(src, dst)
+                      ;Check that every expanded ref is listed in mapping table
+                      for ref in expand(cenv, Ref(capability(cs))) do :
+                        if not key?(table,ref) :
+                          report-error(NoCapabilityPortMappingError(ref))
+      (s:DefBundle) :
+        false
+      (s:DefCapability) :
+        false
+      (s:DefPart) :
+        false
+      (s:DefPackage) :
+        false
+      (s:MakeBoard) :
+        ;Check top-level appropriateness
+        val defm = module(ir-table, module(s))
+        if not empty?(pins(defm)) :
+          report-error(BadTopLevelModule(module(s)))
+
+public defn check (prog:Collection<TStmt>) :
+  fork-on-seq(prog,
+    [check-type-cycles,
+     check-module-cycles,
+     check-definitions])
+  end-if-errors()
+  type-check(prog)
+
+add-plugin-entry-point(`check, `check, check)

@@ -1,0 +1,387 @@
+defpackage param-manager :
+  import core
+  import reader
+  import collections
+  import rtm/utils
+  import rtm/errors
+
+;============================================================
+;==================== Public Interface ======================
+;============================================================
+
+public defn read-params (over-name:String|False, base-name:String, configs:List<Symbol>) :
+  defn parse-file (base?:True|False) :
+    val filename = base-name when base? else over-name
+    match(filename:String) :
+      val forms = read-file(filename)
+      val file = parse-syntax[param-file / #param-file](forms)
+      check(file, base?)
+      file
+    else :
+      ParamFile([])
+  val param-file = merge(parse-file(false), parse-file(true))
+  Params(param-file, configs)
+
+;============================================================
+;====================== Params ==============================
+;============================================================
+
+public deftype Params 
+public defmulti get (p:Params, config:Symbol, field:Symbol) -> ?
+public defmulti get? (p:Params, config:Symbol, field:Symbol) -> Maybe
+
+defn Params (f:ParamFile, configs:List<Symbol>) :
+  ;Check that all given configs exist.
+  val config-table = to-hashtable<Symbol,Symbol> $
+    for s in sets(f) seq? :
+      match(name(s)) :
+        (n:Symbol) : One(n => config(s))
+        (n:False) : None()
+  for c in configs do :
+    if not key?(config-table, c) :
+      report-error(UnknownConfigName(c))
+  end-if-errors()
+  
+  ;Check there aren't duplicate config names
+  val dup-config-names = duplicates(configs)
+  report-error(DuplicateConfigNameArgs(dup-config-names)) when not empty?(dup-config-names)
+  end-if-errors()
+
+  ;Check there aren't duplicate configs
+  val dup-configs = duplicates(seq({config-table[_]}, configs))
+  report-error(DuplicateConfigArgs(dup-configs)) when not empty?(dup-configs)
+  end-if-errors()
+
+  ;Compute the applicable sets
+  defn default? (s:ParamSet) : name(s) is False
+  defn named? (s:ParamSet) : name(s) is Symbol
+  val set-table = to-hashtable<Symbol, ParamSet> $
+    for cset in filter(default?, sets(f)) seq :
+      config(cset) => cset
+  val config-set = to-hashset<Symbol>(configs)
+  for cset in filter(named?, sets(f)) do :
+    if config-set[name(cset) as Symbol] :
+      set-table[config(cset)] = cset
+
+  ;Construct table of values
+  val table = to-hashtable<[Symbol,Symbol], ?> $
+    for set in values(set-table) seq-cat :
+      for [name, value] in kvs(fields(set)) seq :
+        [config(set), name] => value
+
+  ;Ensure that given config is appropriate
+  defn ensure-config! (config:Symbol) :
+    fatal("Invalid config: %~" % [config]) when not key?(PARAM-SET-CONFIGS, config)
+
+  ;Return param datastructure
+  new Params :
+    defmethod get (this, config:Symbol, field:Symbol) :
+      ensure-config!(config)
+      table[[config,field]]
+    defmethod get? (this, config:Symbol, field:Symbol) :
+      ensure-config!(config)
+      val k = [config,field]
+      if key?(table, k) : One(table[k])
+      else : None()
+
+;============================================================
+;================= ParamFile Merging ========================
+;============================================================
+defn merge (over:ParamFile, base:ParamFile) :
+  ;Merge an overriding set with a base set
+  defn merge (over:ParamSet, base:ParamSet) :
+    val overridden = to-hashset<Symbol>(seq(key, fields(over)))
+    val inherited-fields = for f in fields(base) filter : not overridden[key(f)]
+    val fields* = to-tuple(cat(fields(over), inherited-fields))
+    ParamSet(config(over), name(over), fields*)
+
+  ;Predicates
+  defn default? (s:ParamSet) : name(s) is False
+  defn named? (s:ParamSet) : name(s) is Symbol
+  
+  ;Construct the default table
+  val default-table = to-hashtable<Symbol,ParamSet> $
+    for s in filter(default?, sets(base)) seq :
+      config(s) => s
+  defn default-set (c:Symbol) : get?(default-table, c, ParamSet(c, false, []))
+  for s in filter(default?, sets(over)) do :
+    default-table[config(s)] = merge(s, default-set(config(s)))
+
+  ;Construct the named table
+  val named-table = HashTable<Symbol,ParamSet>()
+  for s in filter(named?, cat(sets(over), sets(base))) do :
+    val name = name(s) as Symbol
+    if not key?(named-table, name) :
+      named-table[name] = merge(s, default-set(config(s)))
+
+  ;Return merged ParamFile
+  val sets* = to-tuple(cat(values(default-table), values(named-table)))
+  ParamFile(sets*)
+
+;============================================================
+;================= Parameter Structure ======================
+;============================================================
+defstruct ParamFile :
+  sets: Tuple<ParamSet>
+with: (printer => true)
+  
+defstruct ParamSet :
+  config: Symbol
+  name: Symbol|False
+  fields: Tuple<KeyValue<Symbol,?>>
+with: (printer => true)
+  
+;============================================================
+;================= Types of Parameters ======================
+;============================================================
+;Interface
+public deftype ParamType
+public defmulti welltyped? (t:ParamType, value) -> BadType|True
+public defmulti description (t:ParamType) -> String
+public defstruct BadType: (type:ParamType, value)
+
+public defstruct BoolParam <: ParamType
+public defstruct SymbolParam <: ParamType
+public defstruct StringParam <: ParamType
+public defstruct IntParam <: ParamType
+public defstruct DoubleParam <: ParamType
+public defstruct OrParam <: ParamType : (types:Tuple<ParamType>)
+public defstruct ListParam <: ParamType : (type:ParamType)
+public defstruct OptionalParam <: ParamType : (type:ParamType)
+
+public defn PositiveParam (t:ParamType) :
+  new ParamType :
+    defmethod welltyped? (this, value) :
+      match(value) :
+        (v:Int) :
+          if v >= 0 : true
+          else : BadType(this, v)
+        (v:Double) :
+          if v >= 0.0 : true
+          else : BadType(this, v)
+        (v) : true
+    defmethod description (this) :
+      "positive"
+
+defmethod welltyped? (t:ParamType, value) :
+  match(t, value) :
+    (t:OptionalParam, value) : welltyped?(type(t), value)
+    (t:BoolParam, value:True|False) : true
+    (t:SymbolParam, value:Symbol) : true
+    (t:StringParam, value:String) : true
+    (t:IntParam, value:Int) : true
+    (t:DoubleParam, value:Double) : true
+    (t:ListParam, value:List) :
+      val result = for v in value first :
+        match(welltyped?(type(t), v)) :
+          (r:BadType) : One(r)
+          (r:True) : None()
+      value?(result, true)
+    (t:OrParam, value) :
+      defn wt? (t:ParamType) : welltyped?(t, value) is True
+      if any?(wt?, types(t)) : true
+      else : BadType(t, value)
+    (t, value) : BadType(t, value)
+
+defmethod description (t:ParamType) :
+  match(t) :
+    (t:OptionalParam) : description(type(t))
+    (t:BoolParam) : "a boolean"
+    (t:SymbolParam) : "a symbol"
+    (t:StringParam) : "a string"
+    (t:IntParam) : "an integer"
+    (t:DoubleParam) : "a double"
+    (t:ListParam) : "a list"
+    (t:OrParam) : string-join(seq(description, types(t)), " or ")
+
+defn check (config:Symbol, field:Symbol, t:ParamType, v) :
+  val result = welltyped?(t, v)
+  match(result:BadType) :
+    val msg = "The value %~ is not %_." % [value(result), description(type(result))]
+    throw(InvalidParam(config, field, to-string(msg), v))
+
+;============================================================
+;==================== Checker Configuration =================
+;============================================================
+
+defstruct ParamSetConfig :
+  config: Symbol
+  fields: Tuple<KeyValue<Symbol, ParamType>>
+
+val PARAM-SET-CONFIGS = HashTable<Symbol,ParamSetConfig>()
+
+public defn register-parameter-set (config:Symbol, fields:Seqable<KeyValue<Symbol,ParamType>>) :
+  if key?(PARAM-SET-CONFIGS, config) :
+    fatal("Already registered parameter set %_." % [config])
+  val c = ParamSetConfig(config, to-tuple(fields))
+  PARAM-SET-CONFIGS[config] = c
+
+defn check (f:ParamFile, base?:True|False) :
+  ;Predicates
+  defn default? (s:ParamSet) : name(s) is False
+  defn mandatory? (c:ParamSetConfig) : any?({value(_) is-not OptionalParam}, fields(c))
+  
+  ;Check that ParamFile contains all necessary configs
+  if base? :
+    val covered-configs = to-hashset<Symbol> $
+      seq(config, filter(default?, sets(f)))
+    for c in values(PARAM-SET-CONFIGS) do :
+      if mandatory?(c) and not covered-configs[config(c)] :
+        report-error(MissingDefaultConfig(config(c)))
+      
+  ;Check for duplicate default configs
+  val dup-configs = duplicates(seq(config, filter(default?, sets(f))))
+  if not empty?(dup-configs) :
+    report-error(DuplicateConfigsError(dup-configs))
+    
+  ;Check for duplicate named configs
+  val dup-config-names = duplicates(seq?(name?, sets(f)))
+  if not empty?(dup-config-names) :
+    report-error(DuplicateConfigNamesError(dup-config-names))
+    
+  ;Check each set within the ParamFile
+  for s in sets(f) do :
+    ;Check for duplicate fields
+    val dup-fields = duplicates(seq(key, fields(s)))
+    if not empty?(dup-fields) :
+      report-error(DuplicateFieldsError(config(s), name(s), dup-fields))
+    ;Check for unknown parameter set
+    else if not key?(PARAM-SET-CONFIGS, config(s)) :
+      report-error(UnknownConfig(config(s)))
+    else :
+      ;Check for unknown parameters
+      val config = PARAM-SET-CONFIGS[config(s)]
+      val cfields = to-hashtable<Symbol,ParamType>(fields(config))
+      for [param-name, value] in kvs(fields(s)) do :
+        match(get?(cfields, param-name)) :
+          (t:ParamType) : check(/config(s), param-name, t, value)
+          (t:False) : report-error(UnknownParam(/config(s), name(s), param-name))
+        remove(cfields, param-name)
+      ;Check for missing parameters
+      if base? :
+        for [param-name, type] in kvs(cfields) do :
+          if type is-not OptionalParam :
+            report-error(MissingParam(/config(s), name(s), param-name))
+  ;Exit if any errors
+  end-if-errors()
+
+defn duplicates<?T> (xs:Seqable<?T&Hashable&Equalable>) :
+  val counts = HashTable<Hashable&Equalable,Int>(0)
+  val dups = Vector<T>()
+  for x in xs do :
+    update(counts, {_ + 1}, x)
+    add(dups, x) when counts[x] == 2
+  dups    
+
+;============================================================
+;======================= Syntax =============================
+;============================================================
+defsyntax param-file :
+  public defproduction param-file : ParamFile
+  defrule param-file = (?sets:#param-set! ...) : ParamFile(to-tuple(sets))
+
+  defproduction symbol! : Symbol
+  defrule symbol! = (?x) when unwrap-token(x) is Symbol : unwrap-token(x)
+  fail-if symbol! = () : PE(closest-info(), "Expected a symbol here.")
+
+  defproduction =!
+  defrule =! = (=) : false
+  fail-if =! = () : PE(closest-info(), "Expected an equals sign (=) here.")
+
+  defproduction :!
+  defrule :! = (:) : false
+  fail-if :! = () : PE(closest-info(), "Expected a colon (:) here.")
+
+  defproduction LE
+  fail-if LE = (_) : PE(closest-info(), "Unexpected input here.")
+  defrule LE = () : false
+
+  defproduction LS
+  fail-if LS = ((! (_ ...))) : PE(closest-info(), "Expected a list here.")
+  defrule LS = () : false
+
+  defproduction param-set! : ParamSet
+  defrule param-set! = (?config:#symbol! ?name:#name? #:! #LS (?fields:#field! ...)) :
+    ParamSet(config, name, to-tuple(fields))
+
+  defproduction name? : Symbol|False
+  defrule name? = ((?name:#symbol! #LE)) : name
+  defrule name? = () : false
+  
+  defproduction field! : KeyValue<Symbol,?>
+  defrule field! = (?k:#symbol! #=! ?v) : k => unwrap-all(v)
+
+;============================================================
+;======================== Errors ============================
+;============================================================
+
+public defstruct InvalidParam <: Exception :
+  config:Symbol
+  field:Symbol
+  message:String
+  value  
+defmethod print (o:OutputStream, t:InvalidParam) :
+  print(o, "Parameter %~ in config %~ cannot be assigned value %~: %_" % [
+    field(t), config(t), value(t), message(t)])
+
+public defstruct ParamException <: Exception :
+  info: FileInfo|False with: (default => false)
+  msg
+with :
+  constructor => PE
+
+defmethod print (o:OutputStream, e:ParamException) :
+  print(o, "%_: " % [info(e)]) when info(e) is-not False    
+  print(o, msg(e))
+
+defn UnknownConfigName (c:Symbol) :
+  PE("There is no config set named %~." % [c])
+defn DuplicateConfigNameArgs (dup-config-names:Collection<Symbol>) :
+  PE("The config sets %, are listed more than once." % [dup-config-names])
+defn DuplicateConfigArgs (dup-configs:Collection<Symbol>) :
+  PE("There are redundant config sets for the %, configs." % [dup-configs])
+defn MissingDefaultConfig (c:Symbol) :
+  PE("There are no default parameters specified for the %~ config." % [c])
+defn DuplicateConfigsError (dup-configs:Collection<Symbol>) :
+  PE("There are multiple default configs specified for %, configs." % [dup-configs])
+defn DuplicateConfigNamesError (dup-config-names:Collection<Symbol>) :
+  PE("There are multiple configs specified named %,." % [dup-config-names])
+defn DuplicateFieldsError (config:Symbol, name:Symbol|False, dup-fields:Collection<Symbol>) :
+  PE("%_the fields %, are specified more than once." % [context-string(config,name), dup-fields])
+defn UnknownConfig (config:Symbol) :
+  PE("There is no config set called %~." % [config])
+defn UnknownParam (config:Symbol, name:Symbol|False, param-name:Symbol) :
+  PE("%_there is no param called %~." % [context-string(config,name), param-name])
+defn MissingParam (config:Symbol, name:Symbol|False, param-name:Symbol) :
+  PE("%_the value for the %~ param is unspecified." % [context-string(config,name), param-name])
+defn context-string (config:Symbol, name:Symbol|False) :
+  match(name:False) : "In the default %~ config, " % [config]
+  else : "In the %~ config named %~, " % [config, name]
+
+;============================================================
+;======================== Utilities =========================
+;============================================================
+
+defn name? (s:ParamSet) : attempt: One(name(s) as? Symbol) else: None()
+
+;============================================================
+;================== Example Param File ======================
+;============================================================  
+;<PARAM FILE>
+lower :
+  print-post-power-generation = true
+export-kicad :
+  preplaced = "asdfkadf.kicad"
+bom :
+  vendors = ("Digi-Key", "Mouser")
+  selection = "selection-doc.txt"
+placer :
+  via-diam = 5.0
+  via-diameter = 10.0
+prune :
+  prune-for = board
+  prune-all = (asdf asdf sdaf asdf asdf)
+prune (starsky-special) :
+  prune-for = board
+  prune-all = (asdf asdf sdaf asdf asdf)
+;<PARAM FILE>

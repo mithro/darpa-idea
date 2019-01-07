@@ -1,0 +1,177 @@
+defpackage treegen :
+  import core
+  import collections
+
+public defstruct Tree :
+  load: Int|False with: (updater => sub-load)
+  num-nodes: Int
+  num-leaves: Int
+  num-loads: Int
+  children: Tuple<Tree>
+
+public defn Trees (max-leaves:Int, max-nodes:Int) -> Seq<Tree> :
+  for num-nodes in max-leaves through max-nodes seq-cat :
+    gen-tree(num-nodes + 1, max-leaves)
+
+public defn label-loads (t:Tree, num-loads:Int) -> Seq<Tree> :
+  repeatedly $ fn () :
+    label-selected-loads(select-loads(t, num-loads))
+
+;============================================================
+;==================== Private Constructors ==================
+;============================================================
+
+defn Tree (load:Int|False) :
+  val num-loads = 0 when load is False else 1
+  Tree(load, 1, 1, num-loads, [])
+defn Tree (load:Int|False, children:Tuple<Tree>) :
+  val num-nodes = sum(seq(num-nodes, children)) + 1
+  val num-leaves = sum(seq(num-leaves, children))
+  val num-loads = sum(seq(num-loads, children)) +
+                  0 when load is False else 1
+  Tree(load, num-nodes, num-leaves, num-loads, children)
+
+defmethod print (o:OutputStream, t:Tree) :
+  defn loop (o:OutputStream, t:Tree, first?:True|False) :
+    val lstr = "" when load(t) is False else "L%_" % [load(t)]
+    val nl = "" when first? else "\n"
+    print(o, "%_Tree %_" % [nl, lstr])
+    for c in children(t) do :
+      loop(IndentedStream(o), c, false)
+  loop(o, t, true)
+
+;============================================================
+;==================== Label/Selection =======================
+;============================================================
+
+;Return a new tree where all selected loads are assigned a
+;random appropriate load. We guarantee dominance relationships.
+;No higher indexed load is closer to the root than a lower indexed load.
+defn label-selected-loads (t:Tree) -> Tree :
+  ;Loads to select from
+  val loads = to-vector<Int>(0 to num-loads(t))
+  let loop (t:Tree = t, minload:Int = 0) :
+    if load(t) is Int :
+      ;Children have num-child-load number of loads
+      val num-child-loads = num-loads(t) - 1
+      ;Use the following load for this node
+      val load-index = rand(minload to (length(loads) - num-child-loads))
+      ;Assign loads to children
+      val children* = map(loop{_, load-index + 1}, children(t))
+      ;Remove load from further consideration
+      val l = remove(loads, load-index)
+      Tree(l, children*)
+    else :
+      val children* = map(loop{_, minload}, children(t))
+      Tree(false, children*)
+
+;Return a new tree where exactly nloads is selected as potential
+;loads in the tree (indicated by load = 0). Children are
+;guaranteed to be selected. The root node is guaranteed to
+;not be selected.
+defn select-loads (t:Tree, nloads:Int) -> Tree :
+  ;Check preconditions
+  fatal("More leaves than loads") when num-leaves(t) > nloads
+  fatal("Less nodes than loads") when (num-nodes(t) - 1) < nloads
+
+  ;Selected nodes
+  val selected = Array<True|False>(num-nodes(t), false)
+  
+  ;Retrieve the non-leaves from the tree
+  val non-leaves = Vector<Int>()
+  let :
+    val counter = to-seq(0 to false)
+    let loop (t:Tree = t) :
+      val i = next(counter)
+      if empty?(children(t)) :
+        selected[i] = true
+      else :
+        add(non-leaves, i) when i != 0
+        do(loop, children(t))
+
+  ;Select a random subset of non-leaves
+  for i in rand-subset(non-leaves, nloads - num-leaves(t)) do :
+    selected[i] = true
+
+  ;Return selected tree
+  let :
+    val counter = to-seq(0 to false)
+    let loop (t:Tree = t) :
+      val i = next(counter)    
+      val children* = map(loop, children(t))
+      val load* = 0 when selected[i]
+      Tree(load*, children*)      
+
+;Select a random subset of numbers of xs.
+defn rand-subset (xs:Vector<Int>, n:Int) -> Tuple<Int> :
+  val ys = to-array<Int>(xs)
+  defn swap (i:Int, j:Int) :
+    if i != j :
+      val yi = ys[i]
+      val yj = ys[j]
+      ys[j] = yi
+      ys[i] = yj      
+  for i in 0 to n do :
+    swap(i, rand(i to length(ys)))
+  to-tuple(ys[0 to n])
+
+;============================================================
+;==================== Generation ============================
+;============================================================
+
+;Generate all tree topologies with nnodes number of nodes,
+;and with leaves below the maximum number of leaves
+defn gen-tree (nnodes:Int, max-leaves:Int) -> Seq<Tree> :
+  if max-leaves < 1 :
+    to-seq([])
+  else if nnodes == 1 :
+    to-seq([Tree(false)])
+  else :
+    for nset in all-sets(nnodes - 1) seq-cat :
+      defn gen (i:Int) :
+        fn (last:List<GenItem<Tree>>) :
+          val leaves-used = sum(seq(num-leaves{item(_)}, last))
+          val leaves-left = length(nset) - (i + 1)
+          val max-leaves* = max-leaves - leaves-used - leaves-left
+          if i > 0 and nset[i] == nset[i - 1] :
+            val last-index = index(head(last))
+            val last-leaves = num-leaves(item(head(last)))
+            take-up-to-n(last-index + 1, gen-tree(nset[i], min(max-leaves*, last-leaves)))
+          else :
+            gen-tree(nset[i], max-leaves*)
+      val subtrees-seq = all-combinations $ to-tuple $ seq(gen, 0 to length(nset))
+      seq(Tree{false, _}, subtrees-seq)
+
+;Returns all possible combinations of given sequences.
+;Generating function is given properties of the last item generated.
+defstruct GenItem<T> : (index:Int, item:T)
+defn all-combinations<?T> (seqs:Tuple<(List<GenItem<T>> -> Seqable<?T>)>) -> Seq<Tuple<T>> :
+  val n = length(seqs)
+  defn gen (return:List<T> -> ?, i:Int, last:List<GenItem<T>>) :
+    if i < n :
+      for (x in seqs[i](last), index in 0 to false) do :
+        val last* = cons(GenItem<T>(index,x), last)
+        within xs = gen(i + 1, last*) :
+          return(cons(x, xs))
+    else :
+      return(List())
+  generate<Tuple<T>> :
+    gen(yield{to-tuple(_)}, 0, List())
+      
+;Represent n as a sum of smaller descending n.
+defn all-sets (n:Int) -> Seq<Tuple<Int>> :
+  ;Find all splits of n into subsets, where each set is less than or
+  ;equal to max
+  defn find-sets (return:List<Int> -> ?, max:Int, n:Int) -> False :
+    if n < 1 :
+      false
+    else :
+      for n0 in 1 through max do :
+        within ns = find-sets(n0, n - n0) :
+          return(cons(n0, ns))
+      if n <= max :
+        return(List(n))
+
+  generate<Tuple<Int>> :
+    within ns = find-sets(n, n) :
+      yield(to-tuple(ns))

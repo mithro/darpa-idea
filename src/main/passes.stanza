@@ -1,0 +1,113 @@
+defpackage passes :
+  import core
+  import collections
+  import rtm/ir
+  import pass-manager
+  import param-manager
+  import plugins/master
+  import rtm/ir-lower
+  import rtm/ir-utils
+  import rtm/structures
+  import rtm/pin-solver
+  import rtm/utils
+  import jitpcb/errors
+  import jitpcb/config
+  import rtm/errors
+
+;============================================================
+;===================== Dependencies =========================
+;============================================================
+
+defn add-paths (xs:List<Symbol>) :
+  let loop (x:Symbol = head(xs), ys:List<Symbol> = tail(xs)) :
+    if not empty?(ys) :
+      val y = head(ys)
+      add-path(x, y)
+      loop(y, tail(ys))
+
+add-paths $ `(input check prune-input lower prune-lower solve-requirements key-in)
+
+;============================================================
+;==================== ESIR ==================================
+;============================================================
+
+add-pass $ new Pass :
+  defmethod name (this) : `input
+  defmethod save-output? (this) : true
+  defmethod optional? (this) : true
+  defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
+    input
+
+;============================================================
+;==================== Checker ===============================
+;============================================================
+
+add-pass $ new Pass :
+  defmethod name (this) : `check
+  defmethod save-output? (this) : false
+  defmethod optional? (this) : false
+  defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
+    call(Plugin("checker"), `check, input)
+    input
+
+;============================================================
+;==================== Lower =================================
+;============================================================
+
+register-parameter-set(`lower, [
+  `post-power-generation => OptionalParam(BoolParam())])
+
+add-pass $ new Pass :
+  defmethod name (this) : `lower
+  defmethod save-output? (this) : true
+  defmethod optional? (this) : false
+  defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
+    val show-post-power-gen = value?(get?(params, `lower, `post-power-generation))
+    lower(to-list(input), KicadFlattener(), show-post-power-gen)
+
+;============================================================
+;==================== Solve Requirements ====================
+;============================================================
+
+add-pass $ new Pass :
+  defmethod name (this) : `solve-requirements
+  defmethod save-output? (this) : true
+  defmethod optional? (this) : false
+  defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
+    assign-satisfying-pins(input)
+
+;============================================================
+;========================= Prune ============================
+;============================================================
+register-parameter-set(`prune, [
+  `prune-for => OptionalParam(SymbolParam())
+  `prune-all => OptionalParam(ListParam(SymbolParam()))])
+
+for name in [`prune-input, `prune-lower] do :
+  add-pass $ new Pass :
+    defmethod name (this) : name
+    defmethod command (this) : `prune
+    defmethod save-output? (this) : true
+    defmethod optional? (this) : true
+    defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
+      val pruning-option =
+        match(get?(params, `prune, `prune-for), get?(params, `prune, `prune-all)) :
+          (f:One, a:One) : throw(PruneError(PRUNE-ERROR))
+          (f:One<Symbol>, a:None) : PruneFor(value(f))
+          (f:None, a:One<List<Symbol>>) : PruneAll(value(a))
+          (f:None, a:None) : NoPrune()
+      call(Plugin("passes"), `prune, [input, pruning-option])
+
+val PRUNE-ERROR = "JitPCB prune config can take either the 'prune-for' or 'prune-all' parameters but not both."
+
+;============================================================
+;==================== Key In ================================
+;============================================================
+
+add-pass $ new Pass :
+  defmethod name (this) : `key-in
+  defmethod save-output? (this) : false
+  defmethod optional? (this) : true
+  defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
+    call(Plugin("key-in"), `export, [input, dir, proj-name])
+    input

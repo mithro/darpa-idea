@@ -1,0 +1,97 @@
+defpackage powergen-tester :
+  import core
+  import collections
+  import powergen
+
+;============================================================
+;==================== Pretty Printer ========================
+;============================================================
+
+defn print-solution (rl:RegList) :
+  val rails = to-inttable<RailProps>(rails(rl))
+    
+  println("Environment:")
+  within indented() :
+    println("Source Voltage = %_V" % [src-voltage(env(rl))])
+    println("Source Current = %_A" % [current(rails[0])])
+    println("Ambient Temperature = %_ oC" % [tamb(env(rl))])
+  println("Regulators:")
+  within indented() :
+    for r in regs(rl) do :
+      val type = "LDO" when reg(r) is LDO else "Switching regulator"
+      println("%_ %_ from rail %_ (%_V) to rail %_ (%_V)" % [
+        type, id(reg(r)), input(r), voltage(rails[input(r)]), n(r), voltage(rails[n(r)])])
+  println("Loads:")
+  within indented() :
+    for l in loads(rl) do :
+      println("load %_ (%_V, %_A) on rail %_" % [
+        id(load(l)), voltage(load(l)), current(load(l)), input(l)])
+  println("Noise:")
+  within indented() :
+    for r in regs(rl) do :
+      println("Noise on rail %_ = %_ V" % [n(r), noise(rails[n(r)])])
+  println("Currents:")
+  within indented() :
+    for r in regs(rl) do :
+      println("Current out of rail %_ = %_ A" % [n(r), current(rails[n(r)])])
+
+;============================================================
+;======================= Main ===============================
+;============================================================
+defstruct PowerProblem :
+  env: Env
+  regs: Tuple<Regulator>
+  loads: Tuple<Load>
+
+defstruct DRange :
+  lo: Double
+  hi: Double
+
+defsyntax powergen :
+  public defproduction problem : PowerProblem
+  defrule problem = (?env:#env regs:(?regs:#reg ...) loads:(?loads:#load ...)) :
+    PowerProblem(env, to-tuple(regs), to-tuple(loads))
+
+  defproduction reg : Regulator
+  defrule reg = (LDO(?id:#int, ?noise:#double, ?vdo:#double, ?tjmax:#double, ?thetaja:#double,
+                     ?vin:#drange, ?vout:#drange, ?iout:#drange)) :
+    LDO(id, noise, vdo, tjmax, thetaja,
+        lo(vin), hi(vin), lo(vout), hi(vout), lo(iout), hi(iout))
+  defrule reg = (SwitchReg(?id:#int, ?dcycle:#double, ?noise:#snoise, ?nu:#double, ?tjmax:#double, ?thetaja:#double,
+                           ?vin:#drange, ?vout:#drange, ?iout:#drange)) :
+    SwitchReg(id, dcycle, noise, nu, tjmax, thetaja,
+              lo(vin), hi(vin), lo(vout), hi(vout), lo(iout), hi(iout))
+
+  defproduction snoise : SwitchedNoise|Double
+  defrule snoise = (?noise:#double) : noise
+  defrule snoise = (Noise(?fs:#double, ?L:#double, ?C:#double)) : SwitchedNoise(fs, L, C)
+
+  defproduction load : Load
+  defrule load = (Load(?id:#int, ?voltage:#double, ?current:#double, ?noise:#double)) :
+    Load(id, voltage, current, noise)
+
+  defproduction env : Env
+  defrule env = (environment :
+                   voltage = ?v:#double
+                   tamb = ?tamb:#double) :
+    Env(v, tamb)    
+
+  defproduction drange : DRange
+  defrule drange = ([?lo:#double to ?hi:#double]) : DRange(lo,hi)
+
+  defproduction double : Double
+  defrule double = (?x) when unwrap-token(x) is Double : unwrap-token(x)
+  
+  defproduction int : Int
+  defrule int = (?x) when unwrap-token(x) is Int : unwrap-token(x)
+
+defn main () :
+  val filename = command-line-arguments()[1]
+  val forms = reader/read-file(filename)
+  val problem = parse-syntax[powergen / #problem](forms)
+  val supplies = gen-power-supplies(env(problem), loads(problem), regs(problem))
+  for s in take-up-to-n(50, supplies) do :
+    println("===== Solution =====")
+    print-solution(s)  
+    
+main()

@@ -1,0 +1,67 @@
+defpackage plugins/master :
+  import core
+  import collections
+  import serialize
+  import dlopen
+  import plugins
+  import rtm/errors
+  import jitpcb/config
+
+public deftype Plugin
+defmulti path (p:Plugin) -> String
+defmulti symbol (p:Plugin, name:String) -> DynamicSymbol
+
+public defn Plugin (name:String) -> Plugin :
+  val optimized? =
+    #if-defined(OPTIMIZE) :
+      true
+    #else :
+      false
+  Plugin(name, optimized?)
+
+public defn Plugin (name:String, optimized?:True|False) -> Plugin :
+  val filename =
+    if optimized? : norm-path("%_/fplugins/%_.plugin" % [jitpcb-install-dir(), name])
+    else : norm-path("%_/plugins/%_.plugin" % [jitpcb-install-dir(), name])      
+  val lib = dl-open(filename)
+  call-main(dl-sym(lib, "main"))
+  new Plugin :
+    defmethod path (this) : filename
+    defmethod symbol (this, name:String) : dl-sym(lib, name)
+
+public defn call (p:Plugin, entry:Symbol, args:?) -> ? :
+  try :
+    val init = PluginInit(jitpcb-version(), state(current-random()), current-output-stream(), error-report())
+    call-init(symbol(p, "plugin_initialization"), to-ByteInputStream(init))
+    val output = call(symbol(p, "plugin_main"), to-ByteInputStream(entry, args))
+    match(deserialize(output)) :
+      (r:PluginResult) :
+        report-error(errors(r))
+        srand(seed(r))
+        result(r)
+      (e:Exception) :
+        throw(e)  
+  catch (e:DeserializationError) :
+    fatal("Serialization failure when calling plugin %~." % [path(p)])
+
+lostanza defn call-main (main:ref<DynamicSymbol>) -> ref<False> :
+  val f = main.value as ptr<((int, ptr<ptr<byte>>) -> int)>
+  call-c [f](clib/input_argc, clib/input_argv)
+  return false
+
+lostanza defn call-init (init:ref<DynamicSymbol>, input:ref<ByteInputStream>) -> ref<False> :
+  val f = init.value as ptr<(ptr<ByteInputStream> -> int)>
+  val input-ptr = to-ptr(input)
+  call-c [f](input-ptr)
+  call-c clib/free(input-ptr)
+  return false
+
+lostanza defn call (sym:ref<DynamicSymbol>, input:ref<ByteInputStream>) -> ref<ByteInputStream> :
+  val f = sym.value as ptr<(ptr<ByteInputStream> -> ptr<ByteInputStream>)>
+  val input-ptr = to-ptr(input)
+  val output-ptr = call-c [f](input-ptr)
+  val ret = to-ref(output-ptr)
+  call-c clib/free(input-ptr)
+  call-c clib/free(output-ptr)
+  return ret
+

@@ -1,0 +1,108 @@
+defpackage jitpcb/errors :
+  import core
+  import collections
+  
+public deftype JitPCBError <: Exception
+
+public defstruct NoJitPCBFiles <: JitPCBError
+defmethod print (o:OutputStream, e:NoJitPCBFiles) :
+  print(o, "No JitPCB input files given.")
+
+public defstruct NoJitPCBConfig <: JitPCBError
+defmethod print (o:OutputStream, e:NoJitPCBConfig) :
+  print(o, "Could not locate .jitpcb configuration file.")
+
+public defstruct NoInstall <: JitPCBError
+defmethod print (o:OutputStream, e:NoInstall) :
+  print(o, "Could not write .jitpcb configuration file.")
+
+public defstruct NoLicenseFile <: JitPCBError
+defmethod print (o:OutputStream, e:NoLicenseFile) :
+  print(o, "Could not locate License.txt file.")
+
+public defstruct NoLicenseBadInstall <: JitPCBError :
+  dir: String
+defmethod print (o:OutputStream, e:NoLicenseBadInstall) :
+  val lfile = norm-path("%_/License.txt" % [dir(e)])
+  print(o, "JitPCB installation directory is set to %_, but license file %_ could not be found." % [
+    dir(e), lfile])
+
+public defstruct CommandCannotTakeArgs <: JitPCBError :
+  name: String
+  args: List
+defmethod print (o:OutputStream, e:CommandCannotTakeArgs) :
+  print(o, "Command %_ does not accept any arguments, but received %_.)" % [name(e), args(e)])
+
+public defstruct FlagNotANumber <: JitPCBError :
+  flag:String
+  value:String
+defmethod print (o:OutputStream, e:FlagNotANumber) :
+  val fmt = "The value given to flag %~ (%~) is not a number."
+  print(o, fmt % [flag(e), value(e)])
+
+public defstruct ConfigFileError <: JitPCBError :
+  info: FileInfo|False
+  msg
+defmethod print (o:OutputStream, e:ConfigFileError) :
+  print{o, _} $
+    if info(e) is False : msg(e)
+    else : "%_: %_" % [info(e), msg(e)]
+
+public defstruct NoPkgDir <: JitPCBError :
+  dir: String
+defmethod print (o:OutputStream, e:NoPkgDir) :
+  val pkg-dir = norm-path("%_/pkgs" % [dir(e)])
+  print(o, PKG-DIR-FORMAT % [pkg-dir, pkg-dir])
+val PKG-DIR-FORMAT =
+\<S>The JitPCB pkg directory '%_' is not registered with Stanza. Please add the line:
+  pkg-dirs = (%~) 
+to the .stanza configuration file.<S>
+  
+public defstruct NoFastPkgDir <: JitPCBError :
+  dir: String
+defmethod print (o:OutputStream, e:NoFastPkgDir) :
+  val pkg-dir = norm-path("%_/fast-pkgs" % [dir(e)])
+  print(o, FAST-PKG-DIR-FORMAT % [pkg-dir, pkg-dir])
+val FAST-PKG-DIR-FORMAT =
+\<S>The JitPCB fast pkg directory '%_' is not registered with Stanza. Please add the line:
+  fast-pkg-dirs = (%~) 
+to the .stanza configuration file.<S>
+  
+public defstruct KicadRequiresName <: JitPCBError :
+  args:List
+defmethod print (o:OutputStream, e:KicadRequiresName) :
+  print(o, "Option export-kicad requires one argument for indicating project name.")
+  if empty?(args(e)) :
+    print(o, " No arguments were given.")
+  else :
+    print(o, " Received arguments: %_." % [args(e)])
+
+public defstruct UnrecognizedStage <: JitPCBError :
+  stage:String
+defmethod print (o:OutputStream, e:UnrecognizedStage) :
+  print(o, "Unrecognized stage: '%_'." % [stage(e)])
+
+public defstruct NoESIRFiles <: JitPCBError :
+  command:String
+defmethod print (o:OutputStream, e:NoESIRFiles) :
+  print(o, "No .esir files provided to command %_." % [command(e)])
+
+public defstruct TooManyESIRFiles <: JitPCBError :
+  command:String
+defmethod print (o:OutputStream, e:TooManyESIRFiles) :
+  print(o, "Too many .esir files provided to command %_." % [command(e)])
+
+public defstruct NoFlagValue <: JitPCBError :
+  flag:String
+defmethod print (o:OutputStream, e:NoFlagValue) :
+  print(o, "No value given for flag %~." % [flag(e)])
+
+public defstruct PruneError <: JitPCBError :
+  msg:String
+defmethod print (o:OutputStream, e:PruneError) :
+  print(o, msg(e))
+
+public defstruct ShellError <: JitPCBError :
+  msg:String
+defmethod print (o:OutputStream, e:ShellError) :
+  print(o, msg(e))

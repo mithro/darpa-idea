@@ -1,0 +1,108 @@
+defpackage standalone-wrapper :
+  import core
+  import collections
+  import input-spec/ir
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-utils
+  import jitpcb/flags
+  import interfaces
+  import components
+  import modules
+  import peripherals
+
+#use-added-syntax(ir-gen)
+
+defn sym-ref (r-or-s:Ref|Symbol) :
+  match(r-or-s) :
+    (r:Ref) : r
+    (s:Symbol) : Ref(s)
+
+defn get-shape (s-in:Shape|False|[Double,Double]) :
+  match(s-in) :
+    (s:Shape|False) : s
+    (d:[Double,Double]) : 
+      val [w,h] = d
+      rectangle(w,h)
+
+;==== Board ====================================================================
+
+defn make-standalone-board (
+  board-module:Ref|Symbol
+  board-boundary:Shape|False|[Double,Double]
+  board-sig-boundary:Shape|False|[Double,Double]
+  board-stackup:Ref|Symbol
+  board-rules:Ref|Symbol
+  ) :
+  
+  make-board({sym-ref(board-module)})
+
+;==== Schematic ================================================================
+
+defn make-standalone-schematic (board-module:Ref|Symbol) :
+  ;make-schematic({sym-ref(board-module)})
+  false
+
+;==== Project ==================================================================
+
+public defn make-standalone-project (
+  board-module:Ref|Symbol
+  board-boundary:Shape|False|[Double,Double]
+  board-sig-boundary:Shape|False|[Double,Double]
+  board-stackup:Ref|Symbol
+  board-rules:Ref|Symbol
+  ) :
+
+  if not flag?("no-sch") :
+    make-standalone-schematic(board-module)
+
+  if not flag?("no-brd") :
+    make-standalone-board(board-module, board-boundary, board-sig-boundary, board-stackup, board-rules)
+
+public defn make-standalone-project (
+  board-module:Ref|Symbol
+  board-boundary:Shape|False|[Double,Double]
+  board-sig-boundary:Shape|False|[Double,Double]
+  board-stackup:Ref|Symbol
+  ) :
+  
+  make-standalone-project(
+    board-module
+    board-boundary
+    board-sig-boundary
+    board-stackup
+    `bay-area-circuits-conservative-rules
+  )
+
+public defn make-standalone-project (
+  board-module:Ref|Symbol
+  board-boundary:Shape|False|[Double,Double]
+  board-sig-boundary:Shape|False|[Double,Double]
+  ) :
+  
+  make-standalone-project(
+    board-module
+    board-boundary
+    board-sig-boundary
+    `bay-area-circuits-4-layer-62-mil
+  )
+
+public defn make-standalone-project (
+  board-module:Ref|Symbol
+  board-boundary:Shape|False|[Double,Double]
+  ) :
+  
+  make-standalone-project(
+    board-module
+    board-boundary
+    board-boundary
+  )
+
+public defn make-standalone-project (
+  board-module:Ref|Symbol
+  ) :
+  
+  make-standalone-project(
+    board-module
+    false
+  )

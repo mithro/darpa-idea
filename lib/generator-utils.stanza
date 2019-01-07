@@ -1,0 +1,176 @@
+defpackage generator-utils :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-utils
+
+#use-added-syntax(ir-gen)
+
+public defstruct BoxPlacer :
+  y-max : Double
+  y-min : Double
+  x-coord : Double with : (setter => set-x-coord, default => 0.0)
+  y-coord : Double with : (setter => set-y-coord, default => y-max)
+  col-w : Double|False with : (setter => set-col-w, init => false)
+
+public defn place-box (bp:BoxPlacer, box:Rectangle) -> Pose :
+  val box-w = width(box)
+  val box-h = height(box)
+  val box-c = center(pose(box))
+
+  ; Move to next column if there is not enough room in this one
+  if (y-coord(bp) < y-max(bp)) and ((y-coord(bp) - box-h) < y-min(bp)):
+    set-y-coord(bp, y-max(bp))
+    set-x-coord(bp, x-coord(bp) + box-w)
+    set-col-w(bp, box-w)
+
+  val ret-loc = loc(
+    x-coord(bp) + (box-w / 2.0) - x(box-c)
+    y-coord(bp) - (box-h / 2.0) - y(box-c)
+  )
+
+  set-y-coord(bp, y-coord(bp) - box-h)
+
+  val new-col-w = match(col-w(bp)) :
+    (w:Double) : max(box-w, w)
+    (f:False) : box-w
+
+  set-col-w(bp, new-col-w)
+
+  ret-loc
+
+; Return the cartesian product of coordinate ranges in args-list
+public defn expand-args (args-list:List<List>) :
+  val args = Vector<Tuple>()
+
+  switch(length(args-list)) :
+    0 : false
+    1 : add-all(args, seq({[_]},head(args-list)))
+    else :
+      val post-args = expand-args(tail(args-list))
+      for prefix in head(args-list) do :
+        for suffix in post-args do :
+          add(args, to-tuple(cat([prefix], suffix)))
+
+  args
+
+public defn expand-args (args-list:Tuple<Tuple>) :
+  val ll = to-list(seq(to-list, args-list))
+  expand-args(ll)
+
+public defn place-variants (
+  placer:BoxPlacer
+  box-gen:Tuple -> Rectangle
+  inst-gen:Tuple -> Ref
+  name-gen:(Tuple -> String)|False
+  args-list:Tuple
+  place-symbol?:True|False
+  sch-group:Symbol|False
+  place-package?:True|False
+) :
+  
+  val args-bounds = Vector<KeyValue<Tuple,Box>>()
+
+  inside pcb-module :
+    val args = match(args-list[0]) :
+      (t:Tuple) : expand-args(args-list)
+      (o) : expand-args([args-list])
+
+    for arg-set in args do :
+
+      val arg-inst = match(name-gen) :
+        (f:Tuple -> String) :
+          val inst-name = Ref(f(arg-set))
+          inst {inst-name} : {inst-gen(arg-set)}
+          inst-name
+        (o) :
+          inst i : {inst-gen(arg-set)}
+          i
+
+      val arg-box = box-gen(arg-set)
+      val box-loc = place-box(placer, arg-box)
+
+      add(args-bounds, arg-set => apply(box-loc, bounds(arg-box)))
+
+      ;if place-symbol? :
+      ;  ;symbol(arg-inst) at unit-loc(box-loc)
+      ;  match(sch-group) :
+      ;    (s:Symbol) :
+      ;      schematic-group(arg-inst) = {Ref(s)}
+      ;    (o) :
+      ;      false
+
+      ; TODO: pass side in?
+      ;if place-package? :
+      ;  package(arg-inst) at box-loc on Top
+
+  args-bounds
+
+public defn place-variants (
+  placer:BoxPlacer
+  box-gen:Tuple -> Rectangle
+  inst-gen:Tuple -> Ref
+  args-list:Tuple
+  place-symbol?:True|False
+  sch-group:Symbol|False
+  place-package?:True|False
+) :
+  place-variants(placer, box-gen, inst-gen, false, args-list, place-symbol?, sch-group, place-package?)
+
+public defn place-variants (
+  placer:BoxPlacer
+  box-gen:(Tuple) -> Rectangle
+  inst-gen:(Tuple) -> Ref
+  args-list:Tuple
+) :
+  place-variants(placer, box-gen, inst-gen, args-list, true, false, true)
+
+public defn place-symbol-variants (
+  placer:BoxPlacer
+  box-gen:(Tuple) -> Rectangle
+  inst-gen:(Tuple) -> Ref
+  args-list:Tuple
+  sch-group:Symbol|False
+) :
+  place-variants(placer, box-gen, inst-gen, args-list, true, sch-group, false)
+
+public defn place-symbol-variants (
+  placer:BoxPlacer
+  box-gen:(Tuple) -> Rectangle
+  inst-gen:(Tuple) -> Ref
+  args-list:Tuple
+) :
+  place-variants(placer, box-gen, inst-gen, args-list, true, false, false)
+
+public defn place-package-variants (
+  placer:BoxPlacer
+  box-gen:(Tuple) -> Rectangle
+  inst-gen:(Tuple) -> Ref
+  args-list:Tuple
+) :
+  place-variants(placer, box-gen, inst-gen, args-list, false, false, true)
+
+public defn wrap<?T> (obj:?T & (Rectangle|Ref)) :
+  fn (args:Tuple) :
+    obj
+
+public defn wrap<?T> (gen: () -> ?T) :
+  fn (args:Tuple) :
+    gen()
+
+public defn wrap<?T> (gen: (?) -> ?T) :
+  fn (args:Tuple) :
+    gen(args[0])
+
+public defn wrap<?T> (gen: (?,?) -> ?T) :
+  fn (args:Tuple) :
+    gen(args[0], args[1])
+
+public defn wrap<?T> (gen: (?,?,?) -> ?T) :
+  fn (args:Tuple) :
+    gen(args[0], args[1], args[2])
+
+public defn wrap<?T> (gen: (?,?,?,?) -> ?T) :
+  fn (args:Tuple) :
+    gen(args[0], args[1], args[2], args[3])

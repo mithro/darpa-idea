@@ -1,0 +1,96 @@
+defpackage plugins/master :
+  import core
+  import collections
+  import dlopen
+  import serialize
+
+deftype Plugin
+defmulti Plugin (filename:String) -> Plugin
+defmulti call (p:Plugin, arg:?) -> ?
+
+defpackage plugins/slave :
+  import core
+  import collections
+  import serialize
+
+;All plugins need to be implement this multi
+public defmulti plugin-main (args:?) -> ?
+  
+extern defn plugin_main (arg:ref<?>) -> ref<?> :
+  serialize()
+
+;<COMMENT>======================================================
+================================================================
+================================================================
+
+Implementation Order:
+
+Start with the slave side of the plugin. Its main goal is to execute
+the algorithm for its pass. Its argument will be serialized in binary
+form, and it will return its output also in binary form.
+
+The user interface for the slave side of the plugin is simple. There
+is a multi called plugin-main that the user needs to implement. The
+user code will look like this:
+
+  defpackage mypass :
+    import plugins/slave
+
+  defmethod plugin-main (args:[String, Double, List<String>]) -> [String, Double]
+    val [filename, threshold, stmts] = args
+    ... user-code ...
+    ["Done" 4.2]
+
+The user must ensure that all values to be passed and returned from
+the plugin are registered with the serializer engine.
+
+On the framework side, Jitpcb must do the following things:
+  1. As input, it receives:
+     - a pointer to the binary data that was serialized over by
+       plugin/master.
+  2. The binary data must be deserialized into a Stanza object.
+  3. We then call plugin-main with the deserialized argument, but
+     wrapped in a try block, for catching any appropriate exceptions
+     that are thrown during execution of the plugin.
+  4. We then serialize the result of calling plugin-main and return a
+     pointer to the binary data back to plugin/master.
+  5. There are two cases for returning to plugin/master:
+     - Either the plugin finishes correctly with a result, in which
+       case we need to return a struct that contains both this result,
+       and also the list of errors that have been reported.
+     - Or the plugin threw a catcheable exception, in which case we
+       need to return a struct containing this result.
+
+Now consider the master side of the plugin. Its main goal is to allow
+users to load a plugin from a file and execute it. The user code will
+look like this:
+
+  defpackage myprogram :
+    import plugins/master
+
+  defn main () :
+    val mypass = Plugin("mypass.o")
+    val [tstmts*, stmt-table] = call(mypass, [1, 3.0f, "use option", tstmts])
+
+On the framework side, Jitpcb must do the following things:
+  1. When the Plugin is created, the shared library is loaded into
+  memory.
+  2. When the plugin is called, the argument is serialized to a
+  buffer, and a pointer to its binary data is passed to the dynamic
+  library.
+  3. The plugin returns a pointer to a piece of binary data which
+  needs to be deserialized using the serialization library.
+  4. There are two cases, again, for what will be returned:
+    - Either a struct containing the result of executing the plugin,
+      and also the list of accumulated errors. In this case, the
+      errors are added to the error accumulator of the master program,
+      and the result is returned as the result of call.
+    - Or the exception that was thrown during execution of the plugin.
+      In this case, the master just throws this exception again.
+  5. When the plugin is no longer reachable, its memory is released by
+  closing its shared library.
+
+
+================================================================
+================================================================
+========================================================COMMENT>

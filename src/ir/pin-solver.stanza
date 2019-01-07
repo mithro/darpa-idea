@@ -1,0 +1,361 @@
+defpackage rtm/pin-solver :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir/errors
+  import rtm/ir-utils
+  import rtm/utils
+  import rtm/errors
+  import pin-state
+  import rtm/ir-lower
+
+;============================================================
+;====================== Driver ==============================
+;============================================================
+
+public defn assign-satisfying-pins (prog:Collection<TStmt>) -> Collection<TStmt> :
+  within (ir-table, m) = map-top-modules(prog) :
+    ;Solve mappings
+    val [pins, classes, reqs] = construct-input(ir-table, m)
+    val mappings = seq(make-mapping, solve-pins(pins, classes, reqs))
+
+    ;Detect error
+    if empty?(mappings) :
+      throw(UnsatisfiableRequirements(name(m)))      
+
+    ;Apply the pinmap to the module
+    apply(ir-table, next(mappings), m)
+
+public defn solve-requirements (prog:Collection<TStmt>) -> [Collection<TStmt>, PinMapping] :
+  ;Get IRTable
+  val ir-table = IRTable(prog)
+  switch(length(makeboards(ir-table))) :
+    0 : throw(NoMakeBoard())
+    1 : false
+    else : throw(MultipleMakeBoard())
+
+  ;Compute pin mapping
+  val make-board = makeboards(ir-table)[0]
+  val m = module(ir-table, module(make-board))
+
+  ;Solve mappings
+  val [pins, classes, reqs] = construct-input(ir-table, m)
+  val mappings = seq(make-mapping, solve-pins(pins, classes, reqs))
+
+  ;Detect error
+  if empty?(mappings) :
+    throw(UnsatisfiableRequirements(name(m)))
+
+  ;Form PinMapping datastructure
+  val pin-mapping = PinMapping(pad-table, net-graph, mappings, get-mappings) where :
+    val pad-table = PadTable(ir-table, m)
+    val net-graph = DynamicNetGraph(ir-table, m)
+    defn get-mappings () :
+      seq(make-mapping, solve-pins(pins, classes, reqs))
+
+  ;Return prog and pin-mapping
+  [prog, pin-mapping]
+
+defn make-mapping (map:Tuple<KeyValue<Ref,Ref>>) :
+  Mapping(to-list(map))
+
+;============================================================
+;=================== Pin Mapping ============================
+;============================================================
+
+public deftype PinMapping
+public defmulti single? (p:PinMapping) -> True|False
+public defmulti current-mapping (p:PinMapping) -> Mapping
+public defmulti current-nets (p:PinMapping) -> Tuple<NetStmt>
+public defmulti current-pad-nets (p:PinMapping) -> Tuple<PadNet>
+public defmulti current-short-traces (p:PinMapping) -> Tuple<PadNet>
+public defmulti next-mapping (p:PinMapping) -> Mapping
+
+public defstruct PadNet :
+  name: False|Symbol
+  pads: Tuple<Ref>
+with:
+  printer => true
+
+defn PinMapping (pad-table:PadTable, net-graph:DynamicNetGraph,
+                 mappings0:Seq<Mapping>, get-mappings:()-> Seq<Mapping>) :
+  defn to-pad-net (n:NetStmt) :
+    PadNet(name(n), to-tuple(seq-cat(pads{pad-table, _}, refs(n))))
+    
+  ;Compute current nets
+  var current-mapping:Mapping
+  var current-nets:Tuple<NetStmt>
+  var current-pad-nets:Tuple<PadNet>
+  defn update-current (m:Mapping) :
+    current-mapping = m
+    current-nets = nets(net-graph, m)
+    current-pad-nets = map(to-pad-net, current-nets)
+    m
+  update-current(next(mappings0))
+
+  ;Determine if single mapping or not
+  if empty?(mappings0) :
+    new PinMapping :
+      defmethod single? (this) : true
+      defmethod current-mapping (this) : current-mapping
+      defmethod current-nets (this) : current-nets
+      defmethod current-pad-nets (this) : current-pad-nets
+      defmethod next-mapping (this) : fatal("Only a single mapping available.")      
+  else :
+    val mappings =  cat(mappings0, cat-all(repeatedly(get-mappings)))
+    new PinMapping :
+      defmethod single? (this) : false
+      defmethod current-mapping (this) : current-mapping
+      defmethod current-nets (this) : current-nets
+      defmethod current-pad-nets (this) :current-pad-nets
+      defmethod next-mapping (this) : update-current(next(mappings))
+
+public defn apply (ir-table:IRTable, m:Mapping, module:DefModule) :
+  val table = to-hashtable<Ref,Ref>(mappings(m))  
+  val stmts* = for stmt in stmts(module) map :
+    for ref in stmt map-scope-refs :
+      get?(table, ref, ref)
+  post-lower(ir-table, sub-stmts(module, stmts*))
+
+public defn apply (m:Mapping, prog:Collection<TStmt>) :
+  within (ir-table, module) = map-top-modules(prog) :
+    apply(ir-table, m, module)
+
+;============================================================
+;===================== Pad Table ============================
+;============================================================
+
+deftype PadTable
+defmulti pads (t:PadTable, pin:Ref) -> List<Ref>
+
+defn PadTable (ir-table:IRTable, m:DefModule) :
+  val table = HashTable<Ref,List<Ref>>(List())
+  defn add-pad (pin:Ref, pad:Ref) : update(table, cons{pad, _}, pin)
+  val mtable = mtable(ir-table, name(m))
+  for stmt in packages(mtable) do :
+    match(package(stmt)) :
+      ([pname, pmap]:[Symbol, Mapping]) :
+        for [src, dst] in kvs(mappings(pmap)) do :
+          add-pad(dot(ref(stmt), src), dot(ref(stmt),dst))
+      (f:False) :
+        false
+  new PadTable :
+    defmethod pads (this, pin:Ref) : table[pin]  
+
+;============================================================
+;================= Connectivity Graph =======================
+;============================================================
+
+deftype DynamicNetGraph
+defmulti nets (g:DynamicNetGraph, m:Mapping) -> Tuple<NetStmt>
+
+defn DynamicNetGraph (ir-table:IRTable, m:DefModule) :
+  val mtable = mtable(ir-table, name(m))
+
+  ;===== Compute Pin Indices =====
+  val pin-indices = HashTable<Ref,Int>()
+  val all-pins = Vector<Ref>()
+  val component-pins = HashSet<Ref>()
+  defn record-pin (r:Ref) :
+    pin-indices[r] = length(all-pins)
+    add(all-pins, r)
+  for inst in insts(mtable) do :
+    val inst-ref = Ref(name(inst))
+    for p in pins(ctable(ir-table, component(inst))) do :
+      for pin-ref in expand(ir-table, dot(inst-ref, Ref(name(p))), type(p)) do :
+        record-pin(pin-ref)
+        add(component-pins, pin-ref)
+  for node in nodes(mtable) do :
+    do(record-pin, expand(ir-table, Ref(name(node)), type(node)))
+  for require in requires(mtable) do :
+    val rname = name(require)
+    match(rname:Symbol) :
+      val inst-ref = dot(inst(require), Ref(rname))
+      val cap-name = name(base(capability(require)))
+      val ctype = type(capability(ir-table, cap-name)) as PinType      
+      for cref in expand(inst-ref, capability(require)) do :
+        do(record-pin, expand(ir-table, cref, ctype))
+
+  ;===== Compute Nets =====
+  val nets = to-tuple(nets(mtable))
+
+  ;===== Compute New Nets =====
+  val mapping-table = HashTable<Ref,Ref>()
+  defn load-mapping (m:Mapping) :
+    clear(mapping-table)
+    for e in mappings(m) do :
+      mapping-table[key(e)] = value(e)
+  defn assigned? (r:Ref) :
+    get?(mapping-table, r, r)
+      
+  defn new-nets (m:Mapping) :
+    load-mapping(m)
+    ;Construct UFSets
+    val sets = to-tuple $
+      for p in all-pins seq :
+        val ps = PinSet(p)
+        set-ufset(ps, UFSet(ps))
+        ps
+    ;Union net sets
+    for net in nets do :
+      for r in refs(net) do :
+        val r-id = pin-indices[assigned?(r)]
+        val s = sets[r-id]
+        add(s, name(net))
+      if length(refs(net)) > 1 :
+        val r0-id = pin-indices[assigned?(head(refs(net)))]
+        for r in tail(refs(net)) do :
+          val r-id = pin-indices[assigned?(r)]
+          merge!(ufset(sets[r0-id]), ufset(sets[r-id]))
+    ;Collect refs
+    for s in sets do :
+      val root = root-value(ufset(s))
+      add(root, ref(s))
+      add(root, net-name(s))
+    ;Construct new net statements
+    to-tuple $ for s in sets seq? :
+      val refs* = to-list(filter({component-pins[_]}, refs(s)))
+      if length(refs*) > 1 : One(NetStmt(net-name(s), refs*))
+      else : None()
+
+
+  ;===== Return datastructure =====
+  new DynamicNetGraph :
+    defmethod nets (this, m:Mapping) : new-nets(m)
+
+defstruct PinSet :
+  ref:Ref
+  ufset:UFSet<PinSet> with: (init => void, setter => set-ufset)
+  refs:List<Ref> with: (init => List(), setter => set-refs)
+  net-name:Symbol|False with: (init => false, setter => set-net-name)
+defn add (ps:PinSet, r:Ref) :
+  set-refs(ps, cons(r, refs(ps)))
+defn add (ps:PinSet, name:Symbol|False) :
+  set-net-name(ps, name) when net-name(ps) is False
+
+;============================================================
+;================== Construct Input =========================
+;============================================================
+
+public defn construct-input (ir-table:IRTable, m:DefModule) :
+  ;Retrieve module table
+  val mtable = mtable(ir-table, name(m))
+  val menv = ModuleEnv(ir-table, name(m))
+
+  ;List all component ports
+  defn cports (component:Symbol) :
+    seq(Ref{name(_)}, pins(ctable(ir-table, component)))
+
+  ;Expand all instance ports
+  defn instance-ports (inst:Ref, component:Symbol) :
+    for p in pins(ctable(ir-table, component)) seq-cat :
+      expand(ir-table, dot(inst,Ref(name(p))), type(p))
+
+  ;Expand all capability pins
+  defn capability-pins (base:Ref, cname:Symbol) :
+    match(type(capability(ir-table, cname))) :
+      (t:PinType) : expand(ir-table, base, t)
+      (t:False) : List()
+
+  ;List all pins
+  val all-pins = Vector<Ref>()
+  val pin-index-table = HashTable<Ref,Int>()
+  defn record-pin (r:Ref) :
+    pin-index-table[r] = length(all-pins)
+    add(all-pins, r)
+  for inst in insts(mtable) do :
+    do(record-pin, instance-ports(Ref(name(inst)), component(inst)))
+  for node in nodes(mtable) do :
+    record-pin(Ref(name(node)))
+
+  ;List all inst supports
+  defn all-inst-supports () :
+    val component-supports = for inst in insts(mtable) seq-cat :
+      for support in supports(ctable(ir-table, component(inst))) seq :
+        val options* = for option in options(support) map :
+          val mapping* = Mapping $
+            for e in mappings(mapping(option)) map :
+              key(e) => dot(Ref(name(inst)), value(e))
+          sub-mapping(option, mapping*)
+        InstSupportsStmt(Ref(name(inst)), capability(support), options*)
+    cat(component-supports, inst-supports(mtable))
+
+  ;Compute class index table
+  val class-index-table = HashTable<Ref,Int>()
+  defn record-class (r:Ref) :
+    if not key?(class-index-table, r) :
+      class-index-table[r] = length(class-index-table)
+  for support in all-inst-supports() do :
+    val ref = dot(inst(support), Ref(capability(support)))
+    record-class(ref)
+
+  ;Build the requests
+  defn form-requests (r:RequireStmt, src-table:HashTable<Ref,PinSource>|False) -> Seqable<ClassReq> :
+    val class-ref = dot(inst(r), Ref(name(base(capability(r)))))
+    val class-index = class-index-table[class-ref]
+    val pinmap = to-hashtable<Ref,Ref>(mappings(mapping(r)))
+    match(name(r)) :
+      (rname:Symbol) :
+        val inst-ref = dot(inst(r), Ref(rname))
+        for ref in expand(inst-ref, capability(r)) seq :
+          val pins = capability-pins(ref, name(base(capability(r))))
+          val srcs = match(src-table) :
+            (src-table:HashTable<Ref,PinSource>) :
+              for p in pins seq :
+                get?(src-table, p, NoInput())
+            (src-table:False) :
+              map(PinInput, pins)
+          val tgts = for p in pins seq :
+            match(get?(pinmap, tail(p))) :
+              (p:Ref) : pin-index-table[p]
+              (p:False) : p
+          ClassReq(class-index, to-tuple(srcs), to-tuple(tgts))
+      (rname:False) :
+        for i in 0 to total-length(capability(r)) seq :
+          ClassReq(class-index, [], [])
+
+  ;Create class group
+  val class-groups = Array<List<Group>>(length(class-index-table), List())
+  for support in all-inst-supports() do :      
+    val class-ref = dot(inst(support), Ref(capability(support)))
+    val class = class-index-table[class-ref]
+    val refs = capability-pins(Ref(capability(support)), capability(support))
+    val group = Group $ to-tuple $
+      for option in options(support) seq :
+        ;Forwarded
+        defn forwarded? (r:Ref) :
+          for req in requires(option) any? :
+            match(name(req)) :
+              (n:Symbol) : base?(dot(inst(req), Ref(n)), r)
+              (n:False) : false
+        val pinmap = to-hashtable<Ref,Ref>(mappings(mapping(option)))
+        val src-table = HashTable<Ref,PinSource>()
+        val pins = to-tuple $ for (r in refs, argi in 0 to false) seq :
+          val tgt = pinmap[r]
+          if forwarded?(tgt) : src-table[tgt] = ArgInput(argi)
+          else : pin-index-table[tgt]
+        val reqs = to-tuple $ for r in requires(option) seq-cat :
+          form-requests(r, src-table)
+        Option(pins, reqs)
+    class-groups[class] = cons(group, class-groups[class])
+
+  ;Create classes
+  val classes = to-tuple $
+    for (groups in class-groups, id in 0 to false) seq :
+      Class(id, to-tuple(groups))
+
+  ;Create class requests
+  val class-reqs = to-tuple $
+    for r in requires(mtable) seq-cat :
+      form-requests(r, false)
+      
+  ;Return classes and requests
+  [to-tuple(all-pins), classes, class-reqs]      
+    
+;============================================================
+;==================== Utilities =============================
+;============================================================
+
+defn total-length (t:CapabilityType) :
+  match(t:CapabilityArray) : total-length(capability(t)) * length(t)
+  else : 1

@@ -1,0 +1,1641 @@
+#use-added-syntax(serializer)
+
+defpackage rtm/ir-utils :
+  import core
+  import collections
+  import math
+  import rtm/ir
+  import rtm/ir/errors
+  import rtm/utils
+  import rtm/errors
+
+;============================================================
+;===================== Misc =================================
+;============================================================
+
+public defn inside-out (t:PinType) :
+  let loop (t:PinType = t, lengths:List<Int> = List()) :
+    match(t) :
+      (t:PinArray) : loop(type(t), cons(length(t), lengths))
+      (t) : reduce(PinArray, t, reverse(lengths))
+
+public defn inside-out (t:CapabilityType) :
+  let loop (t:CapabilityType = t, lengths:List<Int> = List()) :
+    match(t) :
+      (t:CapabilityArray) : loop(capability(t), cons(length(t), lengths))
+      (t) : reduce(CapabilityArray, t, reverse(lengths))
+
+public defn inside-out (t:ComponentType) :
+  let loop (t:ComponentType = t, lengths:List<Int> = List()) :
+    match(t) :
+      (t:ComponentArray) : loop(type(t), cons(length(t), lengths))
+      (t) : reduce(ComponentArray, t, reverse(lengths))
+
+;============================================================
+;====================== Ref Flattening ======================
+;============================================================
+
+public deftype RefFlattener
+public defmulti flatten (f:RefFlattener, r:Ref) -> Symbol
+
+public defstruct SeparatorFlattener <: RefFlattener :
+  separator: String
+  index-offset: Int with: (default => 0)
+
+defmethod flatten (sf:SeparatorFlattener, r:Ref) :
+  val buffer = StringBuffer()
+  let loop (r:Ref = r) :
+    match(r) :
+      (r:VarRef) :
+        print(buffer, name(r))
+      (r:FieldRef) :
+        loop(ref(r))
+        print(buffer, "%_%_" % [separator(sf), name(r)])
+      (r:IndexRef) :
+        loop(ref(r))
+        print(buffer, "%_%_" % [separator(sf), index-offset(sf) + index(r)])
+  to-symbol(buffer)
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir-utils/SeparatorFlattener :
+    separator: String
+
+public defn KicadFlattener () :
+  SeparatorFlattener("_", 1)
+
+public defn DefaultFlattener () :
+  SeparatorFlattener("-")
+
+;============================================================
+;=================== Convenience ============================
+;============================================================
+
+public defn ix (p:Point) : to-int(x(p))
+public defn iy (p:Point) : to-int(y(p))
+public defn ix (p:Pose) : ix(center(p))
+public defn iy (p:Pose) : iy(center(p))
+public defn iangle (p:Pose) : to-int(angle(p))
+public defn Point (x:Int, y:Int) : Point(to-double(x), to-double(y))
+
+;============================================================
+;===================== Poses ================================
+;============================================================
+
+public deftype Flip
+public deftype NoFlip <: Flip
+public deftype FlipX <: Flip
+public deftype FlipY <: Flip
+public deftype FlipXY <: Flip
+public val NoFlip = new NoFlip
+public val FlipX = new FlipX
+public val FlipY = new FlipY
+public val FlipXY = new FlipXY
+
+defmethod print (o:OutputStream, f:Flip) :
+  print{o,_} $ match(f) :
+    (f:NoFlip) : "NoFlip"
+    (f:FlipX) : "FlipX"
+    (f:FlipY) : "FlipY"
+    (f:FlipXY) : "FlipXY"    
+
+public defn* loc (center:Point, angle:Double, flip-x?:True|False) :
+  if angle >= 360.0 : loc(center, angle - 360.0, flip-x?)
+  else if angle < 0.0 : loc(center, angle + 360.0, flip-x?)
+  else : #Pose(center, angle, flip-x?)
+
+public defn* loc (center:Point, angle:Double, flip:Flip) :
+  match(flip) :
+    (flip:NoFlip) : loc(center, angle, false)
+    (flip:FlipX) : loc(center, angle, true)
+    (flip:FlipY) : loc(center, angle + 180.0, true)
+    (flip:FlipXY) : loc(center, angle + 180.0, false)
+
+public defn* loc (center:Point, angle:Double) :
+  loc(center, angle, NoFlip)
+public defn* loc (center:Point, flip:Flip) :
+  loc(center, 0.0, flip)
+public defn* loc (center:Point) :
+  loc(center, 0.0, NoFlip)
+public defn* loc (x:Double, y:Double, angle:Double, flip:Flip) :
+  loc(Point(x,y), angle, flip)
+public defn* loc (x:Double, y:Double, angle:Double) :
+  loc(Point(x,y), angle, NoFlip)
+public defn* loc (x:Double, y:Double) :
+  loc(Point(x,y), 0.0, NoFlip)
+public defn* loc (angle:Double) :
+  loc(Point(0.0, 0.0), angle, NoFlip)
+
+public defn flip (p:Pose) :
+  FlipX when flip-x?(p) else NoFlip
+
+public defn inverse (p:Pose) :
+  val r = loc(Point(0.0, 0.0), (- angle(p)), flip-x?(p))
+  val t = apply(r, center(p))
+  loc((- t), angle(r), flip-x?(r))
+
+public defn side (p:Pose) :
+  Bottom when flip-x?(p) else Top
+
+;============================================================
+;===================== Anchors ==============================
+;============================================================
+
+public defn horizontal (a:Anchor) :
+  match(a) :
+    (a:N) : C
+    (a:S) : C
+    (a:E) : E
+    (a:W) : W
+    (a:NE) : E
+    (a:SE) : E
+    (a:SW) : W
+    (a:NW) : W
+    (a:C) : C
+
+public defn vertical (a:Anchor) :
+  match(a) :
+    (a:N) : N
+    (a:S) : S
+    (a:E) : C
+    (a:W) : C
+    (a:NE) : N
+    (a:SE) : S
+    (a:SW) : S
+    (a:NW) : N
+    (a:C) : C
+
+public defn components (a:Anchor) :
+  [vertical(a), horizontal(a)]
+
+;============================================================
+;======================== Sides =============================
+;============================================================
+
+public defn flip (a:Side, b:Side) :
+  match(a, b) :
+    (a:Top, b) : b
+    (a:Bottom, b:Top) : Bottom
+    (a:Bottom, b:Bottom) : Top
+
+public defn consistent? (p:Pose, s:Side) :
+  match(flip-x?(p), s) :
+    (f:True, s:Bottom) : true
+    (f:False, s:Top) : true
+    (f, s) : false
+
+;============================================================
+;====================== Geometry ============================
+;============================================================
+public defn negate (a:Point) :
+  Point((- x(a)), (- y(a)))
+public defn minus (a:Point, b:Point) :
+  Point(x(a) - x(b), y(a) - y(b))
+public defn plus (a:Point, b:Point) :
+  Point(x(a) + x(b), y(a) + y(b))
+public defn divide (a:Point, n:Double) :
+  Point(x(a) / n, y(a) / n)
+public defn times (a:Double, b:Point) :
+  Point(a * x(b), a * y(b))
+public defn min (a:Point, b:Point) :
+  Point(min(x(a), x(b)), min(y(a), y(b)))
+public defn max (a:Point, b:Point) :
+  Point(max(x(a), x(b)), max(y(a), y(b)))
+
+;============================================================
+;========================== Box =============================
+;============================================================
+
+public defstruct Box <: Equalable :
+  lo: Point
+  hi: Point
+with :
+  constructor => #Box
+
+public defn Box (lo:Point, hi:Point) :
+  if x(hi) < x(lo) or y(hi) < y(lo) : fatal("Negative Box")
+  #Box(lo, hi)
+
+public defn up (b:Box) : y(hi(b))
+public defn right (b:Box) : x(hi(b))
+public defn down (b:Box) : y(lo(b))
+public defn left (b:Box) : x(lo(b))
+
+public defn Box (v:Point) -> Box :
+  Box(v, v)
+
+public defn center (b:Box) -> Point :
+  0.5 * (lo(b) + hi(b))
+
+public defn dims (b:Box) -> Point :
+  hi(b) - lo(b)
+
+public defn fatten (dims:Point, b:Box) -> Box :
+  Box(lo(b) - dims, hi(b) + dims)
+
+public defn fatten (dims:Double, b:Box) -> Box :
+  fatten(Point(dims, dims), b)
+
+public defn corners (b:Box) -> Tuple<Point> :
+  val [l, h] = [lo(b), hi(b)]
+  [Point(x(l), y(l)), Point(x(h), y(l)), Point(x(h), y(h)), Point(x(l), y(h))]
+
+public defn dims-to-box (dims:Point) -> Box :
+  val hdims = 0.5 * dims
+  Box((- hdims), hdims)
+
+public defn union (b:Box, v:Point) -> Box :
+  Box(min(lo(b), v), max(hi(b), v))
+
+public defn union (b0:Box, b1:Box) -> Box :
+  Box(min(lo(b0), lo(b1)), max(hi(b0), hi(b1)))
+
+;; public defn union (bs:Seqable<Box>) -> Box :
+;;   reduce(union, bs)
+
+public defn bit-or (b0:Box, b1:Box) -> Box :
+  union(b0, b1)
+
+public defn intersects? (b0:Box, b1:Box) -> True|False :
+  not for i in 0 to 2 any? :
+    (hi(b0)[i] < lo(b1)[i] or lo(b0)[i] > hi(b1)[i])
+
+public defn contains? (b:Box, p:Point) -> True|False :
+  for i in 0 to 2 all? :
+    p[i] >= lo(b)[i] and p[i] <= hi(b)[i]
+
+val [neg-inf, pos-inf] = [DOUBLE-NEGATIVE-INFINITY, DOUBLE-POSITIVE-INFINITY]
+
+public defn inf-box () -> Box:
+  Box(Point(neg-inf, neg-inf), Point(pos-inf, pos-inf))
+  
+defmethod equal? (b1:Box, b2:Box) :
+  lo(b1) == lo(b2) or hi(b1) == hi(b2)
+
+defmethod print (o:OutputStream, b:Box) :
+  print(o, "box(%_, %_)"  % [lo(b), hi(b)])
+
+;============================================================
+;==================== Geometry Bounds =======================
+;============================================================
+
+public defn bounds (e:Shape) -> Box :
+  match(e) :
+    (s:Point) : Box(s)
+    (s:Polygon) : reduce(union, seq(bounds, points(s)))
+    (s:Circle) : Box(center(s) - Point(radius(s), radius(s)), center(s) + Point(radius(s), radius(s)))
+    (s:Rectangle) : bounds(to-polygon(s))
+    (s:Line) : reduce(union, seq(fatten{0.5 * width(s), bounds(_)}, points(s)))
+    (s:Union) : reduce(union, seq(bounds, shapes(s)))
+    (s:Subtraction) : bounds(a(s)) ;Conservative
+
+;============================================================
+;==================== Transformations =======================
+;============================================================
+
+public defn apply (o:Pose, p:Point) -> Point :
+  val xp = x(p)
+  val yp = y(p)
+  val xo = x(center(o))
+  val yo = y(center(o))
+  val f = -1.0 when flip-x?(o) else 1.0
+  switch(angle(o)) :
+    0.0 :
+      Point(xo + f * xp, yo + yp)
+    90.0 :
+      Point(xo - yp, yo + f * xp)
+    180.0 :
+      Point(xo - f * xp, yo - yp)
+    270.0 :
+      Point(xo + yp, yo - f * xp)
+    else :
+      val th = to-radians(angle(o))
+      val cos-th = cos(th)
+      val sin-th = sin(th)
+      Point(
+        xo + f * xp * cos-th - yp * sin-th,
+        yo + f * xp * sin-th + yp * cos-th)
+
+public defn apply (pose:Pose, b:Box) -> Box :
+  reduce(union, map(Box{ apply(pose, _) }, corners(b)))
+
+public defn apply (p1:Pose, p2:Pose) -> Pose :
+  val c* = apply(p1, center(p2))
+  val f = -1.0 when flip-x?(p1) else 1.0
+  val flip-x* = if flip-x?(p1) : not flip-x?(p2)
+                else : flip-x?(p2)
+  loc(c*, angle(p1) + f * angle(p2), flip-x*)
+
+public defn transform<?T> (p:Pose, s:Shape&?T) -> T :
+  {_ as Shape&T} $ match(s) :
+    (s:Point) :
+      apply(p, s)
+    (s:Polygon) :
+      Polygon(map(apply{p, _}, points(s)))
+    (s:Circle) :
+      Circle(apply(p, center(s)), radius(s))
+    (s:Rectangle) :
+      Rectangle(width(s), height(s), apply(p, pose(s)))
+    (s:Line) :
+      Line(width(s), map(apply{p, _}, points(s)))
+    (s:Union) :
+      Union(map(transform{p, _}, shapes(s)))
+    (s:Subtraction) :
+      Subtraction(transform(p,a(s)), transform(p,b(s)))
+
+;============================================================
+;========================= Shapes ===========================
+;============================================================
+
+public defn angle-mod-90? (p:Pose) :
+  contains?(`(0.0, 90.0, 180.0, 270.0), angle(p))
+
+public defn axis-aligned? (r:Rectangle) :
+  angle-mod-90?(pose(r))
+
+defn normalize (r:Rectangle) :
+  val p = pose(r)
+  val [w, h] = [width(r), height(r)]
+  val p* = loc(center(p), 0.0)
+  switch(angle(p)) :
+    0.0 : Rectangle(w, h, p*)
+    90.0 : Rectangle(h, w, p*)
+    180.0 : Rectangle(w, h, p*)
+    270.0 : Rectangle(h, w, p*)
+
+public defn outline (p:Polygon) :
+  val ps = points(p)
+  Line(0.0, cons(last(ps), ps))
+
+public defn outline (r:Rectangle) :
+  outline(to-polygon(r))
+
+public defn outline (l:Line) :
+  fatal("Not yet implemented.")
+
+public defn to-polygon (r:Rectangle) -> Polygon :
+  val [w h] = [width(r), height(r)]
+  val p = Polygon $ to-list $ [
+    Point(w / -2.0, h / -2.0)
+    Point(w /  2.0, h / -2.0)
+    Point(w /  2.0, h /  2.0)
+    Point(w / -2.0, h /  2.0) ]
+  transform(pose(r), p) as Polygon
+
+public defn to-polygon (c:Circle, num:Int) -> Polygon :
+  Polygon $ to-list $
+    for i in 0 to num seq :
+      val theta = 2.0 * PI * to-double(i) / to-double(num)
+      val dx = radius(c) * cos(theta)
+      val dy = radius(c) * sin(theta)
+      center(c) + Point(dx, dy)
+
+public defn to-polygon (l:Line) :
+  fatal("Not yet implemented.")
+
+public defn sw (r:Rectangle) :
+  if not axis-aligned?(r) :
+    fatal("Rectangle is not axis aligned.")
+  val r* = normalize(r)
+  val c = center(pose(r))
+  val [w h] = [width(r), height(r)]
+  c - Point(w / 2.0, h / 2.0)
+
+public defn ne (r:Rectangle) :
+  if not angle-mod-90?(pose(r)) :
+    fatal("Rectangle is not axis aligned.")
+  val r* = normalize(r)
+  val c = center(pose(r))
+  val [w h] = [width(r), height(r)]
+  c + Point(w / 2.0, h / 2.0)
+
+;============================================================
+;===================== Pose Utilities =======================
+;============================================================
+
+public defn times<?T> (a:Pose, b:Shape&?T) -> T : transform(a, b)
+public defn times<?T> (a:Pose, b:Seqable<Shape&?T>) -> Seqable<T> : seq({a * _}, b)
+public defn times<?T> (a:Seqable<Pose>, b:Shape&?T) -> Seqable<T> : seq({_ * b}, a)
+
+public defn times (a:Pose, b:Pose) : apply(a, b)
+public defn times (a:Pose, b:Seqable<Pose>) : seq({a * _}, b)
+public defn times (a:Seqable<Pose>, b:Pose) : seq({_ * b}, a)
+
+public defn times<?T> (a:Seqable<Pose>, b:Seqable<(Pose|Shape)&?T>) -> Seqable<T> :
+  seq(times, a, b as Seqable<Pose|Shape>) as ? as Seq<T>
+
+public defn grid-locs (anchor:Anchor, rows:Int, cols:Int, dx:Double, dy:Double, start-anchor:Anchor, row-major?:True|False) :
+  ;Preconditions
+  fatal("Given delta-x is negative.") when dx < 0.0
+  fatal("Given delta-y is negative.") when dy < 0.0
+  fatal("Illegal starting anchor.") when start-anchor is-not NW|NE|SW|SE
+
+  ;Determine height, width, and positional offset
+  val [ox, oy] = [ox oy] where :
+    val [vert hori] = components(anchor)
+    val [h w] = [to-double(rows - 1) * dy, to-double(cols - 1) * dx]
+    val oy = match(vert) :
+      (v:N) : (- h)
+      (v:C) : h / -2.0
+      (v:S) : 0.0
+    val ox = match(hori) :
+      (v:E) : (- w)
+      (v:C) : w / -2.0
+      (v:W) : 0.0
+
+  ;Determine row and column order
+  val [row-order, col-order] = [ro, co] where :
+    val [vert hori] = components(start-anchor)
+    val ro = match(vert) :
+      (v:S) : 0 to rows
+      (v:N) : reverse(0 to rows)
+    val co = match(hori) :
+      (h:W) : 0 to cols
+      (h:E) : reverse(0 to cols)
+
+  new Collection<Pose> :
+    defmethod to-seq (this) :
+      defn pose (r:Int, c:Int) :
+        loc(to-double(c) * dx + ox, to-double(r) * dy + oy)
+      if row-major? :
+        for r in row-order seq-cat :
+          for c in col-order seq :
+            pose(r, c)
+      else :
+        for c in col-order seq-cat :
+          for r in row-order seq :
+            pose(r, c)
+public defn grid-locs (anchor:Anchor, rows:Int, cols:Int, d:Point, start-anchor:Anchor, row-major?:True|False) :
+  grid-locs(anchor, rows, cols, x(d), y(d), start-anchor, row-major?)
+public defn grid-locs (anchor:Anchor, rows:Int, cols:Int, dx:Double, dy:Double) :
+  grid-locs(anchor, rows, cols, dx, dy, NW, true)
+public defn grid-locs (anchor:Anchor, rows:Int, cols:Int, d:Point) :
+  grid-locs(anchor, rows, cols, x(d), y(d))
+public defn grid-locs (rows:Int, cols:Int, dx:Double, dy:Double) :
+  grid-locs(C, rows, cols, dx, dy)
+public defn grid-locs (rows:Int, cols:Int, d:Point) :
+  grid-locs(C, rows, cols, x(d), y(d))
+  
+public defn row-locs (anchor:Anchor, n:Int, dx:Double, start-anchor:Anchor) :
+  fatal("Illegal horizontal anchor: %_." % [anchor]) when anchor is-not E|C|W
+  fatal("Illegal horizontal start anchor: %_." % [start-anchor]) when anchor is-not E|W
+  val start* = match(start-anchor) :
+    (a:E) : NE
+    (a:W) : NW
+  grid-locs(anchor, 1, n, dx, 0.0, start*, true)
+public defn row-locs (anchor:Anchor, n:Int, dx:Double) :
+  row-locs(anchor, n, dx, W)
+public defn row-locs (n:Int, dx:Double) :
+  row-locs(C, n, dx)
+
+public defn col-locs (anchor:Anchor, n:Int, dy:Double, start-anchor:Anchor) :
+  fatal("Illegal vertical anchor: %_." % [anchor]) when anchor is-not N|C|S
+  fatal("Illegal vertical start anchor: %_." % [start-anchor]) when anchor is-not N|S
+  val start* = match(start-anchor) :
+    (a:N) : NW
+    (a:S) : SW
+  grid-locs(anchor, n, 1, 0.0, dy, start*, true)
+public defn col-locs (anchor:Anchor, n:Int, dy:Double) :
+  col-locs(anchor, n, dy, N)
+public defn col-locs (n:Int, dy:Double) :
+  col-locs(C, n, dy)
+
+;============================================================
+;========================= Mirroring ========================
+;============================================================
+
+defn mirror-x-loc (axis-x:Double) : loc(2.0 * axis-x, 0.0, 0.0, FlipX)
+defn mirror-y-loc (axis-y:Double) : loc(0.0, 2.0 * axis-y, 0.0, FlipY)
+
+public defn symmetric-about-x<?T> (axis:Double, ss:Seqable<Shape&?T>) :
+  val ss* = to-vector<Shape&T>(ss)
+  cat(ss*, mirror-x-loc(axis) * in-reverse(ss*))
+public defn symmetric-about-x<?T> (ss:Seqable<Shape&?T>) :
+  symmetric-about-x(0.0, ss)
+
+public defn symmetric-about-y<?T> (axis:Double, ss:Seqable<Shape&?T>) :
+  val ss* = to-vector<Shape&T>(ss)
+  cat(ss*, mirror-y-loc(axis) * in-reverse(ss*))
+public defn symmetric-about-y<?T> (ss:Seqable<Shape&?T>) :
+  symmetric-about-y(0.0, ss)
+
+;============================================================  
+;======================== Stacking ==========================
+;============================================================
+
+public defn stack-x-locs (anchor:Anchor, ss:Collection<Shape>, dx:Double) :
+  ;Layout shapes and compute total width
+  var cur-x = 0.0
+  val ls = to-list $ for s in ss seq :
+    val b = bounds(s)
+    val b-lo = x(lo(b))
+    val b-hi = x(hi(b))
+    val l = loc(cur-x - b-lo, 0.0)
+    cur-x = cur-x + b-hi - b-lo + dx
+    l
+  ;Compute total width and shift shapes back if necessary
+  val w = cur-x - dx
+  match(anchor) :
+    (a:E) : to-list $ loc((- w), 0.0) * ls
+    (a:C) : to-list $ loc(w / -2.0, 0.0) * ls
+    (a:W) : ls
+    (a) : fatal("Not a horizontal anchor: %_" % [a])
+public defn stack-x-locs (anchor:Anchor, ss:Collection<Shape>) : stack-x-locs(anchor, ss, 0.0)
+public defn stack-x-locs (ss:Collection<Shape>, dx:Double) : stack-x-locs(C, ss, dx)
+public defn stack-x-locs (ss:Collection<Shape>) : stack-x-locs(C, ss, 0.0)
+
+public defn stack-y-locs<?T> (anchor:Anchor, ss:Collection<Shape&?T>, dy:Double) :
+  ;Layout shapes and compute total width
+  var cur-y = 0.0
+  val ls = to-list $ for s in ss seq :
+    val b = bounds(s)
+    val b-lo = y(lo(b))
+    val b-hi = y(hi(b))
+    val l = loc(0.0, cur-y - b-lo)
+    cur-y = cur-y + b-hi - b-lo + dy
+    l
+  ;Compute total width and shift shapes back if necessary
+  val w = cur-y - dy
+  match(anchor) :
+    (a:N) : to-list $ loc(0.0, (- w)) * ls
+    (a:C) : to-list $ loc(0.0, w / -2.0) * ls
+    (a:S) : ls
+    (a) : fatal("Not a vertical anchor: %_" % [a])
+public defn stack-y-locs (anchor:Anchor, ss:Collection<Shape>) : stack-y-locs(anchor, ss, 0.0)
+public defn stack-y-locs (ss:Collection<Shape>, dy:Double) : stack-y-locs(C, ss, dy)
+public defn stack-y-locs (ss:Collection<Shape>) : stack-y-locs(C, ss, 0.0)
+
+public defn stack-x<?T> (anchor:Anchor, ss:Seqable<Shape&?T>, dx:Double) :
+  val ss* = to-vector<Shape&T>(ss)
+  stack-x-locs(anchor, ss*, dx) * ss*
+public defn stack-x<?T> (anchor:Anchor, ss:Seqable<Shape&?T>) : stack-x(anchor, ss, 0.0)
+public defn stack-x<?T> (ss:Seqable<Shape&?T>, dx:Double) : stack-x(C, ss, dx)
+public defn stack-x<?T> (ss:Seqable<Shape&?T>) : stack-x(C, ss, 0.0)
+
+public defn stack-y<?T> (anchor:Anchor, ss:Seqable<Shape&?T>, dy:Double) :
+  val ss* = to-vector<Shape&T>(ss)
+  stack-y-locs(anchor, ss*, dy) * ss*
+public defn stack-y<?T> (anchor:Anchor, ss:Seqable<Shape&?T>) : stack-y(anchor, ss, 0.0)
+public defn stack-y<?T> (ss:Seqable<Shape&?T>, dy:Double) : stack-y(C, ss, dy)
+public defn stack-y<?T> (ss:Seqable<Shape&?T>) : stack-y(C, ss, 0.0)
+
+;============================================================
+;======================== Mappers ===========================
+;============================================================
+
+public defn map (f:Shape -> Shape, s:Shape) :
+  match(s) :
+    (s:Union) : Union(map(f,shapes(s)))
+    (s) : s
+
+;============================================================
+;=================== Electrical Models ======================
+;============================================================
+
+val NUMERICAL-TOLERANCE = 10000.0
+defn fless-eq? (x:Double, y:Double) :
+  val eps = abs(x) / NUMERICAL-TOLERANCE
+  x <= y + eps
+defn fgreater-eq? (x:Double, y:Double) :
+  val eps = abs(x) / NUMERICAL-TOLERANCE
+  x >= y - eps
+defn fequal? (x:Double, y:Double) :
+  val eps = abs(x) / NUMERICAL-TOLERANCE
+  abs(x - y) <= eps
+defn within-tol? (x:Double, xtol:Double, y:Double, ytol:Double) :
+  val a = x * (100.0 - xtol)
+  val b = x * (100.0 + xtol)
+  val c = y * (100.0 - ytol)
+  val d = y * (100.0 + ytol)
+  fgreater-eq?(a,c) and fless-eq?(b,d)
+
+public defn value-string (e:EModel|False) -> String|False :
+  val buffer = StringBuffer()
+  defn P (x) : print(buffer, x)
+  match(e) :
+    (e:Resistor) :
+      match(resistance(e)) :
+        (d:Double) : P $ si-string(d, "Ω")
+        (f:False) : false
+    (e:Capacitor) :
+      match(capacitance(e)) :
+        (d:Double) : P $ si-string(d * pow(10.0, -6.0), "F")
+        (f:False) : false
+    (e:Inductor) :
+      match(inductance(e)) :
+        (d:Double) : P $ si-string(d * pow(10.0, -6.0), "H")
+        (f:False) : false
+    (e) : false
+  to-string(buffer) when not empty?(buffer)
+
+val UNIT-PREFIXES = [
+  24.0 => "Y"
+  21.0 => "Z"
+  18.0 => "E"
+  15.0 => "P"
+  12.0 => "T"
+  9.0 => "G"
+  6.0 => "M"
+  3.0 => "k"
+  0.0 => ""
+  -3.0 => "m"
+  -6.0 => "μ"
+  -9.0 => "n"
+  -12.0 => "p"
+  -15.0 => "f"
+  -18.0 => "a"
+  -21.0 => "z"
+  -24.0 => "y"]
+
+defn si-string (v:Double, unit:String) :
+  val expon = log10(v)
+  for [p, prefix] in kvs(UNIT-PREFIXES) first! :
+    if expon >= p : One(string-join([v / pow(10.0, p), prefix, unit]))
+    else : None()
+
+public defn model-type-name (m:EModel) :
+  match(m) :
+    (m:Resistor) : "resistor"
+    (m:Capacitor) : "capacitor"
+    (m:Inductor) : "inductor"
+    (m:Diode) : "diode"
+
+public defn same-model-type? (a:EModel, b:EModel) :
+  match(a, b) :
+    (a:Resistor, b:Resistor) : true
+    (a:Capacitor, b:Capacitor) : true
+    (a:Inductor, b:Inductor) : true
+    (a:Diode, b:Diode) : true
+    (a, b) : false
+
+; b is what user asked for, a is candidate solution
+public defn match? (a:EModel, b:EModel) :
+  label<True|False> return :
+    defn must-satisfy!<T> (f:(T,T) -> True|False, a:T|False, b:T|False) :
+      match(a, b) :
+        (a:False, b) : false
+        (a, b:False) : false
+        (a:T, b:T) : return(false) when not f(a, b)
+    defn must-satisfy-n!<T> (f:(T,T) -> True|False, a:T|None, b:T|None) :
+      match(a, b) :
+        (a:None, b) : false
+        (a, b:None) : false
+        (a:T, b:T) : return(false) when not f(a, b)
+    defn ensure-within-tol! (x:Double|False, xtol:Double|False, y:Double|False, ytol:Double|False) :
+      match(x, y) :
+        (x:Double, y:Double) :
+          defn zero? (x:Double|False) : (x as Double) when x is Double else 0.0
+          return(false) when not within-tol?(x, zero?(xtol), y, zero?(ytol))
+        (x, y) : false
+    match(a, b) :
+      (a:Resistor, b:Resistor) :
+        ensure-within-tol!(resistance(a), tolerance(a), resistance(b), tolerance(b))
+        must-satisfy!<Double>(fless-eq?, tolerance(a), tolerance(b))
+        must-satisfy!<Double>(fgreater-eq?, max-power(a), max-power(b))
+      (a:Capacitor, b:Capacitor) :
+        ensure-within-tol!(capacitance(a), tolerance(a), capacitance(b), tolerance(b))
+        must-satisfy!<Double>(fless-eq?, tolerance(a), tolerance(b))
+        must-satisfy!<Double>(fgreater-eq?, max-voltage(a), max-voltage(b))
+        must-satisfy-n!<True|False>(equal?, polarized?(a), polarized?(b))
+        must-satisfy-n!<True|False>(equal?, low-esr?(a), low-esr?(b))
+        must-satisfy!<Symbol>(equal?, temperature-coefficient(a), temperature-coefficient(b))
+        must-satisfy!<Symbol>(equal?, dielectric(a), dielectric(b))
+      (a:Inductor, b:Inductor) : 
+        ensure-within-tol!(inductance(a), tolerance(a), inductance(b), tolerance(b))
+        must-satisfy!<Double>(fless-eq?, tolerance(a), tolerance(b))
+        must-satisfy!<Double>(fgreater-eq?, max-current(a), max-current(b))
+      (a:Diode, b:Diode) :
+        must-satisfy!<Double>(fgreater-eq?, forward-current(a), forward-current(b))
+        must-satisfy!<Double>(fgreater-eq?, forward-voltage(a), forward-voltage(b))
+        must-satisfy!<Double>(fgreater-eq?, max-current(a), max-current(b))
+        must-satisfy!<Double>(fgreater-eq?, max-reverse-voltage(a), max-reverse-voltage(b))
+        must-satisfy!<ColorSpec>(equal?, color(a), color(b))
+        must-satisfy!<Double>(fgreater-eq?, luminous-intensity(a), luminous-intensity(b))
+      (a, b) :
+        return(false)
+    true
+
+;============================================================
+;====================== References ==========================
+;============================================================
+
+public defn dot (r1:Ref, r2:Ref) :
+  match(r2) :
+    (r2:VarRef) : FieldRef(r1, name(r2))
+    (r2:FieldRef) : FieldRef(dot(r1, ref(r2)), name(r2))
+    (r2:IndexRef) : IndexRef(dot(r1, ref(r2)), index(r2))
+
+public defn get (r1:Ref, i:Int) :
+  IndexRef(r1, i)
+
+public defn get (r:Ref, indices:Seqable<Int>) :
+  to-tuple $ seq({r[_]}, indices)
+
+public defn get (p:PinType, i:Int) :
+  PinArray(p, i)
+
+public defn get (c:CapabilityType, i:Int) :
+  CapabilityArray(c, i)
+
+;Extract base of length l from reference
+public defn base (r:Ref, l:Int) :
+  val len = length(r)
+  #if-not-defined(OPTIMIZE) :
+    if l <= 0 or l > len :
+      fatal("Cannot retrieve base of length %_ for reference of length %_." % [l, len])
+  let loop (r:Ref = r, n:Int = len - l) :
+    if n == 0 : r
+    else : loop(ref(r as FieldRef|IndexRef), n - 1)
+
+;Extract tail after length l from reference
+public defn tail (r:Ref, l:Int) :
+  val len = length(r)
+  #if-not-defined(OPTIMIZE) :
+    if l < 0 or l >= len :
+      fatal("Cannot retrieve tail of length %_ for reference of length %_." % [l, len])
+  let loop (r:Ref = r, n:Int = len - l) :
+    if n == 1 :
+      match(r) :
+        (r:VarRef) : r
+        (r:FieldRef) : Ref(name(r))
+        (r) : fatal("Illegal base: %_" % [r])
+    else :
+      match(r) :
+        (r:FieldRef) : FieldRef(loop(ref(r), n - 1), name(r))
+        (r:IndexRef) : IndexRef(loop(ref(r), n - 1), index(r))
+
+public defn* base (r:Ref) :
+  match(r) :
+    (r:VarRef) : r
+    (r:FieldRef) : base(ref(r))
+    (r:IndexRef) : base(ref(r))
+
+public defn base? (b:Ref, r:Ref) :
+  val bl = length(b)
+  val rl = length(r)
+  if bl <= rl :
+    b == base(r,bl)
+
+public defn tail (r:Ref) :
+  tail(r, 1)
+
+public defn* base (t:InstType|InstArray) :
+  match(t:InstArray) : base(type(t) as InstType|InstArray)
+  else : t as InstType
+
+public defn* base (t:CapabilityType) :
+  match(t) :
+    (t:Capability) : t
+    (t:CapabilityArray) : base(capability(t))
+
+public defn* base (t:ComponentType) :
+  match(t) :
+    (t:SingleComponent) : t
+    (t:ComponentArray) : base(type(t))
+
+public defn* base (t:PinType) :
+  match(t) :
+    (t:PinArray) : base(type(t))
+    (t:SinglePin|PinBundle) : t
+
+;Count length of reference
+public defn* length (r:Ref) :
+  match(r) :
+    (r:VarRef) : 1
+    (r:FieldRef) : length(ref(r)) + 1
+    (r:IndexRef) : length(ref(r)) + 1
+
+public defn sub-head (r:Ref, h:Ref) :
+  match(r) :
+    (r:VarRef) : h
+    (r:FieldRef) : FieldRef(sub-head(ref(r),h), name(r))
+    (r:IndexRef) : IndexRef(sub-head(ref(r),h), index(r))
+
+;Assume that r is some reference with base pointing to an instance/instance array.
+;Returns the index of that instance.
+public defn inst-index (env:TypeEnv, r:Ref) :
+  defn entries (r:Ref) :
+    match(r) :
+      (r:IndexRef) :
+        match(env[ref(r)]) :
+          (t:InstArray) :
+            val result = entries(ref(r))
+            cons(index(r) => length(t), result)
+          (t) : entries(ref(r))
+      (r:FieldRef) :
+        entries(ref(r))
+      (r:VarRef) :
+        List()
+  let loop (es:List<KeyValue<Int,Int>> = entries(r),
+            skip:Int = 1) :
+    if empty?(es) :
+      0
+    else :
+      val e = head(es)
+      val i = key(e)
+      val n = value(e)
+      i * skip + loop(tail(es), skip * n)  
+
+;============================================================
+;===================== IR Table =============================
+;============================================================
+
+public deftype IRTable
+defmulti stmts (t:IRTable) -> Collection<TStmt>
+public defmulti add (t:IRTable, s:TStmt) -> False
+
+public defmulti bundles (t:IRTable) -> Seqable<DefBundle>
+public defmulti components (t:IRTable) -> Seqable<DefComponent>
+public defmulti capabilities (t:IRTable) -> Seqable<DefCapability>
+public defmulti modules (t:IRTable) -> Seqable<DefModule>
+public defmulti packages (t:IRTable) -> Seqable<DefPackage>
+public defmulti parts (t:IRTable) -> Seqable<DefPart>
+public defmulti attaches (t:IRTable) -> Seqable<List<DefAttach>>
+public defmulti bundle (t:IRTable, name:Symbol) -> DefBundle
+public defmulti component (t:IRTable, name:Symbol) -> DefComponent
+public defmulti capability (t:IRTable, name:Symbol) -> DefCapability
+public defmulti module (t:IRTable, name:Symbol) -> DefModule
+public defmulti package (t:IRTable, name:Symbol) -> DefPackage
+public defmulti part (t:IRTable, name:Symbol) -> DefPart
+public defmulti attaches (t:IRTable, name:Symbol) -> List<DefAttach>
+public defmulti bundle? (t:IRTable, name:Symbol) -> DefBundle|False
+public defmulti component? (t:IRTable, name:Symbol) -> DefComponent|False
+public defmulti capability? (t:IRTable, name:Symbol) -> DefCapability|False
+public defmulti module? (t:IRTable, name:Symbol) -> DefModule|False
+public defmulti package? (t:IRTable, name:Symbol) -> DefPackage|False
+public defmulti part? (t:IRTable, name:Symbol) -> DefPart|False
+public defmulti makeboards (t:IRTable) -> Vector<MakeBoard>
+public defmulti mtable (t:IRTable, name:Symbol) -> MTable
+public defmulti ctable (t:IRTable, name:Symbol) -> CTable
+public defmulti btable (t:IRTable, name:Symbol) -> BTable
+public defmulti ptable (t:IRTable, name:Symbol) -> PTable
+
+public defn IRTable (t0:IRTable, prog:Seqable<TStmt>) :
+  IRTable(cat(stmts(t0), prog))
+
+public defn IRTable (prog:Seqable<TStmt>) :
+  val t = IRTable()
+  do(add{t, _}, prog)
+  t
+
+public defn IRTable () :
+  val stmts = Vector<TStmt>()
+  val bundles = HashTable<Symbol, DefBundle>()
+  val components = HashTable<Symbol, DefComponent>()
+  val capabilities = HashTable<Symbol, DefCapability>()
+  val modules = HashTable<Symbol, DefModule>()
+  val packages = HashTable<Symbol, DefPackage>()
+  val parts = HashTable<Symbol, DefPart>()
+  val attaches = HashTable<Symbol, List<DefAttach>>(List())
+  val makeboards = Vector<MakeBoard>()
+
+  defn add-stmt (s:TStmt) :
+    add(stmts, s)
+    match(s) :
+      (s:DefBundle) : bundles[name(s)] = s
+      (s:DefComponent) : components[name(s)] = s
+      (s:DefCapability) : capabilities[name(s)] = s
+      (s:DefModule) : modules[name(s)] = s
+      (s:DefPackage) : packages[name(s)] = s
+      (s:DefPart) : parts[name(s)] = s
+      (s:DefAttach) : update(attaches, cons{s, _}, name(s))
+      (s:MakeBoard) : add(makeboards, s)
+    false
+
+  ;Memoized tables
+  val mtables = HashTable-init<Symbol,MTable>(MTable{modules[_]})
+  val ctables = HashTable-init<Symbol,CTable>(CTable{components[_]})
+  val btables = HashTable-init<Symbol,BTable>(BTable{bundles[_]})
+  val ptables = HashTable-init<Symbol,PTable>(PTable{packages[_]})
+
+  new IRTable :  
+    defmethod stmts (this) : stmts
+    defmethod add (this, s:TStmt) : add-stmt(s)
+    
+    defmethod bundles (this) : values(bundles)
+    defmethod components (this) : values(components)
+    defmethod capabilities (this) : values(capabilities)
+    defmethod modules (this) : values(modules)
+    defmethod packages (this) : values(packages)
+    defmethod parts (this) : values(parts)
+    defmethod attaches (this) : values(attaches)
+    
+    defmethod bundle (this, name:Symbol) : bundles[name]
+    defmethod component (this, name:Symbol) : components[name]
+    defmethod capability (this, name:Symbol) : capabilities[name]
+    defmethod module (this, name:Symbol) : modules[name]
+    defmethod package (this, name:Symbol) : packages[name]
+    defmethod part (this, name:Symbol) : parts[name]
+    defmethod attaches (this, name:Symbol) : attaches[name]
+
+    defmethod bundle? (this, name:Symbol) : get?(bundles,name)
+    defmethod component? (this, name:Symbol) : get?(components,name)
+    defmethod capability? (this, name:Symbol) : get?(capabilities,name)
+    defmethod module? (this, name:Symbol) : get?(modules,name)
+    defmethod package? (this, name:Symbol) : get?(packages,name)
+    defmethod part? (this, name:Symbol) : get?(parts,name)
+
+    defmethod makeboards (this) : makeboards
+
+    defmethod mtable (this, name:Symbol) : mtables[name]
+    defmethod ctable (this, name:Symbol) : ctables[name]
+    defmethod btable (this, name:Symbol) : btables[name]
+    defmethod ptable (this, name:Symbol) : ptables[name]
+
+public defn component-or-module? (t:IRTable, name:Symbol) :
+  val c = component?(t, name)
+  match(c:DefComponent) : c
+  else : module?(t, name)
+
+public defn component-or-module (t:IRTable, name:Symbol) :
+  component-or-module?(t, name) as DefComponent|DefModule
+
+public defn cmtable (t:IRTable, name:Symbol) :
+  if component?(t, name) is False : mtable(t,name)
+  else : ctable(t,name)
+
+;                    Reference Expansion
+;                    ===================
+
+public defn expand (ir-table:IRTable, r:Ref, t:PinType) :
+  to-list $ generate<Ref> :
+    defn exp (suffix: Ref -> Ref, t:PinType) :
+      match(t) :
+        (t:SinglePin) :
+          yield(suffix(r))
+        (t:PinArray) :
+          for i in 0 to length(t) do :
+            exp(IndexRef{suffix(_), i}, type(t))
+        (t:PinBundle) :
+          for pin in pins(bundle(ir-table,name(t))) do :
+            exp(FieldRef{suffix(_), name(pin)}, type(pin))
+    exp({_}, t)  
+
+public defn expand (r:Ref, t:ComponentType) :
+  to-list $ generate<Ref> :
+    defn exp (suffix: Ref -> Ref, t:ComponentType) :
+      match(t) :
+        (t:SingleComponent) :
+          yield(suffix(r))
+        (t:ComponentArray) :
+          for i in 0 to length(t) do :
+            exp(IndexRef{suffix(_), i}, type(t))
+    exp({_}, t)    
+
+public defn expand (r:Ref, t:InstType|InstArray) :
+  to-list $ generate<Ref> :  
+    defn exp (suffix: Ref -> Ref, t:InstType|InstArray) :
+      match(t) :
+        (t:InstType) :
+          yield(suffix(r))
+        (t:InstArray) :
+          for i in 0 to length(t) do :
+            exp(IndexRef{suffix(_), i}, type(t) as InstType|InstArray)
+    exp({_}, t)    
+
+public defn expand (r:Ref, t:CapabilityType) :
+  to-list $ generate<Ref> :
+    defn exp (suffix: Ref -> Ref, t:CapabilityType) :
+      match(t) :
+        (t:Capability) :
+          yield(suffix(r))
+        (t:CapabilityArray) :
+          for i in 0 to length(t) do :
+            exp(IndexRef{suffix(_), i}, capability(t))
+    exp({_}, t)    
+
+;============================================================
+;======================= Pins ===============================
+;============================================================
+
+public deftype HasPins<K,V> ;[TODO: Temporary Fix for Dualview Interpreter, Should not have to be public]
+public defmulti pin-table<?K,?V> (p:HasPins<?K,?V>) -> HashTable<K,V>
+public defn pins<?K,?V> (p:HasPins<?K,?V>) -> Seqable<V> : values(pin-table(p))
+public defn pin<?K,?V> (p:HasPins<?K,?V>, key:K) : pin-table(p)[key]
+public defn pin?<?K,?V> (p:HasPins<?K,?V>, key:K) : get?(pin-table(p), key)
+
+;============================================================
+;======================= MTable =============================
+;============================================================
+
+public deftype MTable <: HasPins<Symbol,Pin>
+public defmulti module (t:MTable) -> Symbol
+
+public defmulti nets (t:MTable) -> Seqable<NetStmt>
+public defmulti insts (t:MTable) -> Seqable<InstStmt>
+public defmulti requires (t:MTable) -> Seqable<RequireStmt>
+public defmulti supports (t:MTable) -> Seqable<SupportsStmt>
+public defmulti packages (t:MTable) -> Seqable<PackageStmt>
+public defmulti emodels (t:MTable) -> Seqable<EModelStmt>
+public defmulti parts (t:MTable) -> Seqable<PartStmt>
+public defmulti references (t:MTable) -> Seqable<ReferenceStmt>
+public defmulti nodes (t:MTable) -> Seqable<NodeStmt>
+public defmulti inst-supports (t:MTable) -> Seqable<InstSupportsStmt>
+
+public defmulti net (t:MTable, name:Symbol) -> NetStmt
+public defmulti inst (t:MTable, name:Symbol) -> InstStmt
+public defmulti requires (t:MTable, name:Symbol) -> List<RequireStmt>
+public defmulti package (t:MTable, name:Symbol) -> PackageStmt
+public defmulti emodel (t:MTable, name:Symbol) -> EModelStmt
+public defmulti part (t:MTable, name:Symbol) -> PartStmt
+public defmulti reference (t:MTable, name:Symbol) -> ReferenceStmt
+public defmulti node (t:MTable name:Symbol) -> NodeStmt
+public defmulti inst-supports (t:MTable, name:Symbol) -> List<InstSupportsStmt>
+
+public defmulti net? (t:MTable, name:Symbol) -> NetStmt|False
+public defmulti inst? (t:MTable, name:Symbol) -> InstStmt|False
+public defmulti package? (t:MTable, name:Symbol) -> PackageStmt|False
+public defmulti emodel? (t:MTable, name:Symbol) -> EModelStmt|False
+public defmulti part? (t:MTable, name:Symbol) -> PartStmt|False
+public defmulti reference? (t:MTable, name:Symbol) -> ReferenceStmt|False
+public defmulti node? (t:MTable, name:Symbol) -> NodeStmt|False
+
+public defmulti requires (t:MTable, ref:Ref) -> List<RequireStmt>
+public defmulti package? (t:MTable, ref:Ref) -> PackageStmt|False
+public defmulti emodel? (t:MTable, ref:Ref) -> EModelStmt|False
+public defmulti part? (t:MTable, ref:Ref) -> PartStmt|False
+public defmulti reference? (t:MTable, ref:Ref) -> ReferenceStmt|False
+public defmulti inst-supports (t:MTable, ref:Ref) -> List<InstSupportsStmt>
+
+public defmulti attaches (c:MTable) -> Collection<AttachStmt>
+
+public defn MTable (m:DefModule) :
+  MTable(name(m), pins(m), stmts(m))
+
+public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
+  val pin-table = HashTable<Symbol,Pin>()
+  val net-table = HashTable<Symbol, NetStmt>()
+  val nodes = HashTable<Symbol, NodeStmt>()
+  val insts = HashTable<Symbol, InstStmt>()
+  val requires = HashTable<Ref, List<RequireStmt>>(List())
+  val inst-supports = HashTable<Ref, List<InstSupportsStmt>>(List())
+  val packages = HashTable<Ref, PackageStmt>()
+  val emodels = HashTable<Ref, EModelStmt>()
+  val parts = HashTable<Ref, PartStmt>()
+  val references = HashTable<Ref, ReferenceStmt>()  
+  val nets = Vector<NetStmt>()
+  val attaches = Vector<AttachStmt>()
+  val supports = Vector<SupportsStmt>()
+
+  for p in pins do :
+    pin-table[name(p)] = p
+  for s in stmts do :
+    match(s) :
+      (s:NetStmt) :
+        add(nets, s)
+        attempt: net-table[name(s) as? Symbol] = s        
+      (s:InstStmt) : insts[name(s)] = s
+      (s:RequireStmt) : update(requires, cons{s, _}, inst(s))
+      (s:PackageStmt) : packages[ref(s)] = s
+      (s:EModelStmt) : emodels[ref(s)] = s
+      (s:PartStmt) : parts[ref(s)] = s
+      (s:ReferenceStmt) : references[ref(s)] = s
+      (s:AttachStmt) : add(attaches, s)
+      (s:SupportsStmt) : add(supports, s)
+      (s:NodeStmt) : nodes[name(s)] = s
+      (s:InstSupportsStmt) : update(inst-supports, cons{s, _}, inst(s))
+
+  new MTable :
+    defmethod module (this) : ctxt-name
+    defmethod pin-table (this) : pin-table
+    
+    defmethod nets (this) : nets
+    defmethod insts (this) : values(insts)
+    defmethod requires (this) : cat-all(values(requires))
+    defmethod packages (this) : values(packages)
+    defmethod emodels (this) : values(emodels)
+    defmethod parts (this) : values(parts)
+    defmethod references (this) : values(references)
+    defmethod supports (this) : supports
+    defmethod nodes (this) : values(nodes)
+    defmethod inst-supports (this) : cat-all(values(inst-supports))
+    
+    defmethod net (this, name:Symbol) : net-table[name]
+    defmethod inst (this, name:Symbol) : insts[name]
+    defmethod requires (this, name:Symbol) : requires[Ref(name)]
+    defmethod package (this, name:Symbol) : packages[Ref(name)]
+    defmethod emodel (this, name:Symbol) : emodels[Ref(name)]
+    defmethod part (this, name:Symbol) : parts[Ref(name)]
+    defmethod reference (this, name:Symbol) : references[Ref(name)]
+    defmethod node (this, name:Symbol) : nodes[name]
+    defmethod inst-supports (this, name:Symbol) : inst-supports[Ref(name)]
+
+    defmethod net? (this, name:Symbol) : get?(net-table,name)
+    defmethod inst? (this, name:Symbol) : get?(insts,name)
+    defmethod package? (this, name:Symbol) : get?(packages,Ref(name))
+    defmethod emodel? (this, name:Symbol) : get?(emodels,Ref(name))
+    defmethod part? (this, name:Symbol) : get?(parts,Ref(name))
+    defmethod reference? (this, name:Symbol) : get?(references,Ref(name))
+    defmethod node? (this, name:Symbol) : get?(nodes, name)
+
+    defmethod requires (this, ref:Ref) : requires[ref]
+    defmethod package? (this, ref:Ref) : get?(packages,ref)
+    defmethod emodel? (this, ref:Ref) : get?(emodels,ref)
+    defmethod part? (this, ref:Ref) : get?(parts,ref)
+    defmethod reference? (this, ref:Ref) : get?(references,ref)
+    defmethod inst-supports (this, ref:Ref) : inst-supports[ref]
+
+    defmethod attaches (this) : attaches
+
+;============================================================
+;===================== CTable ===============================
+;============================================================
+
+public deftype CTable <: HasPins<Symbol,Pin>
+public defmulti supports (c:CTable) -> Collection<SupportsStmt>
+public defmulti default-package (c:CTable) -> DefaultPackageStmt|False
+public defmulti default-emodel (c:CTable) -> DefaultEModelStmt|False
+public defmulti default-part (c:CTable) -> DefaultPartStmt|False
+public defmulti reference-prefix (c:CTable) -> ReferencePrefixStmt|False
+
+public defn CTable (c:DefComponent) :
+  val pin-table = HashTable<Symbol,Pin>()
+  val supports = Vector<SupportsStmt>()
+  var default-package = false
+  var default-emodel = false
+  var default-part = false
+  var reference-prefix = false
+
+  for p in pins(c) do :
+    pin-table[name(p)] = p
+  for s in stmts(c) do :
+    match(s) :
+      (s:SupportsStmt) : add(supports, s)
+      (s:DefaultPackageStmt) : (default-package = s) when default-package is False
+      (s:DefaultEModelStmt) : (default-emodel = s) when default-emodel is False
+      (s:DefaultPartStmt) : (default-part = s) when default-part is False
+      (s:ReferencePrefixStmt) : (reference-prefix = s) when reference-prefix is False
+
+  new CTable :
+    defmethod pin-table (this) : pin-table
+    defmethod supports (this) : supports
+    defmethod default-package (this) : default-package
+    defmethod default-emodel (this) : default-emodel
+    defmethod default-part (this) : default-part
+    defmethod reference-prefix (this) : reference-prefix
+
+;============================================================
+;======================= BTable =============================
+;============================================================
+
+public deftype BTable <: HasPins<Symbol,Pin>
+
+public defn BTable (c:DefBundle) :
+  val pin-table = HashTable<Symbol,Pin>()
+  for p in pins(c) do :
+    pin-table[name(p)] = p
+
+  new BTable :
+    defmethod pin-table (this) : pin-table
+
+;============================================================
+;======================= PTable =============================
+;============================================================
+
+public deftype PTable
+public defmulti pads (t:PTable) -> Seqable<Pad>
+public defmulti pad (t:PTable, ref:Ref) -> Pad
+public defmulti pad? (t:PTable, ref:Ref) -> Pad|False
+public defmulti pad-defs (t:PTable) -> Seqable<DefPad>
+public defmulti pad-def (t:PTable, name:Symbol) -> DefPad
+public defmulti pad-def? (t:PTable, name:Symbol) -> DefPad|False
+
+public defn PTable (s:DefPackage) :
+  val pad-table = HashTable<Ref,Pad>()
+  for p in pads(s) do :
+    pad-table[ref(p)] = p
+  val pad-def-table = HashTable<Symbol,DefPad>()
+  for p in pad-defs(s) do :
+    pad-def-table[name(p)] = p
+  new PTable :
+    defmethod pads (this) : values(pad-table)
+    defmethod pad (this, ref:Ref) : pad-table[ref]
+    defmethod pad? (this, ref:Ref) : get?(pad-table,ref)
+    defmethod pad-defs (this) : values(pad-def-table)
+    defmethod pad-def (this, name:Symbol) : pad-def-table[name]
+    defmethod pad-def? (this, name:Symbol) : get?(pad-def-table,name)
+
+;============================================================
+;=============== Specific Type Environments =================
+;============================================================
+
+;Used to evaluate whether a pcb-attach statement is applicable to a
+;set of arguments with types given in 'types'.
+;Construct an environment where each argument in the pcb-attach statement has
+;the expected argument types.
+public defn TestAttachEnv (ir-table:IRTable, a:DefAttach, argtypes:List<RefType>) :
+  val type-table = to-hashtable<Ref,RefType> $
+    for (arg in args(a), t in argtypes) seq :
+      Ref(arg) => t
+  TypeEnv{ir-table, _} $ fn (r, env, safe?) :
+    get?(type-table, r)
+
+;The environment inside a pcb-attach statement
+public defn AttachEnv (ir-table:IRTable, a:DefAttach, mtable:MTable) :
+  val type-table = to-hashtable<Ref,RefType> $
+    for p in pins(a) seq : ref(p) => type(p)
+  val menv = ModuleEnv(ir-table, mtable)
+  TypeEnv{ir-table, _} $ fn (r, env, safe?) :
+    match(get?(type-table, r)) :
+      (t:RefType) : t
+      (t:False) : root-type(menv)(r, env, safe?)
+
+;The environment inside a pcb-component statement
+public defn ComponentEnv (ir-table:IRTable, component:Symbol) :
+  val ctable = ctable(ir-table, component)
+  TypeEnv{ir-table, _} $ fn (r, env, safe?) :
+    match(r:VarRef) :
+      match(pin?(ctable, name(r))) :
+        (p:Pin) : type(p)
+        (p:False) : false
+
+;The environment inside a pcb-module statement
+public defn ModuleEnv (ir-table:IRTable, module:Symbol) :
+  ModuleEnv(ir-table, mtable(ir-table, module))
+
+public defn ModuleEnv (ir-table:IRTable, mtable:MTable) :
+  ;Construct an InstType given its ComponentType
+  defn inst-type (iname:Symbol, t:ComponentType) :
+    match(t) :
+      (t:SingleComponent) : InstType(iname, name(t))
+      (t:ComponentArray) : InstArray(inst-type(iname, type(t)), length(t))
+  ;Construct requirements table
+  val require-table = HashTable<Ref,RefType>()
+  for r in requires(mtable) do :
+    val name = name(r)
+    match(name:Symbol) :
+      val src = dot(inst(r), Ref(name))
+      require-table[src] = to-pin-type(ir-table, capability(r))
+  ;Construct TypeEnv
+  TypeEnv{ir-table, _} $ fn (r, env, safe?) :
+    label<RefType|False> return :
+      ;Check whether it's a require
+      match(get?(require-table, r)) :
+        (rt:PinType) : return(rt)
+        (rt:False) : false
+      match(r:VarRef) :
+        ;Check if net
+        match(net?(mtable, name(r))) :
+          (net:NetStmt) :
+            match(ref-type(env, head(refs(net)), safe?)) :
+              (rt:PinType) : return(NetType(rt))
+              (rt:RefType) : throw(BadNetRef(name(net), head(refs(net)), rt))
+          (net:False) : false
+        ;Check if inst
+        match(inst?(mtable, name(r))) :
+          (inst:InstStmt) : return(inst-type(name(r), type(inst)))
+          (inst:False) : false
+        ;Check if pin
+        match(pin?(mtable, name(r))) :
+          (pin:Pin) : return(type(pin))
+          (pin:False) : false
+        ;Check if node
+        match(node?(mtable, name(r))) :
+          (node:NodeStmt) : return(type(node))
+          (node:False) : false    
+
+;The right-hand-side environment inside a supportoption
+public defn SupportOptionEnv (env:TypeEnv, option:SupportOption) :
+  ;Construct requirements table
+  val require-table = HashTable<Ref,RefType>()
+  for r in requires(option) do :
+    val name = name(r)
+    match(name:Symbol) :
+      val src = dot(inst(r), Ref(name))
+      require-table[src] = to-pin-type(ir-table(env), capability(r))  
+  TypeEnv{ir-table(env), _} $ fn (r, env*, safe?) :
+    match(get?(require-table, r)) :
+      (rt:PinType) : rt
+      (rt:False) : root-type(env)(r, env*, safe?)
+
+;The environment inside either the module or the component.
+public defn CMEnv (ir-table:IRTable, module-or-component:Symbol) :
+  if component?(ir-table, module-or-component) is False :
+    ModuleEnv(ir-table, module-or-component)
+  else :
+    ComponentEnv(ir-table, module-or-component)  
+
+;The environment inside a pcb-capability.
+;Assuming that i2c is the name of the capability, return an environment mapping
+;i2c to its pin type. Used during typechecking.
+;It is guaranteed that the base of the ref is the name of the
+;capability with a given type.
+public defn CapabilityEnv (ir-table:IRTable, base:Ref, capability-type:CapabilityType) :
+  TypeEnv{ir-table, _} $ fn (r, env, safe?) :
+    to-pin-type(ir-table, capability-type) when base == r
+
+defn to-pin-type (ir-table:IRTable, c:CapabilityType) :
+  match(c) :
+    (c:Capability) : type(capability(ir-table, name(c))) as PinType
+    (c:CapabilityArray) : PinArray(to-pin-type(ir-table, capability(c)), length(c))
+
+;============================================================
+;=================== Reference Types ========================
+;============================================================
+
+public deftype RefType :
+  PinType <: RefType
+public defstruct InstType <: RefType :
+  name: Symbol
+  component: Symbol
+public defstruct InstArray <: RefType :
+  type: RefType
+  length: Int
+public defstruct NetType <: RefType :
+  type: PinType
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir-utils/InstType :
+    name: Symbol
+    component: Symbol
+  rtm/ir-utils/InstArray :
+    type: RefType
+    length: Int
+  rtm/ir-utils/NetType :
+    type: PinType
+
+defmethod print (o:OutputStream, t:InstType) :
+  print(o, "inst(%_)" % [component(t)])
+defmethod print (o:OutputStream, t:InstArray) :
+  print(o, "inst-array(%_, %_)" % [type(t), length(t)])
+defmethod print (o:OutputStream, t:NetType) :
+  print(o, "net(%_)" % [type(t)])
+
+;============================================================
+;============= Generalized TypeEnv Datastructure ============
+;============================================================
+public deftype TypeEnv
+public defmulti ref-type (e:TypeEnv, r:Ref, safe?:True|False) -> RefType
+public defmulti root-type (e:TypeEnv) -> (Ref, TypeEnv, True|False) -> RefType|False
+public defmulti ir-table (e:TypeEnv) -> IRTable
+
+public defn get (e:TypeEnv, r:Ref) : ref-type(e, r, false)  
+public defn ensure-wellformed (e:TypeEnv, r:Ref) : ref-type(e, r, true)
+  
+public defn expand (env:TypeEnv, r:Ref, t:PinType) :
+  expand(ir-table(env), r, t)
+  
+public defn expand (env:TypeEnv, r:Ref) :
+  expand(env, r, env[r] as PinType)
+
+defn TypeEnv (ir-table:IRTable, root-type:(Ref, TypeEnv, True|False) -> RefType|False) :
+  ;Retrieve the reference type of a ref
+  defn ref-type-unsafe (r:Ref, env:TypeEnv) :
+    let recur (r:Ref = r) :
+      match(root-type(r, env, false)) :
+        (t:False) :
+          match(r) :
+            (r:FieldRef) :
+              let loop (t:RefType = recur(ref(r))) :
+                match(t) :
+                  (t:InstType) : field-type(r, component(t), false)
+                  (t:PinBundle) : type(pin(btable(ir-table, name(t)), name(r)))
+                  (t:NetType) : NetType(loop(type(t)) as PinType)            
+            (r:IndexRef) :
+              let loop (t:RefType = recur(ref(r))) :
+                match(t) :
+                  (t:PinArray) : type(t)
+                  (t:InstArray) : type(t)
+                  (t:NetType) : NetType(loop(type(t)) as PinType)
+        (t:RefType) : t
+  
+  ;Check wellformedness of ref
+  defn ref-type-safe (r0:Ref, env:TypeEnv) -> RefType :
+    let recur (r:Ref = r0, suffix:Ref -> Ref = {_}) :
+      match(root-type(r, env, true)) :
+        (t:False) :
+          match(r) :
+            (r:VarRef) :
+              throw(InaccessibleBindingError(r0))
+            (r:FieldRef) :
+              let loop (t:RefType = recur(ref(r), suffix{FieldRef(_, name(r))})) :
+                match(t) :
+                  (t:InstType) :
+                    field-type(r, component(t), true)
+                  (t:PinBundle) :
+                    match(pin?(btable(ir-table, name(t)), name(r))) :
+                      (p:Pin) : type(p)
+                      (p:False) : throw(BadFieldError(r, t))
+                  (t:NetType) :
+                    NetType(loop(type(t)) as PinType)
+                  (t) :
+                    throw(BadFieldError(r, t))
+            (r:IndexRef) :
+              let loop (t:RefType = recur(ref(r), suffix{IndexRef(_, index(r))})) :
+                match(t) :
+                  (t:PinArray) :          
+                    if index(r) < length(t) : type(t)
+                    else : throw(IndexRefOutOfBoundsError(r,t))
+                  (t:InstArray) :
+                    if index(r) < length(t) : type(t)
+                    else : throw(IndexRefOutOfBoundsError(r,t))
+                  (t:NetType) :
+                    NetType(loop(type(t)) as PinType)
+                  (t) :
+                    throw(BadIndexError(r,t))
+        (t:RefType) : t
+
+  ;Get the type of a field
+  ;Given that ref is of form 'inst.name', and inst is an instance of 'module',
+  ;return the type of ref. 
+  defn field-type (ref:FieldRef, module:Symbol, safe?:True|False) :
+    val env = CMEnv(ir-table, module)
+    if safe? :
+      try :
+        ref-type(env, Ref(name(ref)), safe?)
+      catch (e:ESIRError) :
+        throw(BadInstFieldError(ref, module))
+    else :
+      ref-type(env, Ref(name(ref)), safe?)
+
+  ;Return TypeEnv datastructure
+  new TypeEnv :
+    defmethod ir-table (this) : ir-table
+    defmethod root-type (this) : root-type
+    defmethod ref-type (this, r:Ref, safe?:True|False) :
+      if safe? : ref-type-safe(r, this)
+      else : ref-type-unsafe(r, this)
+
+;============================================================
+;=================== Mapping Table ==========================
+;============================================================
+
+public deftype MappingTable <: Collection<MapEntry>
+public defmulti key? (t:MappingTable, ref:Ref) -> True|False
+
+;A MapEntry represents a mapping of the type a.b => (c.d, tag)
+;One place where the tag is used is when mapping component pins to pins on different symbols.
+;In that case, it is useful to track which symbol the component pin was mapped to.
+;The level is a priority feature. Mappings with higher level override mappings of lower level.
+public defstruct MapEntry <: Equalable :
+  key: Ref
+  ref: Ref
+  tag: Int with: (default => 0)
+  level: Int with: (default => length(key))
+
+defmethod equal? (a:MapEntry, b:MapEntry) :
+  key(a) == key(b) and
+  ref(a) == ref(b) and
+  level(a) == level(b) and
+  tag(a) == tag(b)
+
+public defn MappingTable (env:TypeEnv, one-to-many?:True|False, entries:Seqable<MapEntry>) :
+  ;Maintain table of entries
+  val table = HashTable<Ref,List<MapEntry>>(List())
+
+  ;Add a new entry
+  defn add (e:MapEntry) :
+    match(get?(table,key(e))) :
+      ;If that key already has entries
+      (es:List<MapEntry>) :
+        val e0 = head(es)
+        switch(compare(level(e), level(e0))) :
+          ;Case: The new entry has a smaller level than old entry
+          -1 :
+            false
+          ;Case: The new entry has the same level as new entry
+          0 :
+            ;If the entry doesn't already exist
+            if not contains?(es, e) :
+              if one-to-many? :
+                update(table, cons{e, _}, key(e))
+              else :
+                report-error(AmbiguousMappingValue(key(e), ref(e0), ref(e)))
+          ;Case: The new entry has higher level than old entry
+          1 :
+            table[key(e)] = List(e)
+      ;That key doesn't exist
+      (f:False) :
+        table[key(e)] = List(e)
+
+  ;Expand entry into its base type and add
+  defn expand+add (e:MapEntry) :
+    val type = env[key(e)] as PinType
+    for (k in expand(env, key(e), type), r in expand(env, ref(e), type)) do :
+      add(MapEntry(k, r, tag(e), level(e)))
+
+  ;Ensure that all destinations have a unique source.
+  defn forbid-many-to-one () :
+    val vtable = HashTable<[Int,Ref],Ref>()
+    for e in cat-all(values(table)) do :
+      val pair = [tag(e), ref(e)]
+      match(get?(vtable, pair)) :
+        (k0:Ref) :
+          if key(e) != k0 :
+            report-error(AmbiguousMappingKey(k0, key(e), ref(e)))
+        (f:False) :
+          vtable[pair] = key(e)
+
+  ;Initialize table
+  do(expand+add, entries)
+  forbid-many-to-one()
+
+  new MappingTable :
+    defmethod key? (this, ref:Ref) : key?(table,ref)
+    defmethod to-seq (this) : cat-all(values(table))
+
+;============================================================
+;=================== Pass Utilities =========================
+;============================================================
+
+defn top-modules (ir-table:IRTable) :
+  val module-set = HashSet<Symbol>()
+  add-all(module-set, seq(module, makeboards(ir-table)))
+  module-set
+
+public defn map-top-modules (f:DefModule -> DefModule, ir-table:IRTable, prog:Collection<TStmt>) :
+  val mset = top-modules(ir-table)
+  to-list $ for s in prog seq :
+    match(s:DefModule) :
+      if mset[name(s)] : f(s)
+      else : s
+    else : s
+
+public defn map-top-modules (f:(IRTable, DefModule) -> DefModule, prog:Collection<TStmt>) :
+  val ir-table = IRTable(prog)
+  map-top-modules(f{ir-table, _}, ir-table, prog)
+
+public defn do-top-modules (f:DefModule -> ?, ir-table:IRTable, prog:Collection<TStmt>) :
+  for name in top-modules(ir-table) do :
+    f(module(ir-table, name))
+
+public defn do-top-modules (f:(IRTable, DefModule) -> ?, prog:Collection<TStmt>) :
+  val ir-table = IRTable(prog)
+  do-top-modules(f{ir-table, _}, ir-table, prog)
+
+;============================================================
+;======================= Mappers ============================
+;============================================================
+
+;Map the function func over all Refs that refer to definitions
+;in the current scope.
+public defn map-scope-refs (func:Ref -> Ref, s:MStmt) :
+  ;Dispatch
+  defn f (r:False) : r
+  defn f (r:Ref) : func(r)
+  defn f (r:List<Ref>) : map(func,r)
+  defn f (o:SupportOption) :
+    val mapping* = f-rhs(mapping(o))
+    val requires* = map(f, requires(o))
+    sub-requires(sub-mapping(o, mapping*), requires*)
+  defn f (os:List<SupportOption>) : map(f, os)
+  defn f (r:RequireStmt) :
+    val inst* = f(inst(r))
+    val mapping* = f-rhs(mapping(r))
+    sub-mapping(sub-inst(r, inst*), mapping*)
+  defn f-rhs (m:Mapping) :
+    Mapping $ for e in mappings(m) map :
+      key(e) => f(value(e))
+  
+  match(s) :
+    (s:NetStmt) : sub-refs(s, f(refs(s)))
+    (s:NodeStmt) : s
+    (s:InstStmt) : s
+    (s:RequireStmt) : f(s)
+    (s:SupportsStmt) : sub-options(s, f(options(s)))
+    (s:InstSupportsStmt) : sub-options(sub-inst(s, f(inst(s))), f(options(s)))
+    (s:PackageStmt) : sub-ref(s, f(ref(s)))
+    (s:EModelStmt) : sub-ref(s, f(ref(s)))
+    (s:PartStmt) : sub-ref(s, f(ref(s)))
+    (s:ReferenceStmt) : sub-ref(s, f(ref(s)))
+    (s:AttachStmt) : sub-args(s, f(args(s)))   
+
+;============================================================
+;=============== PartRequest and Matching ===================
+;============================================================
+
+public defstruct PartRequest :
+  inst: Symbol
+  component: Symbol
+  package: Symbol|False
+  emodel: EModel|False
+  
+defmethod print (o:OutputStream, r:PartRequest) :
+  print(o, "PartRequest(%~, %~, %~, %~)" % [inst(r), component(r), package(r), emodel(r)])
+
+public defn match? (p:DefPart, r:PartRequest) :
+  attempt: num-categorical-matches(p, r) as? Int > 0
+
+public defn weak-match? (p:DefPart, r:PartRequest) :
+  num-categorical-matches(p, r) is Int
+
+defn num-categorical-matches (p:DefPart, r:PartRequest) :
+  label<Int|False> return :
+    ;Count number of categorical matches
+    val num-categorical-matches = to-seq(0 to false)
+
+    ;Return false if doesn't match
+    defn must-satisfy!<T> (f:(T,T) -> True|False, a:T|False, b:T|False) :
+      match(a, b) :
+        (a:False, b) : false
+        (a, b:False) : false
+        (a:T, b:T) :
+          if f(a, b) : next(num-categorical-matches)
+          else : return(false)
+
+    ;Check all components
+    must-satisfy!<Symbol>(equal?, component(p), component(r))
+    must-satisfy!<Symbol>(equal?, package(p), package(r))
+    must-satisfy!<EModel>(match?, emodel(p), emodel(r))
+
+    ;Part matches
+    peek(num-categorical-matches)

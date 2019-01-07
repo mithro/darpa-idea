@@ -1,0 +1,50 @@
+defpackage rtm/reader-plugin :
+  import core
+  import reader
+  import collections
+  import rtm/ir
+  import rtm/ir/errors
+  import rtm/ir-utils
+  import rtm/utils
+  import rtm/errors
+  import rtm/structures
+  import plugins/slave
+  import rtm/ir-gen-macros
+  import rtm/ir-reader
+  import serialize
+  import stz/core-macros
+
+;============================================================
+;================== Entry Points ============================
+;============================================================
+
+add-plugin-entry-point(`parsers, `read-jitpcb-exps,
+  fn ([filename, use-macros]:[String, True|False]) :
+    read-jitpcb-exps(filename, use-macros))
+
+add-plugin-entry-point(`parsers, `expand-jitpcb-exps,
+  fn ([forms, use-macros]:[List, True|False]) :
+    expand-jitpcb-exps(forms, use-macros))
+
+add-plugin-entry-point(`parsers, `read-esir, read-esir)
+
+add-plugin-entry-point(`parsers, `parse-esir, parse-esir)
+
+;============================================================
+;==================== Top Level Calls =======================
+;============================================================
+
+;Read and expand Stanza expressions
+defn read-jitpcb-exps (filename:String, use-macros:True|False) -> ? :
+  expand-jitpcb-exps(read-file(filename), use-macros)
+  
+defn expand-jitpcb-exps (forms:List, use-macros:True|False) -> ? :
+  if use-macros : parse-syntax[core + serializer, ir-gen / #exp!](List(forms))
+  else : parse-syntax[core / #exp!](List(forms))
+
+;Read and parse ESIR
+defn read-esir (filename:String) -> List<TStmt> :
+  parse-rtm(filename)
+
+defn parse-esir (forms:List) -> List<TStmt> :
+  parse-syntax[rtm-ir / #tstmt! ...](forms)

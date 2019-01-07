@@ -1,0 +1,138 @@
+defpackage jitpcb/config :
+  import core
+  import collections
+  import reader
+  import rtm/utils
+  import rtm/errors
+  import jitpcb/errors
+  import stz/config with :
+    prefix(read-config-file) => stz-
+  import stz/params
+
+;============================================================
+;====================== Parameters ==========================
+;============================================================
+
+defstruct JitPCBConfig :
+  install-dir: String
+
+public defn jitpcb-install-dir () :
+  install-dir(read-config-file())
+
+public defn jitpcb-version () : [0 6 12]
+
+;============================================================
+;================ Configuration File Syntax =================
+;============================================================
+
+defsyntax jitpcb-config :
+  val ut = unwrap-token
+  val CFE = ConfigFileError
+
+  defproduction sym: Symbol
+  defrule sym = (?x) when ut(x) is Symbol : ut(x)
+  
+  defproduction string: String
+  defrule string = (?x) when ut(x) is String : ut(x)
+
+  defproduction string!: String
+  defrule string! = (?s:#string) : s
+  fail-if string! = () : CFE(closest-info(), "Expected a string here.")
+
+  public defproduction config: JitPCBConfig
+  defrule config = (?es:#entry! ...) :
+    val plist = [
+      Property(`install-dir, false, true)]
+    val ps = PropertyList(plist, es, true)
+    JitPCBConfig(
+      property(ps, `install-dir))
+
+  defproduction entry!: KeyValue<Symbol,?>
+  defrule entry! = (install-dir = ?path:#string!) :
+    `install-dir => path
+  fail-if entry! = () :
+    CFE(closest-info(), "Invalid configuration rule.")
+
+;============================================================
+;============ Reading the Configuration File ================
+;============================================================
+
+var CONFIG:JitPCBConfig|False = false
+defn read-config-file () :
+  ;Read the configuration file
+  defn read-config-file () :
+    label<JitPCBConfig> return :
+      defn from-dir (dir:String) :
+        val path = norm-path("%_/.jitpcb" % [dir])
+        if file-exists?(path) :
+          val forms = read-file(path)
+          return(parse-syntax[jitpcb-config / #config](forms))
+      defn from-env (name:String) :
+        match(get-env(name)) :
+          (path:String) : from-dir(path)
+          (path:False) : false
+      from-dir(".")
+      from-env("JITPCB_CONFIG")
+      from-env("HOME")
+      throw(NoJitPCBConfig())
+
+  ;Verify installation
+  defn verify-config (c:JitPCBConfig) :
+    ;Ensure that Stanza is installed
+    stz-read-config-file()
+    
+    ;Ensure license file is where it should be
+    val license-file = norm-path("%_/License.txt" % [install-dir(c)])
+    if not file-exists?(license-file) :
+      throw(NoLicenseBadInstall(install-dir(c)))
+
+    ;Ensure that JitPCB is installed
+    val pkg-dir = norm-path("%_/pkgs" % [install-dir(c)])
+    if not contains?(STANZA-PKG-DIRS, pkg-dir) :
+      report-error(NoPkgDir(install-dir(c)))
+    val fast-pkg-dir = norm-path("%_/fast-pkgs" % [install-dir(c)])
+    if not contains?(STANZA-FAST-PKG-DIRS, fast-pkg-dir) :
+      report-error(NoFastPkgDir(install-dir(c)))
+    end-if-errors()
+      
+  ;Read the config if it has not already been configured
+  if CONFIG is False :
+    val config = read-config-file()
+    verify-config(config)
+    CONFIG = config
+  CONFIG as JitPCBConfig
+
+;============================================================
+;============== Writing the Configuration File ==============
+;============================================================
+
+public defn write-config-file () :
+  ;Resolve full directory
+  defn resolve-install-dir () :
+    match(resolve-path("License.txt")) :
+      (path:String) :
+        val suffix = norm-path("/License.txt")
+        if suffix?(path, suffix) :
+          val n = length(suffix)
+          path[0 to (length(path) - n)]
+        else : throw(NoLicenseFile())
+      (path:False) :
+        throw(NoLicenseFile())
+
+  ;Write the config file
+  defn write-config (dir:String) :
+    val path = norm-path("%_/.jitpcb" % [dir])
+    with-output-file{FileOutputStream(path), _} $ fn () :
+      println("install-dir = %~" % [resolve-install-dir()])
+
+  ;Try to write config file
+  label break :
+    defn to-env (name:String) :
+      val dir = get-env(name)
+      match(dir:String) :
+        write-config(dir)
+        break()
+        
+    to-env("HOME")
+    to-env("JITPCB_CONFIG")
+    throw(NoInstall())

@@ -1,0 +1,194 @@
+#use-added-syntax(serializer)
+
+defpackage rtm/ir-serializer :
+  import core
+  import collections
+  import rtm/ir
+  import serialize
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/ir/VarRef :
+    name: Symbol
+  rtm/ir/FieldRef :
+    ref: Ref
+    name: Symbol
+  rtm/ir/IndexRef :
+    ref: Ref
+    index: Int
+  rtm/ir/DefBundle :
+    name: Symbol
+    pins: List<Pin>
+  rtm/ir/Pin :
+    name: Symbol 
+    type: PinType 
+  rtm/ir/RPin :
+    ref: Ref
+    type: PinType 
+  rtm/ir/SinglePin
+  rtm/ir/PinArray :
+    type: PinType
+    length: Int 
+  rtm/ir/PinBundle :
+    name: Symbol 
+  rtm/ir/DefCapability :
+    name: Symbol
+    type: PinType|False
+  rtm/ir/DefPart :
+    name: Symbol
+    manufacturer: String
+    mpn: String
+    package: Symbol
+    component: Symbol|False 
+    emodel: EModel|False 
+  rtm/ir/DefComponent :
+    name: Symbol 
+    pins: List<Pin> 
+    stmts: List<CStmt> 
+  rtm/ir/DefaultPackageStmt :
+    package: Symbol 
+    mapping: Mapping 
+  rtm/ir/DefaultEModelStmt :
+    model: EModel
+  rtm/ir/DefaultPartStmt :
+    part: Symbol
+  rtm/ir/SupportsStmt :
+    capability: Symbol
+    options: List<SupportOption>
+  rtm/ir/ReferencePrefixStmt :
+    prefix: String
+  rtm/ir/DefPackage :
+    name: Symbol
+    pads: List<Pad>
+    pad-defs: List<DefPad>
+  rtm/ir/Pad :
+    ref: Ref
+    pad: Symbol
+    pose: Pose
+    side: Side
+  rtm/ir/DefPad :
+    name: Symbol 
+    shape: Shape 
+    type: PadType 
+  rtm/ir/DefModule :
+    name: Symbol
+    pins: List<Pin>
+    stmts: List<MStmt>
+  rtm/ir/DefAttach :
+    name: Symbol 
+    args: List<Symbol> 
+    pins: List<RPin> 
+    stmts: List<MStmt> 
+  rtm/ir/NetStmt :
+    name: Symbol|False
+    refs: List<Ref> 
+  rtm/ir/InstStmt :
+    name: Symbol 
+    type: ComponentType 
+  rtm/ir/RequireStmt :
+    name: Symbol|False 
+    capability: CapabilityType
+    inst: Ref
+    mapping: Mapping 
+  rtm/ir/InstSupportsStmt :
+    inst: Ref 
+    capability: Symbol 
+    options: List<SupportOption> 
+  rtm/ir/NodeStmt :
+    name: Symbol 
+    type: PinType 
+  rtm/ir/PackageStmt :
+    ref: Ref 
+    instance?: True|False 
+    package: [Symbol, Mapping]|False 
+  rtm/ir/EModelStmt :
+    ref: Ref 
+    model: EModel 
+  rtm/ir/PartStmt :
+    ref: Ref 
+    part: Symbol 
+  rtm/ir/ReferenceStmt :
+    ref: Ref 
+    value: String
+  rtm/ir/AttachStmt :
+    attach:Symbol
+    args:List<Ref>
+  rtm/ir/Mapping :
+    mappings: List<KeyValue<Ref, Ref>>
+  rtm/ir/Resistor :
+    resistance: Double|False 
+    tolerance: Double|False 
+    max-power: Double|False
+  rtm/ir/Capacitor :
+    capacitance: Double|False
+    tolerance: Double|False
+    max-voltage: Double|False
+    polarized?: True|False|None
+    low-esr?: True|False|None
+    temperature-coefficient: Symbol|False
+    dielectric: Symbol|False
+  rtm/ir/Inductor :
+    inductance: Double|False
+    tolerance: Double|False
+    max-current: Double|False
+  rtm/ir/Diode :
+    forward-current: Double|False
+    forward-voltage: Double|False
+    max-current: Double|False
+    max-reverse-voltage: Double|False
+    color: ColorSpec|False
+    luminous-intensity: Double|False
+  rtm/ir/SupportOption :
+    requires: List<RequireStmt>
+    mapping: Mapping
+  rtm/ir/NamedColor :
+    name: Symbol      
+  rtm/ir/Capability :
+    name: Symbol
+  rtm/ir/CapabilityArray :
+    capability: CapabilityType
+    length: Int 
+  rtm/ir/SingleComponent :
+    name: Symbol
+  rtm/ir/ComponentArray :
+    type: ComponentType
+    length: Int 
+  rtm/ir/MakeBoard :
+    module: Symbol
+  rtm/ir/Point :
+    x: Double
+    y: Double
+  rtm/ir/Polygon :
+    points: List<Point> 
+  rtm/ir/Circle :
+    center: Point
+    radius: Double 
+  rtm/ir/Rectangle :
+    width: Double 
+    height: Double 
+    pose: Pose
+  rtm/ir/Line :
+    width: Double 
+    points: List<Point> 
+  rtm/ir/Union :
+    shapes: List<Shape>
+  rtm/ir/Subtraction :
+    a: Shape
+    b: Shape
+
+register-serializer :
+  serialize (o:OutputStream, p:rtm/ir/Pose) :
+    serialize(o, center(p))
+    serialize(o, angle(p))
+    serialize(o, flip-x?(p))
+  deserialize (i:InputStream) :
+    val center = deserialize(i)
+    val angle = deserialize(i)
+    val flip-x? = deserialize(i)
+    #Pose(center, angle, flip-x?)
+
+#for (ENUM in [rtm/ir/TH, rtm/ir/SMD,
+               rtm/ir/Top, rtm/ir/Bottom]) :
+  register-serializer :
+    serialize (o:OutputStream, x:ENUM) : false
+    deserialize (i:InputStream) : ENUM
+

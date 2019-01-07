@@ -1,0 +1,81 @@
+defpackage modulegen :
+  import core
+  import collections
+
+;============================================================
+;===================== DataStructure ========================
+;============================================================
+
+defstruct StarNode :
+  center?: True|False
+  voltage: Double
+  current: Double
+  description: String
+  attributes: Tuple<Symbol>
+with:
+  printer => true
+
+;============================================================
+;====================== Registry ============================
+;============================================================
+
+val STAR-NODES = Vector<StarNode>()
+public defn add-star-node (n:StarNode) :
+  add(STAR-NODES, n)
+
+public defn add-center-node (description:String, voltage:Double, current:Double) :
+  add-star-node(StarNode(true, voltage, current, description, []))
+
+public defn add-peripheral-node (description:String, voltage:Double, current:Double, attributes:Tuple<Symbol>) :
+  add-star-node(StarNode(false, voltage, current, description, attributes))
+
+;============================================================
+;==================== GraphViz Exporter =====================
+;============================================================
+
+public defn export-module-graphviz (filename:String) :
+  spit(filename, graphviz-string())
+
+defn graphviz-string () :
+  val [cnodes, pnodes] = split!(center?, STAR-NODES)
+  val cnode = switch(length(cnodes)) :
+    0 : fatal("No center node!")
+    1 : next(to-seq(cnodes))
+    else : fatal("There is more than one center node!")
+
+  defn print-cnode (o:OutputStream, n:StarNode) :
+    println(o, \<S>N0 [shape=rectangle, label=%~];<S> % [description(n)])
+    println(o, \<S>i0 [shape=plaintext, label="%_V\n%_A"];<S> % [voltage(n), current(n)])
+    println(o, \<S>N0 -> i0;<S>)
+
+  defn print-pnode (o:OutputStream, i:Int, n:StarNode) :
+    println(o, \<S>N%_ [shape=rectangle,label=%~];<S> % [i, description(n)])
+    println(o, \<S>i%_ [shape=plaintext, label="%_V\n%_A"];<S> % [i, voltage(n), current(n)])
+    println(o, \<S>N0 -> N%_ [dir=none, label="%,"];<S> % [i, attributes(n)])
+    println(o, \<S>N%_ -> i%_;<S> % [i, i])
+
+  defn print-file (o:OutputStream) :
+    println(o, "digraph system_architecture {")
+    val o2 = IndentedStream(o)
+    println(o2, "splines=line;")
+    print-cnode(o2, cnode)
+    do(print-pnode{o2, _, _}, 1 to false, pnodes)
+    println(o, "}")
+
+  new Printable :
+    defmethod print (o:OutputStream, this) :
+      print-file(o)
+
+;<example>===================================================
+;============================================================
+;============================================================
+
+add-center-node("Electron", 12.0, 1.3)
+add-peripheral-node("IPEX Connector", 3.0, 0.3, [`i2c, `spi])
+add-peripheral-node("Accelerometer", 6.0, 1.3, [`i2c, `spi])
+add-peripheral-node("Spin", 3.5, 0.1, [`wifi])
+add-peripheral-node("Washing Machine", 2.5, 1.0, [`p802-11])
+
+;============================================================
+;============================================================
+;===================================================<example>
