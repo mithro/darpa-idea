@@ -21,22 +21,10 @@ stanza-files :
   "src/utils/dlopen.stanza"
   "src/utils/rtm-utils.stanza"
   "src/utils/structures.stanza"
-  "src/main/flags.stanza"
-  "src/main/errors.stanza"
-  "src/main/driver.stanza"
-  "src/main/launcher.stanza"
+  "src/utils/keyed-set.stanza"
   "src/main/config.stanza"
-  "src/main/jitpcb.stanza"
-  "src/main/pass-manager.stanza"
   "src/main/param-manager.stanza"
-  "src/main/passes.stanza"
-  "src/ir/part-solver.stanza"
-  "src/ir/ir-check.stanza"
-  "src/ir/ir-lower.stanza"
-  "src/ir/reader-plugin.stanza"
-  "src/ir/pin-solver.stanza"
-  "src/ir/pin-state.stanza"
-  "src/ir/key-in.stanza"
+  "src/main/errors.stanza"
 
 external-files :
   "runtime/rtm-utils.c"
@@ -54,12 +42,35 @@ compiling :
 
 jitpcb core :
   package: jitpcb
+  stanza-files :
+    "src/inputspec/input-ir.stanza"
+    "src/inputspec/test-ir.stanza"    
+    "src/ir/ir-lower.stanza"
+    "src/ir/pin-solver.stanza"
+    "src/ir/pin-state.stanza"
+    "src/main/flags.stanza"
+    "src/main/driver.stanza"
+    "src/main/launcher.stanza"    
+    "src/main/pass-manager.stanza"
+    "src/main/passes.stanza"
+    "src/main/jitpcb.stanza"
   
 jitpcb plugin checker :
   package: rtm/ir-check
+  stanza-files :
+    "src/ir/ir-check.stanza"    
+
+jitpcb plugin passes :
+  package: rtm/ir-passes
+  stanza-files :
+    "src/ir/ir-passes.stanza"
 
 jitpcb plugin parsers :
   package: rtm/reader-plugin
+  stanza-files :
+    "src/ir/reader-plugin.stanza"    
 
 jitpcb plugin key-in :
   package: key-in
+  stanza-files :
+    "src/ir/key-in.stanza"

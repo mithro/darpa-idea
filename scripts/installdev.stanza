@@ -16,39 +16,35 @@ defstruct ProjFile :
   core: Target
   plugins: Tuple<Plugin>
   output-files: Table<String,String> with: (init => HashTable<String,String>())
+with :
+  printer => true
 
 deftype FileAssoc
 defmulti command (a:FileAssoc) -> String
 defstruct SuffixAssoc <: FileAssoc :
   suffix: String
   command: String with: (as-method => true)
+with :
+  printer => true
 defstruct ListAssoc <: FileAssoc :
   files: Tuple<String>
   command: String with: (as-method => true)
+with :
+  printer => true
   
 defstruct Target :
   package: Symbol
+  stanza-files: Tuple<String>
   external-files: Tuple<String>
   linker-flags: Tuple<KeyValue<Symbol,String>>  
+with :
+  printer => true
 
 defstruct Plugin :
   name: Symbol
   target: Target
-
-;============================================================
-;================ Project File Printing =====================
-;============================================================
-
-defmethod print (o:OutputStream, p:ProjFile) :
-  print(o, "ProjFile(macro-files = %_, stanza-files = %_, external-files = %_, linker-flags = %_, compiler-commands = %_, core = %_, plugins = %_)" % [macro-files(p), stanza-files(p), external-files(p), linker-flags(p), compiler-commands(p), core(p), plugins(p)])
-defmethod print (o:OutputStream, x:SuffixAssoc) :
-  print(o, "SuffixAssoc(%~, %~)" % [suffix(x), command(x)])
-defmethod print (o:OutputStream, x:ListAssoc) :
-  print(o, "ListAssoc(%~, %~)" % [files(x), command(x)])
-defmethod print (o:OutputStream, t:Target) :
-  print(o, "Target(%~, %_, %_)" % [package(t), external-files(t), linker-flags(t)])
-defmethod print (o:OutputStream, p:Plugin) :
-  print(o, "Plugin(%~, %_)" % [name(p), target(p)])
+with :
+  printer => true
 
 ;============================================================
 ;=============== Project File Syntax ========================
@@ -105,10 +101,14 @@ defsyntax projfile :
   
   defproduction external-files : Tuple<String>
   defrule external-files = (external-files #:! #LS! (?fs:#string! ...)) : to-tuple(fs)
+
+  defproduction stanza-files : Tuple<String>
+  defrule stanza-files = (stanza-files #:! #LS! (?fs:#string! ...)) : to-tuple(fs)
   
   defproduction target-entry! : KeyValue<Symbol,?>
   defrule target-entry! = (package #:! ?value:#symbol!) : `package => value
   defrule target-entry! = (?ef:#external-files) : `external-files => ef
+  defrule target-entry! = (?sf:#stanza-files) : `stanza-files => sf
   defrule target-entry! = (?lf:#linker-flags) : `linker-flags => lf
   fail-if target-entry! = () : PFE(closest-info(), "Unrecognized target option.")
   
@@ -117,6 +117,7 @@ defsyntax projfile :
     defn entry (e:ParseEntry) : parse(closest-info(), es, e)
     Target(
       entry(RequiredEntry(`package, true))
+      entry(OptionalEntry(`stanza-files, true, []))
       entry(OptionalEntry(`external-files, true, []))
       entry(OptionalEntry(`linker-flags, true, [])))
 
@@ -131,6 +132,8 @@ defsyntax projfile :
     `compiling => to-tuple(es)
   defrule top-entry! = (?lf:#linker-flags) :
     `linker-flags => lf
+  defrule top-entry! = (?sf:#stanza-files) :
+    `stanza-files => sf
   defrule top-entry! = (?ef:#external-files) :
     `external-files => ef
   defrule top-entry! = (stanza-files #:! #LS! (?files:#string! ...)) :
@@ -351,6 +354,18 @@ defn compute-cc-files (pj:ProjFile, t:Target) :
     if not compile?(f) : relative-to-dev(f)
     else : output-files(pj)[f]
 
+defn compute-stanza-files (pj:ProjFile, t:Target) :
+  val files = unique(cat(stanza-files(pj), stanza-files(t)))
+  map(relative-to-dev, files)
+
+defn all-stanza-files (pj:ProjFile) :
+  val files = unique $ generate<String> :
+    do(yield, stanza-files(pj))
+    defn scan (t:Target) : do(yield, stanza-files(t))
+    scan(core(pj))
+    do(scan{target(_)}, plugins(pj))
+  map(relative-to-dev, files)
+
 defn compute-cc-flags (pj:ProjFile, t:Target, platform:Symbol, plugin?:True|False) :
   val flags = Vector<String>()
   defn add? (flag:String|False) :
@@ -371,12 +386,10 @@ defn linker-flags (t:Target, platform:Symbol) :
 
 defn make-build-file (pj:ProjFile, platform:Symbol) :
   val o = StringBuffer()
-  ;Compute all files
-  val stz-files = to-tuple(seq(relative-to-dev, stanza-files(pj)))
   ;Generate core target
   let :
     val filled = replace-template(CORE-TARGET, [
-      "{STZ-FILES}" => indented-strings(stz-files,4)
+      "{STZ-FILES}" => indented-strings(compute-stanza-files(pj, core(pj)),4)
       "{PACKAGE}" => to-string(package(core(pj)))
       "{CC-FILES}" => indented-strings(compute-cc-files(pj, core(pj)), 4)
       "{CC-FLAGS}" => compute-cc-flags(pj, core(pj), platform, false)])
@@ -386,7 +399,7 @@ defn make-build-file (pj:ProjFile, platform:Symbol) :
     val target = target(plugin)
     val filled = replace-template(PLUGIN-TARGET, [
       "{NAME}" => to-string(name(plugin))
-      "{STZ-FILES}" => indented-strings(stz-files,4)
+      "{STZ-FILES}" => indented-strings(compute-stanza-files(pj, target),4)
       "{PACKAGE}" => to-string(package(target))
       "{CC-FILES}" => indented-strings(compute-cc-files(pj, target), 4)
       "{CC-FLAGS}" => compute-cc-flags(pj, target, platform, true)])
@@ -495,7 +508,7 @@ defn make-make-jitpcb-file (pj:ProjFile, platform:Symbol, cross-platform:Symbol|
   P $ "ROOT=`pwd`"
 
   ;Declare files
-  P $ \<S>FILES="%s"<S> % [seq(relative-to-dev, stanza-files(pj))]
+  P $ \<S>FILES="%s"<S> % [all-stanza-files(pj)]
 
   ;Create and enter directory 
   P $ replace-template(MKDIR-FMT, ["{STAGE}" => build-folder(platform)])
