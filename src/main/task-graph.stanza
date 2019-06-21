@@ -1,0 +1,108 @@
+defpackage jitpcb/task-graph :
+  import core
+  import collections
+
+;============================================================
+;================ Input Datastructures ======================
+;============================================================
+  
+public deftype Task
+public defmulti name (t:Task) -> Symbol
+public defmulti parent (t:Task) -> Symbol
+
+public deftype ThruTask <: Task
+public defmulti optional? (t:ThruTask) -> True|False
+public defmulti output? (t:ThruTask) -> True|False
+defmethod optional? (t:ThruTask) : false
+defmethod output? (t:ThruTask) : true
+
+public deftype EndTask <: Task
+
+;============================================================
+;==================== Output Path ===========================
+;============================================================
+
+public defstruct TaskPath :
+  tasks: Tuple<Task>
+  prev-tasks: Tuple<ThruTask|False>
+
+;============================================================
+;==================== Implementation ========================
+;============================================================
+
+public defn TaskPath (stages:Collection<Symbol>,
+                      tasks:Collection<Task>,
+                      CannotReachError:(Symbol, Tuple<Symbol>) -> Exception) :
+  ;Collect task table
+  val task-table = to-hashtable<Symbol,Task> $
+    for t in tasks seq : name(t) => t
+                       
+  ;First calculate all the children of all tasks
+  val thru-children = HashTable<Symbol, List<Symbol>>(List())
+  val end-children = HashTable<Symbol, List<Symbol>>(List())
+  for t in tasks do :
+    val children = thru-children when t is ThruTask else end-children
+    update(children, cons{name(t), _}, parent(t))
+
+  ;Return the first reachable destination from start
+  defn first-reachable-dest (start:Symbol, dests:Set<Symbol>) :
+    label<Symbol|False> return :
+      val queue = Queue<Symbol>()
+      add(queue, start)
+      while not empty?(queue) :
+        val stage = pop(queue)
+        if dests[stage] : return(stage)
+        else : do(add{queue, _}, thru-children[stage])
+
+  ;Return the path from start (exclusive) to dest (inclusive)
+  defn path-to (start:Symbol, dest:Symbol) :
+    generate<Symbol> :
+      let loop (node:Symbol = dest) :
+        if node != start :
+          loop(parent(task-table[node]))
+          yield(node)      
+
+  ;Accumulate all the stages that we need to hit
+  val stage-set = to-hashset<Symbol> $
+    for s in stages seq :
+      match(task-table[s]) :
+        (t:ThruTask) : name(t)
+        (t:EndTask) : parent(t)
+
+  ;Compute the path required to hit all of the required stages.
+  ;Path will contain all the thru-nodes in the order that they must be hit
+  ;to reach the thru-tasks given.
+  val path = Vector<Symbol>()
+  compute-path-from(`input) where :
+    defn compute-path-from (start:Symbol) :
+      if not empty?(stage-set) :
+        match(first-reachable-dest(start, stage-set)) :
+          (dst:Symbol) :
+            add-all(path, path-to(start, dst))
+            remove(stage-set, dst)
+            compute-path-from(dst)
+          (_:False) :
+            throw(CannotReachError(start, to-tuple(stage-set)))  
+
+  ;Compute the evaluation path using the required set
+  val eval-path = Vector<Task>()
+  val required = to-hashset<Symbol>(stages)
+  for end-stage in end-children[`input] do :
+    add(eval-path, task-table[end-stage]) when required[end-stage]
+  for stage in path do :
+    val t = task-table[stage] as ThruTask
+    if not optional?(t) or required[stage] :
+      add(eval-path, task-table[stage])
+    for end-stage in end-children[stage] do :
+      add(eval-path, task-table[end-stage]) when required[end-stage]
+
+  ;Compute the task with the previous output
+  val prev-tasks = Vector<ThruTask|False>()
+  var prev-task:ThruTask|False = false
+  for task in eval-path do :
+    add(prev-tasks, prev-task)
+    match(task:ThruTask) :
+      (prev-task = task) when output?(task)
+      
+  ;Return TaskPath
+  TaskPath(to-tuple(eval-path), to-tuple(prev-tasks))

@@ -1,0 +1,72 @@
+#use-added-syntax(serializer)
+
+defpackage rtm/structures :
+  import core
+  import collections
+  import serialize
+  import rtm/ir
+  import rtm/ir-utils
+
+
+;============================================================
+;=================== Pruning Options ========================
+;============================================================
+
+public deftype PruningOption
+public defstruct PruneFor <: PruningOption :
+  type: Symbol
+public defstruct PruneAll <: PruningOption :
+  types: List<Symbol>
+public defstruct NoPrune <: PruningOption
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/structures/PruneFor :
+    type: Symbol
+  rtm/structures/PruneAll :
+    types: List<Symbol>
+  rtm/structures/NoPrune
+
+;============================================================
+;=================== PartList Datastructure =================
+;============================================================
+
+public defstruct PartList :
+  entries: List<PartEntry>
+
+public defstruct PartEntry :
+  inst: Symbol
+  component: Symbol
+  reference: String
+  part: Symbol
+  manufacturer: String
+  mpn: String
+  emodel: EModel|False
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/structures/PartList :
+    entries: List<PartEntry>
+
+  rtm/structures/PartEntry :
+    inst: Symbol
+    component: Symbol
+    reference: String
+    part: Symbol
+    manufacturer: String
+    mpn: String
+    emodel: EModel|False
+
+defmethod print (o:OutputStream, p:PartList) :
+  ;Group entries by part 
+  val groups = HashTable-init<Symbol,Vector<PartEntry>>(Vector<PartEntry>{})
+  for e in entries(p) do :
+    add(groups[part(e)], e)
+
+  ;Print parts
+  print(o, "Quantity, Reference Designators, Manufacturer, Manufacturer Part Number, Value (Optional)")
+  for parts in values(groups) do :
+    val quantity = length(parts)
+    val part = parts[0]
+    print(o, "\n%_, %s, %_, %_" % [quantity, seq(reference,parts), manufacturer(part), mpn(part)])
+    match(value-string(emodel(part))) :
+      (x:String) : print(o, ", %_" % [x])
+      (x:False) : false

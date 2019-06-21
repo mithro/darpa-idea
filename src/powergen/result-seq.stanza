@@ -1,0 +1,57 @@
+defpackage result-seq :
+  import core
+  import collections
+
+public deftype Pass
+
+;Maximum number of empty sequences in a row that
+;process can return before we give up.
+public defmulti max-iterations (p:Pass) -> Int
+
+;Maximum number of candidate proposals to try out
+;and flow through rest of pipe, before giving up.
+public defmulti max-retries (p:Pass) -> Int
+
+;Maximum number of solutions to keep from each
+;proposal.
+public defmulti max-solutions (p:Pass) -> Int
+
+;Return all proposals for a given input.
+public defmulti process (p:Pass, input) -> Seq
+
+public defn process (passes:Tuple<Pass>, input) -> Seq :
+  defn* gen (i:Int, input) -> Seq :
+    if i < length(passes) :    
+      val pass = passes[i]
+
+      ;Generate proposal solutions
+      val proposals = cat-all $ repeat-while $ fn () :
+        let loop (iter:Int = 0) :
+          val result = process(pass, input)
+          if empty?(result) :
+            if iter < max-iterations(pass) : loop(iter + 1)
+            else : None()
+          else : One(result)
+
+      ;Generate results
+      val results = repeat-while $ fn () :
+        let loop (retry:Int = 0) :
+          if empty?(proposals) :
+            None()
+          else :
+            val results = gen(i + 1, next(proposals))          
+            if empty?(results) :
+              if retry < max-retries(pass) : loop(retry + 1)
+              else : None()
+            else :
+              val n = max-solutions(pass)
+              One(take-up-to-n(n, results))
+
+      ;Return all results
+      cat-all(results)    
+    else :
+      to-seq([input])
+  ;Driver
+  gen(0, input)
+
+

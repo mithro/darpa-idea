@@ -1,0 +1,62 @@
+defpackage jitpcb/driver :
+  import core
+  import collections
+  import jitpcb/errors
+  import stz/arg-parser
+  import jitpcb/flags
+  import rtm/utils
+  import pass-manager-io
+  import jitpcb/core-interface
+  import rtm/errors
+  import rtm/ir-gen
+  import jitpcb/config
+  import plugins/master
+  import rtm/ir-connections
+
+public var LAUNCH-FN
+defn process (parsed:ParseResult) :
+  ;No arguments accepted
+  if not empty?(args(parsed)) :
+    throw(CommandCannotTakeArgs("process", args(parsed)))
+  val filename = command-line-arguments()[0]
+
+  ;Set seed: retrieve the seed
+  val seed = long-arg?(parsed, "seed", current-time-us())
+  ;Set the seed
+  srand(seed)
+  ;Output the seed
+  match(single?(parsed, "seed-out", false)) :
+    (file:String) : spit(file, seed)
+    (str:False) : false
+    
+  ;Parse flags
+  parse-flags(multiple?(parsed, "flags", List()))
+
+  ;Prepare launch function
+  LAUNCH-FN = fn () :
+    ;Call requested passes
+    defn symbol-args (name:String) :
+      map(to-symbol, multiple?(parsed, name, List()))
+    call-core-process(
+      GenArg(filename, ir-statements()),
+      single?(parsed, "o", false),
+      single?(parsed, "params", false),
+      symbol-args("passes"),
+      symbol-args("configs"))    
+
+val PROCESS-COMMAND = Command("process", 
+  [MultipleFlag("passes", false)
+   MultipleFlag("configs", true)
+   MultipleFlag("flags", true)
+   SingleFlag("seed", true)
+   SingleFlag("seed-out", true)
+   SingleFlag("o", true)
+   SingleFlag("params", true)]
+  process)
+
+try :
+  val args = command-line-arguments()[1 to false]  
+  parse-args([PROCESS-COMMAND], false, args)
+catch (e) :
+  println(e)
+  exit(-1)

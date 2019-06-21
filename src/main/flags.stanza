@@ -1,0 +1,29 @@
+defpackage jitpcb/flags :
+  import core
+  import collections
+  import jitpcb/errors
+
+val FLAGS = HashTable<String, String|False>()
+
+public defn flag? (name:String) :
+  key?(FLAGS, name)
+
+public defn flag?<?T> (name:String, default:?T) :
+  if flag?(name) : flag(name)
+  else : default
+
+public defn flag (name:String) :
+  fatal("No flag named %~." % [name]) when not flag?(name)
+  FLAGS[name]
+
+public defn parse-flags (flags0:Seqable<String>) :
+  val flags = to-seq(flags0)
+  let loop () :
+    if not empty?(flags) :
+      val flag = next(flags)
+      FLAGS[flag] = 
+        if not empty?(flags) and peek(flags) == "=" :
+          next(flags) ;Eat "="
+          throw(NoFlagValue(flag)) when empty?(flags)
+          next(flags)
+      loop()

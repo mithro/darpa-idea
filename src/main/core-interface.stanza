@@ -1,0 +1,26 @@
+defpackage jitpcb/core-interface :
+  import core
+  import collections
+  import pass-manager-io
+  import plugins/master
+  import jitpcb/config
+
+public defn call-core-plugin (entry:Symbol, arg, verbose?:True|False) :
+  val core-plugin-path = norm-path("%_/plugins/core.plugin" % [jitpcb-install-dir()])
+  println("Calling core plugin %~" % [core-plugin-path]) when verbose?
+  call(Plugin(core-plugin-path), entry, arg)  
+
+public defn call-core-plugin (entry:Symbol, arg) :
+  call-core-plugin(entry, arg, false)
+
+public defn call-core-process (arg:PassArg,
+                               output:String|False,
+                               param-filename:String|False,
+                               passes:Seqable<Symbol>,
+                               configs:Seqable<Symbol>) :
+  call-core-plugin(`process, [
+    arg
+    output
+    param-filename
+    to-list(passes)
+    to-list(configs)])

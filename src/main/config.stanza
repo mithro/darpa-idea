@@ -1,0 +1,40 @@
+defpackage jitpcb/config :
+  import core
+  import jitpcb/errors
+  import stz/config
+  import stz/params
+
+;============================================================
+;====================== Parameters ==========================
+;============================================================
+
+public defn jitpcb-version () : [0 7 4]
+
+public defn jitpcb-install-dir () :
+  match(get-env("JITPCB_ROOT")) :
+    (p:String) :
+      ;Ensure license file is where it should be
+      val license-file = norm-path("%_/License.txt" % [p])
+      if not file-exists?(license-file) :
+        throw(NoLicenseBadInstall(p))
+      p      
+    (_:False) :
+      throw(NoJitPCBRoot())
+
+;============================================================
+;=============== Verify Correct Installation ================
+;============================================================
+
+public defn verify-config () :
+  ;Ensure that Stanza is installed
+  read-config-file()
+
+  ;Ensure that JitPCB can be found
+  val jitpcb-dir = jitpcb-install-dir()
+  defn home-dir (name:String) :
+    norm-path("%_/%_" % [jitpcb-dir, name])
+    
+  ;Ensure that JitPCB pkgs are registered with Stanza
+  if not contains?(STANZA-PKG-DIRS, home-dir("pkgs")) :
+    throw(NoPkgDir(jitpcb-dir))
+

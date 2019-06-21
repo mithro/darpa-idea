@@ -1,0 +1,95 @@
+defpackage rtm/property-merge :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-utils
+
+;============================================================
+;=================== Input Datastructure ====================
+;============================================================
+
+public deftype PEntry
+public defmulti properties (p:PEntry) -> Tuple<KeyValue<Symbol,?>>
+public defmulti ref (p:PEntry) -> Ref
+public defmulti level (p:PEntry) -> Int
+public defmulti type (p:PEntry) -> PinType
+
+public deftype PEnv<T>
+public defmulti expand (e:PEnv, r:Ref, t:PinType) -> List<Ref>
+public defmulti make-entry<?T> (e:PEnv<?T>, r:Ref, kvs:Tuple<KeyValue<Symbol,?>>) -> T
+
+;============================================================
+;============================================================
+;============================================================
+
+public defn merge-properties<?T> (env:PEnv<?T>, entries:Seqable<PEntry>) -> Seqable<T> :
+  val table = HashTable<Ref,List<PKey>>(List())
+  for e in entries do :
+    val pkey = PKey(level(e), length(ref(e)), properties(e))
+    for r in expand(env, ref(e), type(e)) do :
+      update(table, cons{pkey,_}, r)
+  for e in table seq :
+    val sorted = lazy-qsort(value(e))
+    val merged = merge(seq(properties, sorted))
+    make-entry(env, key(e), merged)
+
+defstruct PKey <: Comparable<PKey> : (level:Int, length:Int, properties:Tuple<KeyValue<Symbol,?>>)
+with: (printer => true)
+
+;Less indicates lower priority.
+;Return -1 if a has lower priority than b.
+;Lower levels take priority over higher levels.
+;Longer references take priority over shorter references.
+defmethod compare (a:PKey, b:PKey) :
+  val c = compare(level(a), level(b))
+  if c == 0 : compare(length(a), length(b))    
+  else : -1 * c
+
+;Merge the given sets of key-value pairs into a single set.
+;The entries from later sets override entries from earlier sets.
+;Within a set, later entries override earlier entries.
+defn merge (kv-sets:Seqable<Tuple<KeyValue<Symbol,?>>>) :
+  val table = HashTable<Symbol,?>()
+  for e in cat-all(kv-sets) do :
+    table[key(e)] = value(e)
+  to-tuple(table)
+
+;============================================================
+;==================== Testing ===============================
+;============================================================
+;
+;defstruct TestPEntry <: PEntry :
+;  level: Int with: (as-method => true)
+;  ref: Ref with: (as-method => true)
+;  type: PinType with: (as-method => true)
+;  properties: Tuple<KeyValue<Symbol,?>> with: (as-method => true)
+;with:
+;  printer => true
+;
+;public defn test () :
+;  val entries = [
+;    TestPEntry(2, Ref(`a), PinArray(SinglePin(), 10), [`voltage => 3.3, `current => 4.0])
+;    TestPEntry(2, IndexRef(Ref(`a), 3), SinglePin(), [`voltage => 6.6, `override => true])
+;    TestPEntry(2, IndexRef(Ref(`a), 4), SinglePin(), [`voltage => 6.6, `override => true])
+;    TestPEntry(1, IndexRef(Ref(`a), 4), SinglePin(), [`voltage => 7.7, `override => true])
+;    TestPEntry(0, IndexRef(Ref(`a), 5), SinglePin(), [`voltage => 8.7, `override => false])]
+;
+;  val env = new PEnv<TestPEntry> :
+;    defmethod expand (this, r:Ref, t:PinType) :
+;      to-list $ generate<Ref> :
+;        defn exp (suffix: Ref -> Ref, t:PinType) :
+;          match(t) :
+;            (t:SinglePin) :
+;              yield(suffix(r))
+;            (t:PinArray) :
+;              for i in 0 to length(t) do :
+;                exp(IndexRef{suffix(_), i}, type(t))
+;        exp({_}, t)    
+;    defmethod make-entry (this, r:Ref, kvs:Tuple<KeyValue<Symbol,?>>) :
+;      TestPEntry(0, r, SinglePin(), kvs)
+;
+;  val merged = merge-properties(env, entries)
+;  println("===== Merged =====")
+;  do(println, merged)
+;  
+;test()

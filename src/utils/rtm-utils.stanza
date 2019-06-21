@@ -1,0 +1,797 @@
+defpackage rtm/utils :
+  import core
+  import collections
+  import stz/arg-parser
+
+;============================================================
+;================= Table Utilities ==========================
+;============================================================
+
+public defn to-inttable<?V> (key:V -> Int, values:Seqable<?V>) -> IntTable<V> :
+  to-inttable<V> $
+    for v in values seq :
+      key(v) => v
+
+public defn to-hashtable<?K,?V> (key:V -> ?K, values:Seqable<?V>) -> HashTable<K,V> :
+  to-hashtable<K,V> $
+    for v in values seq :
+      key(v) => v
+
+public defn update?<?K,?V> (f:() -> V, table:Table<?K,?V>, k:K) -> V :
+  if key?(table, k) :
+    table[k]
+  else :
+    val v = f()
+    table[k] = v
+    v
+
+;============================================================
+;===================== String Utilities =====================
+;============================================================
+
+public defn pre<?T,?S> (prefix:?S, xs:Seqable<?T>) :
+  seq-cat({[prefix _]}, xs)
+
+public defn join<?T> (xs0:Seqable<?T>, pre:Maybe<?T>, mid:Maybe<?T>, suf:Maybe<?T>) :
+  val xs = to-seq(xs0)
+  if empty?(xs) : []
+  else :
+    cat-all $ [
+      attempt: [value(pre as? One<T>)] else: []
+      attempt: join(xs, value(mid as? One<T>)) else: xs
+      attempt: [value(suf as? One<T>)] else: []]
+
+public defn join-nl<?T> (xs:Seqable<?T>) :
+  join(xs, "\n")
+  
+public defn pre-nl<?T> (xs:Seqable<?T>) :
+  pre("\n", xs)
+
+public defn add-indents (x) :
+  new Printable :
+    defmethod print (o:OutputStream, this) :
+      print(IndentedStream(o, 2), x)
+
+public defn replace-template (template:String, fills:Seqable<KeyValue<String,String>>) :
+  defn fill (t:String, e:KeyValue<String,String>) :
+    replace(t, key(e), value(e))
+  reduce(fill, template, fills)
+
+;============================================================
+;===================== Argument Parsing =====================
+;============================================================
+
+#for (num-arg in [int-arg, long-arg, float-arg, double-arg]
+      num-arg? in [int-arg?, long-arg?, float-arg?, double-arg?]
+      to-num in [to-int, to-long, to-float, to-double]
+      Num in [Int, Long, Float, Double]) :
+
+  public defn num-arg (parsed:ParseResult, flag:String) :
+    val str = single(parsed, flag)
+    match(to-num(str)) :
+      (v:Num) : v
+      (v:False) : throw(FlagNotANumber(flag, str))  
+
+  public defn num-arg?<?T> (parsed:ParseResult, flag:String, default:?T) :
+    if has-flag?(parsed, flag) : num-arg(parsed, flag)
+    else : default
+
+public defstruct FlagNotANumber <: Exception :
+  flag:String
+  value:String
+defmethod print (o:OutputStream, e:FlagNotANumber) :
+  val fmt = "The value given to flag %~ (%~) is not a number."
+  print(o, fmt % [flag(e), value(e)])
+
+;============================================================
+;====================== Property List =======================
+;============================================================
+
+public defstruct Property :
+  name: Symbol
+  optional?: True|False
+  unique?: True|False
+
+public deftype PropertyList
+public defmulti key? (pl:PropertyList, name:Symbol) -> True|False
+public defmulti property (pl:PropertyList, name:Symbol) -> ?
+public defmulti properties (pl:PropertyList, name:Symbol) -> List
+
+public deftype PropertyListException <: Exception
+public defstruct MissingProperty <: PropertyListException: (name:Symbol)
+public defstruct DuplicateProperty <: PropertyListException: (name:Symbol)
+public defstruct UnknownProperty <: PropertyListException: (name:Symbol)
+
+public defn PropertyList (ps:Collection<Property>, vs:List<KeyValue<Symbol,?>>, complete?:True|False) :
+  ;Store values in table
+  val table = HashTable<Symbol,List>(List())
+  for entry in vs do :
+    update(table, cons{value(entry), _}, key(entry))
+  map!(reverse{value(_)}, table)
+  ;Check for missing properties
+  for p in ps do :
+    if not key?(table, name(p)) and not optional?(p) :
+      throw(MissingProperty(name(p)))
+  ;Check for duplicate properties  
+  for entry in table do :
+    match(find({name(_) == key(entry)}, ps)) :
+      (p:Property) :
+        if length(value(entry)) > 1 and unique?(p) :
+          throw(DuplicateProperty(key(entry)))
+      (p:False) :
+        if complete? :
+          throw(UnknownProperty(key(entry)))
+  ;Return datastructure
+  new PropertyList :
+    defmethod key? (this, name:Symbol) : key?(table, name)
+    defmethod properties (this, name:Symbol) : table[name]
+    defmethod property (this, name:Symbol) : head(table[name])
+
+public defn PropertyList (ps:Collection<Property>, vs:List<KeyValue<Symbol,?>>) :
+  PropertyList(ps, vs, true)
+
+public defn property? (pl:PropertyList, name:Symbol) :
+  property(pl,name) when key?(pl, name)
+
+public defn property? (pl:PropertyList, name:Symbol, default) :
+  property(pl,name) when key?(pl,name) else default
+
+;============================================================
+;================= Get the File Type ========================
+;============================================================
+
+public deftype FileType
+public defstruct RegularFileType <: FileType
+public defstruct DirectoryType <: FileType
+public defstruct OtherType <: FileType
+
+defmethod print (o:OutputStream, t:FileType) :
+  print{o, _} $ match(t) :
+    (t:RegularFileType) : "Regular File"
+    (t:DirectoryType) : "Directory"
+    (t:OtherType) : "Other"
+
+extern get_file_type: ptr<byte> -> int
+public lostanza defn file-type (filename:ref<String>) -> ref<FileType> :
+  val r = call-c get_file_type(addr!(filename.chars))
+  if r == -1 : throw(FileTypeException(filename, linux-error-msg()))
+  if r == 0 : return RegularFileType()
+  else if r == 1 : return DirectoryType()
+  else if r == 2 : return OtherType()
+  else : return throw(FileTypeException(filename))
+
+public defstruct FileTypeException <: IOException :
+  filename: String
+  cause: String|False with: (default => false)
+defmethod print (o:OutputStream, e:FileTypeException) :
+  val cause-str = match(cause(e)) :
+    (c:String) : ": %_" % [c]
+    (c:False) : ""
+  print(o, "Error occurred when determining type of file %_%_." % [filename(e), cause-str])
+
+;============================================================
+;================ List Contents of Directory ================
+;============================================================
+
+extern free_stringlist : ptr<StringList> -> int
+lostanza deftype StringList :
+  n: int
+  capacity: int
+  strings: ptr<ptr<byte>>
+  
+extern list_dir: ptr<byte> -> ptr<StringList>
+public lostanza defn dir-files (dirname:ref<String>, include-parents?:ref<True|False>) -> ref<Tuple<String>> :
+  ;Call list dir
+  val list = call-c list_dir(addr!(dirname.chars))
+  val null = 0L as ptr<?>
+  if list == null: throw(DirException(dirname, linux-error-msg()))
+  ;Convert to vector
+  val strings = Vector<String>()
+  for (var i:int = 0, i < list.n, i = i + 1) :
+    add(strings, String(list.strings[i]))
+  ;Free stringlist
+  call-c free_stringlist(list)
+  ;Apply filter
+  if include-parents? == true : return to-tuple(strings)
+  else : return to-tuple(filter(fn(without-parents), strings))
+
+defn without-parents (name:String) : name != "." and name != ".."
+
+;val DIR-BUFFER = Vector<String>()
+;extern defn put_dir_entry (name:ptr<byte>) -> int :
+;  add(DIR-BUFFER, String(name))
+;  return 0
+;extern list_dir: (ptr<byte>, ptr<(ptr<byte> -> ?)>) -> int
+;public lostanza defn dir-files (dirname:ref<String>, 
+;                                include-parents?: ref<True|False>) -> ref<Tuple<String>> :
+;  clear(DIR-BUFFER)
+;  val r = call-c list_dir(addr!(dirname.chars), addr(put_dir_entry))
+;  if r == -1 : throw(DirException(dirname, linux-error-msg()))
+;  if include-parents? == true : return to-tuple(DIR-BUFFER)
+;  else : return to-tuple(filter(fn(without-parents), DIR-BUFFER))
+
+public defn dir-files (dirname:String) : dir-files(dirname, false)
+
+public defstruct DirException <: IOException :
+  filename: String
+  cause: String
+defmethod print (o:OutputStream, e:DirException) :
+  print(o, "Error occurred when listing contents of directory %_: %_." % 
+    [filename(e), cause(e)])
+
+;============================================================
+;================== Recursively Delete ======================
+;============================================================
+
+public defn delete-recursive (path:String) :
+  if file-type(path) is DirectoryType :
+    for file in dir-files(path) do :
+      delete-recursive(norm-path("%_/%_" % [path, file]))
+  delete-file(path)
+
+;============================================================
+;================ Create a New Directory ====================
+;============================================================
+
+extern mkdir: (ptr<byte>, long) -> int
+
+public lostanza defn create-dir (dirname:ref<String>, 
+                                 permissions:ref<Int>) -> ref<False> :
+  val result = call-c mkdir(addr!(dirname.chars), permissions.value)
+  if result == -1 : throw(CreateDirException(dirname, linux-error-msg()))  
+  return false
+
+public defn create-dir (dirname:String) :
+  create-dir(dirname, 0o777)
+
+public defstruct CreateDirException <: IOException :
+  filename: String
+  cause: String
+defmethod print (o:OutputStream, e:CreateDirException) :
+  print(o, "Error occurred when attempting to create directory %_: %_." % 
+    [filename(e), cause(e)])
+
+;============================================================
+;======================== Sleep =============================
+;============================================================
+
+extern sleep_us : long -> int
+public lostanza defn sleep-us (us:ref<Long>) -> ref<False> :
+  call-c sleep_us(us.value)
+  return false
+
+;============================================================
+;======================= Utilities ==========================
+;============================================================
+
+lostanza defn linux-error-msg () -> ref<String> :
+   val s = call-c clib/strerror(call-c clib/get_errno())
+   return String(s)
+
+;============================================================
+;======================== FreeLists =========================
+;============================================================
+
+public deftype FreeList
+public defmulti clear (l:FreeList) -> False
+public defmulti capacity (l:FreeList) -> Int
+public defmulti make (l:FreeList, used?:True|False) -> Int
+public defmulti set-free (l:FreeList, i:Int) -> False
+public defmulti set-used (l:FreeList, i:Int) -> False
+public defmulti all-free (l:FreeList) -> Seq<Int>
+public defmulti all-used (l:FreeList) -> Seq<Int>
+public defmulti next-free (l:FreeList) -> Int
+public defmulti next-used (l:FreeList) -> Int
+public defn make (l:FreeList) : make(l, true)
+public defmulti used? (l:FreeList, i:Int) -> True|False
+public defmulti num-used (l:FreeList) -> Int
+public defmulti num-free (l:FreeList) -> Int
+public defn free? (l:FreeList, i:Int) : not used?(l, i)
+public defmulti free-idx (l:FreeList, n:Int) -> Int
+public defmulti used-idx (l:FreeList, n:Int) -> Int
+
+public defn FreeList () :
+  ;State
+  ;The first 'num-used' items in list are being used.
+  var num-used = 0
+  val list = Vector<Int>() ;Vector holding all items
+  val idx = Vector<Int>()  ;Vector holding indices of items
+
+  ;Swap item i in list with item j
+  defn swap (i:Int, j:Int) :
+    if i != j :
+      val item-i = list[i]
+      val item-j = list[j]
+      list[i] = item-j
+      list[j] = item-i
+      idx[item-i] = j
+      idx[item-j] = i    
+
+  ;Set item i as being used
+  defn set-used (i:Int) :
+    #if-not-defined(OPTIMIZE) :
+      fatal("%_ out of bounds." % [i]) when i < 0 or i >= length(list)
+    val idx = idx[i]
+    if idx >= num-used :
+      swap(idx, num-used)
+      num-used = num-used + 1
+    
+  ;Set item i as being free
+  defn set-free (i:Int) :
+    #if-not-defined(OPTIMIZE) :
+      fatal("%_ out of bounds." % [i]) when i < 0 or i >= length(list)
+    val idx = idx[i]
+    if idx < num-used :
+      num-used = num-used - 1
+      swap(idx, num-used)      
+
+  new FreeList :
+    defmethod clear (this) :
+      clear(idx)
+      clear(list)
+      num-used = 0    
+    defmethod capacity (this) :
+      length(list)
+    defmethod make (this, used?:True|False) :
+      val i = length(list)
+      add(list, i)
+      add(idx, i)
+      set-used(i) when used?
+      i
+    defmethod set-free (this, i:Int) :
+      set-free(i)
+    defmethod set-used (this, i:Int) :
+      set-used(i)
+    defmethod all-free (this) :
+      seq({list[_]}, num-used to length(list))
+    defmethod all-used (this) :
+      take-n(num-used, list)
+    defmethod used? (this, item:Int) :
+      idx[item] < num-used
+    defmethod next-free (this) :
+      fatal("No free items") when num-used >= length(list)
+      list[num-used]
+    defmethod next-used (this) :
+      fatal("No used items") when num-used == 0
+      list[0]
+    defmethod num-used (this) :
+      num-used
+    defmethod num-free (this) :
+      length(list) - num-used
+    defmethod free-idx (this, n:Int) :
+      list[num-used + n]
+    defmethod used-idx (this, n:Int) :
+      list[n]
+
+public defn FreeList (n:Int, used?:True|False) :
+  val l = FreeList()
+  for i in 0 to n do :
+    make(l, used?)
+  l
+
+;============================================================
+;================ UnboundedFreeList =========================
+;============================================================
+public deftype UnboundedFreeList
+public defmulti set-used (l:UnboundedFreeList, i:Int) -> False
+public defmulti set-free (l:UnboundedFreeList, i:Int) -> False
+public defmulti next-free (l:UnboundedFreeList) -> Int
+
+public defn UnboundedFreeList () :
+  val list = FreeList()
+  defn ensure-capacity (n:Int) :
+    while capacity(list) < n : make(list, false)
+  new UnboundedFreeList :
+    defmethod set-used (this, i:Int) :
+      ensure-capacity(i + 1)
+      set-used(list, i)
+    defmethod set-free (this, i:Int) :
+      ensure-capacity(i + 1)
+      set-free(list, i)
+    defmethod next-free (this) :
+      make(list, false) when num-free(list) == 0
+      next-free(list)
+
+;============================================================
+;===================== Walkers ==============================
+;============================================================
+
+public defn ring-pairs<?T> (xs0:Seqable<?T>) -> Seq<[T,T]> :
+  val xs = to-seq(xs0)
+  generate<[T,T]> :
+    val x0 = next(xs)
+    let loop (x:T = x0) :
+      if empty?(xs) :
+        yield([x, x0])
+      else :
+        yield([x, peek(xs)])
+        loop(next(xs))
+
+public defn path-pairs<?T> (xs0:Seqable<?T>) -> Seq<[T,T]> :
+  val xs = to-seq(xs0)
+  generate<[T,T]> :
+    if not empty?(xs) :
+      let loop (x:T = next(xs)) :
+        if not empty?(xs) :
+          yield([x, peek(xs)])
+          loop(next(xs))
+
+;============================================================
+;==================== Comparison ============================
+;============================================================
+
+public defn all-equal? (xs0:Seqable<Equalable>) -> True|False :
+  val xs = to-seq(xs0)
+  if empty?(xs) :
+    true
+  else :
+    val x0 = next(xs)
+    all?({x0 == _}, xs)
+
+;============================================================
+;==================== Memoization ===========================
+;============================================================
+
+public defn memoize<T,?S> (f: T -> ?S) :
+  val table = HashTable<T,S>()
+  fn (key:T) -> S :
+    if not key?(table,key) :
+      table[key] = f(key)
+    table[key]
+
+#for (Ts in splice([(T1) (T1 T2) (T1 T2 T3)])
+      xs in splice([(x1) (x1 x2) (x1 x2 x3)])
+      args in splice([(x1:T1) (x1:T1 x2:T2) (x1:T1 x2:T2 x3:T3)])) :
+  public defn memoize<Ts,?K,?S> (key:(Ts) -> ?K, f: (Ts) -> ?S) :
+    val table = HashTable<K,S>()
+    fn (args) -> S :
+      val key = key(xs)
+      if not key?(table,key) :
+        table[key] = f(xs)
+      table[key]
+
+;============================================================
+;===================== Shuffles =============================
+;============================================================
+
+public defn shuffled-merge<?T> (xs0:Seqable<Seq<?T>>) -> Seq<T> :
+  val xs = to-tuple(xs0)
+  val freelist = FreeList(length(xs), true)
+  within repeat-while() :
+    let loop () :
+      val n = num-used(freelist)
+      if n > 0 :
+        val i = used-idx(freelist, rand(0 to n))
+        if empty?(xs[i]) :
+          set-free(freelist, i)
+          loop()
+        else : One(next(xs[i]))
+      else : None()
+
+;============================================================
+;============= Permutations and Combinations ================
+;============================================================
+
+public defn choose (n:Int, k:Int) -> Long :
+  let loop (n:Long = to-long(n), k:Long = to-long(k)) :
+    if k == 0L : 1L
+    else : loop(n - 1L, k - 1L) * n / k
+
+;============================================================
+;=================== Lazy Sequences =========================
+;============================================================
+
+deftype Unforced
+deftype Empty
+public defn lazy-seq<?T> (force: () -> Seq<?T>) :
+  var value = new Unforced
+  defn get-value () :
+    (value = force()) when value is Unforced
+    value as Seq<T>
+  
+  new Seq<T> :
+    defmethod peek (this) :
+      peek(get-value())
+    defmethod next (this) :
+      next(get-value())
+    defmethod empty? (this) :
+      if value is Empty :
+        true
+      else :
+        val e? = empty?(get-value())
+        (value = new Empty) when e?          
+        e?
+
+;============================================================
+;====================== Lazys ===============================
+;============================================================
+
+public deftype Lazy<T>
+public defmulti value<?T> (d:Lazy<?T>) -> T
+
+public defn Lazy<?T> (force: () -> ?T) :
+  var value = new Unforced
+  new Lazy<T> :
+    defmethod value (this) :
+      (value = force()) when value is Unforced
+      value as T
+
+;============================================================
+;================ Functional Wrapper ========================
+;============================================================
+
+;<DOCUMENTATION>
+For some state object STATE, the type Path<STATE> is the functional
+wrapper around it. You can retrieve a new Path by applying a
+Patch<STATE> to it. The only requirement is that you implement apply
+and undo for the Patch<State>. 
+;<DOCUMENTATION>
+
+deftype System
+defmulti next-id (s:System) -> Int
+defmulti state (s:System, p:Path) -> ?
+
+public deftype Path<T>
+public defmulti state<?T> (p:Path<?T>) -> T
+defmulti id (p:Path) -> Int
+defmulti system (p:Path) -> System
+
+defmulti parent (p:Path) -> Path
+defmulti patch (p:Path) -> Patch
+
+public deftype Patch<T>
+public defmulti apply<?T> (p:Patch<?T>, s:T) -> False
+public defmulti undo<?T> (p:Patch<?T>, s:T) -> False
+
+public defn Root<?T> (s0:?T) :
+  val id-counter = to-seq(0 to false)
+  val system-state = s0
+  var current-path:Path<T>
+
+  defn* sync (p:Path) :
+    if id(p) > id(current-path) :
+      sync(parent(p))
+      apply(patch(p), system-state)
+      current-path = p
+    else if id(p) < id(current-path) :
+      undo(patch(current-path), system-state)
+      current-path = parent(current-path)
+      sync(p)
+
+  val system = new System :
+    defmethod next-id (this) : next(id-counter)
+    defmethod state (this, p:Path) :
+      sync(p)
+      system-state
+
+  val root-id = next-id(system)
+  val root = new Path<T> :
+    defmethod id (this) : root-id
+    defmethod state (this) : state(system, this)
+    defmethod system (this) : system
+
+  current-path = root
+
+  root
+      
+public defn change<?T> (parent:Path<?T>, p:Patch<T>) :
+  val sys = system(parent)
+  val id* = next-id(sys)
+  new Path<T> :
+    defmethod id (this) : id*
+    defmethod system (this) : sys
+    defmethod state (this) : state(sys, this)
+    defmethod parent (this) : parent
+    defmethod patch (this) : p
+
+
+;========================================
+;============== UFSet ===================
+;========================================
+
+public defstruct UFSet<T> :
+  parent: False|UFSet<T> with: (setter => set-parent, default => false)
+  value: T
+  id: Int with: (init => genid())
+  size: Int with: (init => 1, setter => set-size)
+with:
+  constructor => #UFSet
+
+public defn UFSet<?T> (value:?T) :
+  #UFSet<T>(value)
+
+defn root<?T> (s:UFSet<?T>) -> UFSet<T> :
+  match(parent(s)) :
+    (p:False) :
+      s
+    (p:UFSet<T>) :
+      val r = root(p)
+      set-parent(s, r)
+      r
+
+public defn merge! (a:UFSet, b:UFSet) :
+  val ra = root(a)
+  val rb = root(b)
+  if id(ra) != id(rb) :
+    val [p, c] = [ra, rb] when size(ra) >= size(rb)
+            else [rb, ra]
+    set-parent(c, p)
+    set-size(p, size(p) + size(c))
+
+public defn root-value<?T> (s:UFSet<?T>) :
+  value(root(s))
+
+;============================================================
+;======================== OffsetSet =========================
+;============================================================
+public defstruct OffsetSet<T> <: Equalable&Hashable :
+  id: Int with: (init => genid())
+  parent: OffsetSet<T>|False with: (setter => set-parent, default => false)
+  offset: Int with: (setter => set-offset, default => 0)
+  value: T
+with:
+  constructor => #OffsetSet
+
+public defn OffsetSet<?T> (value:?T) :
+  #OffsetSet<T>(value)
+
+defmethod equal? (a:OffsetSet, b:OffsetSet) : id(a) == id(b)
+defmethod hash (a:OffsetSet) : id(a)
+
+defn root<?T> (s:OffsetSet<?T>) -> [OffsetSet<T>, Int] :
+  match(parent(s)) :
+    (p:OffsetSet<T>) :
+      val [r, v] = root(p)
+      val o = offset(s) + v
+      set-parent(s, r)
+      set-offset(s, o)
+      [r, o]
+    (p:False) :
+      [s, 0]
+
+public defn merge!<?T> (a:OffsetSet<?T>, b:OffsetSet<T>, o:Int) :
+  val [ra, va] = root(a)
+  val [rb, vb] = root(b)
+  val va* = vb - va + o
+  if ra == rb :
+    if va* != 0 :
+      fatal("Inconsistent merge: %_ = %_ + %_" % [value(a), value(b), o])
+  else if va* >= 0 :
+    set-parent(ra, rb)
+    set-offset(ra, va*)
+  else :
+    set-parent(rb, ra)
+    set-offset(rb, (- va*))
+
+public defn root-value<?T> (a:OffsetSet<?T>) :
+  val [r o] = root(a)
+  [value(r), o]
+
+;============================================================
+;====================== Grouping ============================
+;============================================================
+
+public defn group-by<?T,?K,?V> (xkey:T -> ?K&Hashable&Equalable, xval:T -> ?V, xs:Seqable<?T>) :
+  val table = HashTable<K,List<V>>(List())
+  for x in xs do :
+    update(table, cons{xval(x), _}, xkey(x))
+  table
+
+public defn group-by<?T,?K> (xkey:T -> ?K&Hashable&Equalable, xs:Seqable<?T>) :
+  group-by(xkey, {_}, xs)
+
+;============================================================
+;==================== Small Utilities =======================
+;============================================================
+
+public defn kvs<?K,?V> (xs:Seqable<KeyValue<?K,?V>>) :
+  for x in xs seq : [key(x), value(x)]
+
+public defn set-equal?<?T> (xs:Collection<?T&Equalable&Comparable>, ys:Collection<T&Equalable&Comparable>) :
+  val sorted-xs = qsort(xs)
+  val sorted-ys = qsort(ys)
+  length(sorted-xs) == length(sorted-ys) and
+  all?(equal?, sorted-xs, sorted-ys)
+
+public defn set-subset?<?T> (xs:Collection<?T&Equalable>, ys:Collection<T&Equalable>) :
+  for x in xs all? :
+    contains?(ys, x)
+
+;============================================================
+;================== Split a Filepath ========================
+;============================================================
+
+public defn split-filepath (path:String) -> [String, String] :
+  val n = length(path)
+  match(last-index-of-char(path, '/')) :
+    (i:Int) :
+      throw(PathEndsWithSlash(path)) when i == n - 1        
+      [path[0 through i], path[(i + 1) to false]]
+    (i:False) :
+      throw(EmptyPath()) when n == 0
+      ["./", path]
+
+public deftype PathException <: Exception
+
+public defstruct PathEndsWithSlash <: PathException :
+  path: String
+defmethod print (o:OutputStream, e:PathEndsWithSlash) :
+  print(o, PEWS-MSG % [path(e)])
+val PEWS-MSG = "Could not determine project name. Path %~ ends with a slash."
+
+public defstruct EmptyPath <: PathException
+defmethod print (o:OutputStream, e:EmptyPath) :
+  print(o, EP-MSG)
+val EP-MSG = "Could not determine project name. The given path is empty."
+
+;============================================================
+;================ Hexadecimal Conversion ====================
+;============================================================
+val HEX-CHARS = ['0' '1' '2' '3' '4' '5' '6' '7' '8' '9'
+                 'A' 'B' 'C' 'D' 'E' 'F']
+defn hex (b:Byte) :
+  val c1 = HEX-CHARS[to-int(b) >> 4]
+  val c2 = HEX-CHARS[to-int(b) & 0xF]
+  String([c1, c2])
+defn hexint (c:Char) :
+  if c >= '0' and c <= '9' :
+    to-int(c) - to-int('0')
+  else if c >= 'A' and c <= 'F' :
+    10 + to-int(c) - to-int('A')
+  else :
+    fatal("Invalid hexadecimal character: %_" % [c])
+defn hexint (c1:Char, c2:Char) :
+  hexint(c1) << 4 + hexint(c2)
+defn hexchar (c1:Char, c2:Char) :
+  to-char(hexint(c1, c2))
+
+;============================================================
+;=================== C-Identifier Decoder ===================
+;============================================================
+
+public defn c-decode (s:String) :
+  if suffix?(s, "_") :
+    val n = length(s) - 1
+    val buffer = StringBuffer()
+    let loop (i:Int = 0) :
+      if i < n :
+        val c = s[i]
+        if c == '_' :
+          if i + 2 < n :
+            add(buffer, hexchar(s[i + 1], s[i + 2]))
+            loop(i + 3)
+          else :
+            fatal("Illegally encoded identifier.")
+        else :
+          add(buffer, c)
+          loop(i + 1)
+    to-string(buffer)
+  else :
+    s
+
+;============================================================
+;==================== C-Identifier Encoder ==================
+;============================================================
+
+public defn c-encode (s:String) :
+  defn valid? (c:Char, include-underscore?:True|False) :
+    (c >= '0' and c <= '9') or
+    (c >= 'a' and c <= 'z') or
+    (c >= 'A' and c <= 'Z') or
+    (c == '_' and include-underscore?)
+  defn encode () :
+    val buffer = StringBuffer()
+    for c in s do :
+      if valid?(c, false) :
+        add(buffer, c)
+      else :
+        add(buffer, '_')
+        print(buffer, hex(to-byte(c)))
+    add(buffer, '_')
+    to-string(buffer)
+  if suffix?(s, "_") : encode()
+  else if all?(valid?{_, true}, s) : s
+  else : encode()
+
+public defn c-encode (s:Symbol) :
+  c-encode(to-string(s))

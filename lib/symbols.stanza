@@ -1,0 +1,179 @@
+defpackage symbols :
+  import core
+  import collections
+  import math
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-utils
+
+#use-added-syntax(ir-gen)
+
+; ====== Unit Conversion Functions =======
+; The following functions expect sizes and coordinates in "Symbol Units" which 
+; is the expected grid size in schematics. For Kicad this is 50 mil, or 1.27 mm
+
+val UNIT-TO-MM = 2.54
+
+public defn unit-point (x:Double, y:Double, scale:Double) :
+  point(scale * x, scale * y)
+  
+defn point-coords (p:Point|[Double,Double]) :
+  match(p) :
+    (pp:Point) : [x(pp), y(pp)]
+    (dd:[Double,Double]) : dd
+  
+public defn unit-point (p:Point|[Double,Double], scale:Double) :
+  val [x,y] = point-coords(p)
+  unit-point(x, y, scale)
+
+public defn unit-point (p:Point|[Double,Double]) :
+  unit-point(p, UNIT-TO-MM)
+
+public defn unit-points (ps:Collection<Point|[Double,Double]>, scale:Double) :
+  to-list(seq({unit-point(_,scale)}, ps))
+
+public defn unit-points (ps:Collection<Point|[Double,Double]>) :
+  unit-points(ps, UNIT-TO-MM)
+
+public defn unit-loc (p:Pose, scale:Double) :
+  sub-center(p, unit-point(center(p), scale))
+
+public defn unit-loc (p:Pose) :
+  unit-loc(p, UNIT-TO-MM)
+
+public defn unit-loc (p:Point|[Double,Double], a:Double, flip-x?:Flip, scale:Double) :
+  val [x,y] = point-coords(p)
+  unit-loc(loc(x,y,a,flip-x?), scale)
+
+public defn unit-loc (p:Point|[Double,Double], a:Double, flip-x?:Flip) :
+  unit-loc(p, a, flip-x?, UNIT-TO-MM)
+
+public defn unit-loc (p:Point|[Double,Double], scale:Double) :
+  unit-loc(p, 0.0, NoFlip, scale)
+
+public defn unit-loc (p:Point|[Double,Double]) :
+  unit-loc(p, UNIT-TO-MM)
+
+
+; ====== Shared Geometry Helpers ======
+
+
+
+; ====== Switches, Relays ======================================================
+
+; TODO: Switch symbol parametric in connections
+
+; TODO: Relay symbol parametric in connections
+
+; ====== Generic Box ===========================================================
+
+public defstruct BoxPinLocs :
+  box-w : Double
+  box-h : Double
+  ; List of pin ref, side, and coordinate
+  pin-locs : List<[Ref,Symbol,Double]>
+
+defmethod print (o:OutputStream, bpl:BoxPinLocs) :
+  val o2 = IndentedStream(o,2)
+  println(o, "BoxPinLocs w:%_ h:%_" % [box-w(bpl), box-h(bpl)])
+  for pl in pin-locs(bpl) do :  
+    println(o2, pl)
+
+public deftype PinSpecType <: Hashable & Equalable
+
+public defstruct PinSpec <: Hashable & Equalable :
+  l-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  r-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  b-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  t-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  order: Symbol|False
+with:
+  constructor => #PinSpec
+
+defn to-pin-tuple (entries:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
+  to-tuple $ for e in entries seq :
+    match(e) :
+      (e:Ref) : e
+      (e:Symbol) : Ref(e)
+      (e:KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>) :
+        match(key(e)) :
+          (k:Symbol) : Ref(k) => value(e)
+          (k:Ref) : k => value(e)
+
+;USAGE:
+;  PinSpec2([
+;    `l-pins => [`a => 1, `b => 2]
+;    `b-pins => [`c => 3, `d => 4]])
+public defn PinSpec2 (pins:Tuple<KeyValue<Symbol, Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>>>, order:Symbol|False) :
+  val allowed-pins = `(l-pins, b-pins, r-pins, t-pins)
+  for k in seq(key, pins) do :
+    fatal("Not an allowed pin setting: %_" % [k]) when not contains?(allowed-pins, k) 
+  defn grab-option (o:Symbol) : to-pin-tuple(lookup?(pins, o, []))
+  #PinSpec(grab-option(`l-pins), grab-option(`r-pins), grab-option(`b-pins), grab-option(`t-pins), order)
+
+public defn PinSpec2 (pins:Tuple<KeyValue<Symbol, Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>>>) :
+  PinSpec2(pins, false)
+      
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
+  #PinSpec(to-pin-tuple(left), [], [], [], false)
+
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     order:Symbol|False) :
+  #PinSpec(to-pin-tuple(left), [], [], [], order)
+  
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
+  #PinSpec(to-pin-tuple(left), to-pin-tuple(right), [], [], false)
+
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     order:Symbol|False) :
+  #PinSpec(to-pin-tuple(left), to-pin-tuple(right), [], [], order)
+  
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
+  #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), [], false)
+
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     order:Symbol|False) :
+  #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), [], order)
+  
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     top:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
+  #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), to-pin-tuple(top), false)
+
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     top:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     order:Symbol|False) :
+  #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), to-pin-tuple(top), order)
+
+defmethod hash (ps:PinSpec) :
+  hash([l-pins(ps), r-pins(ps), b-pins(ps), t-pins(ps), order(ps)])
+
+defmethod equal? (psa:PinSpec, psb:PinSpec) :
+  l-pins(psa) == l-pins(psb) and
+  r-pins(psa) == r-pins(psb) and
+  b-pins(psa) == b-pins(psb) and
+  t-pins(psa) == t-pins(psb) and
+  order(psa) == order(psb)
+
+defmethod print (o:OutputStream, ps:PinSpec) :
+  val o2 = IndentedStream(o,2)
+  println(o, "PinSpec, order:%_" % [order(ps)])
+  println(o2, l-pins(ps))
+  println(o2, r-pins(ps))
+  println(o2, b-pins(ps))
+  println(o2, t-pins(ps))
+
+
+
+
+
+

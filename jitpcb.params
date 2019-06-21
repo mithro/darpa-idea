@@ -1,0 +1,7 @@
+;The following is an example of the parameter file for JitPCB. 
+;
+;lower :
+;  post-power-generation = false
+;
+
+

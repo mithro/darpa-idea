@@ -1,0 +1,14 @@
+defpackage jitpcb/repl-driver :
+  import core
+  import collections
+  import jitpcb/flags
+
+defn read-flags-file (filename:String) :
+  if file-exists?(filename) :
+    println("Flags file %~ found. Reading JitPCB flags from file." % [filename])
+    parse-flags(tokenize-shell-command(slurp(filename)))
+  else :
+    println("No flags file %~ found. Running JitPCB with no flags set." % [filename])
+
+read-flags-file("jitpcb-flags.txt")
+

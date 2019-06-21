@@ -1,0 +1,48 @@
+defpackage jitpcb/repl-lib :
+  import core
+  import collections
+  import rtm/ir-gen
+  import rtm/ir
+  import pass-manager-io
+  import jitpcb/core-interface
+  import rtm/ir-connections
+  import rtm/errors
+
+val LIB-STMTS = to-vector<TStmt>(ir-statements())
+val USER-STMTS = Vector<TStmt>()
+
+within (context, stmt) = add-tstmt-notifier() :
+  val stmts = LIB-STMTS when context == `default else USER-STMTS
+  add(stmts, stmt)
+
+defn get-all-statements () :
+  ir-statements()  ;Dummy call to clear the main statements
+  to-tuple $ cat(LIB-STMTS, USER-STMTS)  
+
+public defn clear-user-statements () :
+  set-context(`user)
+  clear(USER-STMTS)
+
+public defn dump-esir (filename:String, passes:Tuple<Symbol>, param-file:String|False, configs:Tuple<Symbol>) :
+  val stmts = get-all-statements()
+  try :
+    call-core-process(GenArg(filename,stmts), filename, param-file, passes, configs)
+  catch (e:Exception) :
+    print-error-report(e)
+
+public defn dump-esir (filename:String, passes:Tuple<Symbol>) :
+  dump-esir(filename, passes, false, [])
+
+public defn dump-place-esir (filename:String) :
+  dump-esir(filename, [`prune-lower, `place], "jitpcb-repl.params", [`jitpcb-repl])
+
+public defn dump-viz-esir (filename:String) :
+  val t0 = current-time-ms()
+  dump-esir(filename, [`prune `place], "jitpcb-repl.params", [`jitpcb-repl])
+  println("Time %_" % [current-time-ms() - t0])
+  val sra = to-string("%_.place.esir" % [filename])
+  call-system("cp" , ["cp" sra "viz.esir"])
+  call-system("jitpcb", ["jitpcb" "process" filename "-passes" "kicad-routed"])
+  println("Time %_" % [current-time-ms() - t0])
+  val src = to-string("%_.merge-rte.esir" % [filename])
+  call-system("cp" , ["cp" src "viz.esir"])  

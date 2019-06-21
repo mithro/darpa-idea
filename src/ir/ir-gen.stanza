@@ -1,0 +1,511 @@
+#use-added-syntax(serializer)
+defpackage rtm/ir-gen :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-utils
+  import rtm/ir-reader
+
+;============================================================
+;======================= Namespaces =========================
+;============================================================
+
+public deftype NameSpace
+defmulti init (ns:NameSpace, category:Int, x:Symbol, n:Int) -> False
+defmulti add (ns:NameSpace, category:Int, x:Symbol) -> False
+defmulti gen-name (ns:NameSpace, category:Int, x:Symbol) -> Symbol
+
+defn NameSpace () :
+  val id = gensym("NAMESPACE")
+  val table = HashTable<[Int,Symbol], Int>(0)
+  new NameSpace :
+    defmethod init (this, c:Int, x:Symbol, n:Int) :
+      table[[c,x]] = n
+    defmethod add (this, c:Int, x:Symbol) :
+      update(table, {_ + 1}, [c, x])
+      false
+    defmethod gen-name (this, c:Int, x:Symbol) :
+      val n = update(table, {_ + 1}, [c, x])
+      if n == 1 : x
+      else : symbol-join $ [x "$" n]
+
+protected val BUNDLE-NAMESPACE = 0
+protected val COMPONENT-NAMESPACE = 1
+protected val PACKAGE-NAMESPACE = 3
+protected val CAPABILITY-NAMESPACE = 9
+protected val PART-NAMESPACE = 10
+protected val LOCAL-NAMESPACE = 11
+
+;============================================================
+;====================== Global IRTable ======================
+;============================================================
+
+val GLOBAL-IR-TABLE = IRTable()
+public defn global-ir-table () : GLOBAL-IR-TABLE
+
+;============================================================
+;======================= Context ============================
+;============================================================
+
+protected var IR-GEN-CONTEXT:Symbol = `default
+
+public defn in-context<?T> (f:() -> ?T, context:Symbol) :
+  let-var IR-GEN-CONTEXT = context :
+    f()
+
+public defn set-context (context:Symbol) :
+  IR-GEN-CONTEXT = context
+
+val TSTMT-NOTIFIERS = Vector<((Symbol, TStmt) -> ?)>()
+public defn add-tstmt-notifier (f:(Symbol, TStmt) -> ?) :
+  add(TSTMT-NOTIFIERS, f)
+
+;============================================================
+;====================== Buffers =============================
+;============================================================
+
+;Program Buffers
+var MAIN-BUFFER = Buffer(`main, `program)
+val BUFFERS = Vector<Buffer>()
+
+defstruct BufferDecl :
+  name: Symbol
+  description: String
+  fields: Collection<BufferField>
+defstruct BufferField :
+  name: Symbol
+  description: String
+  type: FieldType
+  
+deftype FieldType
+defstruct OptionalField <: FieldType : (value)
+defstruct ListField <: FieldType
+defstruct RequiredField <: FieldType
+
+val BUFFER-DECLS = [
+  BufferDecl(`program, "program", [
+    BufferField(`tstmt, "top level statement", ListField())])
+  BufferDecl(`pcb-bundle, "pcb bundle", [
+    BufferField(`pin, "pin", ListField())])
+  BufferDecl(`pcb-component, "pcb component", [
+    BufferField(`pin, "pin", ListField())
+    BufferField(`stmt, "statement", ListField())])
+  BufferDecl(`pcb-package, "pcb package", [
+    BufferField(`pad, "pad", ListField())
+    BufferField(`pad-def, "pad definition", ListField())
+    BufferField(`external-names, "external names", OptionalField(List()))
+  ])
+  BufferDecl(`pcb-pad, "pcb pad", [
+    BufferField(`type, "type", RequiredField())
+    BufferField(`shape, "shape", RequiredField())
+    BufferField(`layer, "layer", ListField())])
+  BufferDecl(`pcb-module, "pcb module", [
+    BufferField(`pin, "pin", ListField())
+    BufferField(`stmt, "statement", ListField())])
+  BufferDecl(`pcb-attach, "pcb attach", [
+    BufferField(`pin, "pin", ListField())
+    BufferField(`stmt, "statement", ListField())])
+  BufferDecl(`pcb-part, "pcb part", [
+    BufferField(`manufacturer, "manufacturer", RequiredField())
+    BufferField(`mpn, "manufacturer part number", RequiredField())
+    BufferField(`package, "package", RequiredField())
+    BufferField(`component, "component", OptionalField(false))
+    BufferField(`emodel, "electrical model", OptionalField(false))])
+  BufferDecl(`mapping, "mapping", [
+    BufferField(`entry, "mapping entry", ListField())])
+  BufferDecl(`properties, "pin properties", [
+    BufferField(`entry, "pin property", ListField())])
+  BufferDecl(`option, "support option", [
+    BufferField(`entry, "support entry", ListField())
+    BufferField(`require, "require statement", ListField())
+    BufferField(`property, "pin properties", ListField())])
+  BufferDecl(`options, "support options", [
+    BufferField(`option, "support option", ListField()),
+    BufferField(`entry, "support entry", ListField())
+    BufferField(`require, "require statement", ListField())
+    BufferField(`property, "pin properties", ListField())])]
+
+defn buffer-decl (type:Symbol) :
+  val decl = 
+    for decl in BUFFER-DECLS find :
+      name(decl) == type
+  if decl is False :
+    fatal("No buffer declaration for type '%_'." % [type])
+  decl as BufferDecl
+  
+defn decl (b:Buffer) :
+  buffer-decl(type(b))
+
+defn field (b:BufferDecl, fname:Symbol) :
+  val f = 
+    for f in fields(b) find :
+      name(f) == fname
+  match(f) :
+   (f:BufferField) : f
+   (f:False) : fatal("No field %_ in buffer type %_." % [fname, name(b)])
+
+protected defstruct Buffer :
+  name: Symbol
+  type: Symbol
+  namespace: NameSpace with: (default => NameSpace())
+  table: HashTable<Symbol,?> with: (init => HashTable<Symbol,?>())
+
+protected defn top-buffer! (btype:Symbol) :
+  val b = find({type(_) == btype}, in-reverse(BUFFERS))
+  match(b) :
+    (b:Buffer) : b
+    (b:False) : fatal("No %_ is currently being defined." % [
+      description(buffer-decl(btype))])
+
+protected defn add-entry (buffer:Buffer, field-name:Symbol, value) :
+  val field = field(decl(buffer), field-name)
+  match(type(field)) :
+    (t:ListField) :
+      val v = get?(table(buffer), field-name, List())
+      table(buffer)[field-name] = cons(value, v)
+    (t:RequiredField|OptionalField) :
+      if key?(table(buffer), field-name) :
+        fatal("The %_ %_ already has a %_." % [
+          name(buffer), description(decl(buffer)), description(field)])
+      table(buffer)[field-name] = value
+
+defn get (b:Buffer, field-name:Symbol) -> ? :
+  val decl = decl(b)
+  val field = field(decl, field-name)
+  match(type(field)) :
+    (t:ListField) :
+      reverse(get?(table(b), field-name, List()))
+    (t:RequiredField) :
+      if not key?(table(b), field-name) :
+        fatal("The %_ %_ has no %_." % [name(b), description(decl), description(field)])
+      table(b)[field-name]
+    (t:OptionalField) :
+      get?(table(b), field-name, value(t))
+
+defn buffer (f:Buffer -> ?, name:Symbol, type:Symbol) :
+  buffer(f, Buffer(name, type))
+  
+defn buffer (f:Buffer -> ?, b:Buffer) :
+  dynamic-wind(
+    fn () : add(BUFFERS, b)
+    fn () : f(b)
+    fn (final) : pop(BUFFERS))
+  b
+
+defn clear (b:Buffer) :
+  clear(table(b))
+
+;============================================================
+;===================== Mapping ==============================
+;============================================================
+
+protected defn make-mapping (f:Buffer -> ?) :
+  val b = buffer(f, `mapping, `mapping)
+  Mapping(b[`entry])
+
+;============================================================
+;====================== Pin Properties ======================
+;============================================================
+
+protected defn make-pin-properties (ref:Ref, f:Buffer -> ?) :
+  val b = buffer(f, `properties, `properties)
+  val entries = b[`entry]
+  PinPropertiesStmt(ref, 0, to-tuple(entries))
+
+;============================================================
+;===================== SupportOptions =======================
+;============================================================
+
+protected defn make-option (id:Ref|False, f:Buffer -> ?) :
+  val b = buffer(f, `option, `option)
+  val entries = b[`entry]
+  val requires = b[`require]
+  val properties = b[`property]
+  SupportOption(id, requires, properties, Mapping(entries))
+
+protected defn make-options (id:Ref|False, f:Buffer -> ?) :
+  val b = buffer(f, `options, `options)
+  val options = b[`option]
+  val entries = b[`entry]
+  val requires = b[`require]
+  val properties = b[`property]
+  if empty?(options) :
+    List(SupportOption(id, requires, properties, Mapping(entries)))
+  else :
+    if id is-not False :
+      fatal("Cannot give explicit name %_ to supports statement containing multiple options." % [id])
+    if not empty?(entries) :
+      fatal("The mappings %, are not contained in an option group." % [entries])
+    if not empty?(requires) :
+      fatal("The requirements %, are not contained in an option group." % [requires])
+    if not empty?(properties) :
+      fatal("The properties %, are not contained in an option group." % [properties])
+    options
+
+;============================================================
+;=================== Top Level Statements ===================
+;============================================================
+defn add-tstmt (s:TStmt) :
+  add(GLOBAL-IR-TABLE, s)
+  val context = IR-GEN-CONTEXT
+  for f in TSTMT-NOTIFIERS do : f(context, s)
+  add-entry(MAIN-BUFFER, `tstmt, s)
+
+defn pcb-bundle (f:Buffer -> ?, name:Symbol) :
+  val b = buffer(f, name, `pcb-bundle)
+  add-tstmt(DefBundle(name, b[`pin]))
+
+defn pcb-component (f:Buffer -> ?, name:Symbol) :
+  val b = buffer(f, name, `pcb-component)
+  add-tstmt(DefComponent(name, b[`pin], b[`stmt]))
+
+
+defn pcb-package (f:Buffer -> ?, name:Symbol) :
+  val b = buffer(f, name, `pcb-package)
+  add-tstmt(DefPackage(name, b[`pad], b[`pad-def]))
+
+
+
+
+defn pcb-module (f:Buffer -> ?, name:Symbol) :
+  val b = buffer(f, name, `pcb-module)
+  add-tstmt(DefModule(name, b[`pin], b[`stmt]))
+
+
+defn pcb-part (f:Buffer -> ?, name:Symbol) :
+  val b = buffer(f, name, `pcb-part)
+  add-tstmt(DefPart(name, b[`manufacturer], b[`mpn], b[`package], b[`component], b[`emodel]))
+
+defn pcb-capability (t:PinType|False, name:Symbol) :
+  add-tstmt(DefCapability(name, t))
+
+defn pcb-pad (f:Buffer -> ?, scope:Buffer, name:Symbol) :
+  val b = buffer(f, name, `pcb-pad)
+  add-entry(scope, `pad-def, DefPad(name, b[`shape], b[`type]))
+
+
+protected defn make-schematic (name:Symbol) :
+  add-tstmt(MakeSchematic(name))
+
+protected defn pcb-attach (f:Buffer -> ?, name:Symbol, args:List<Symbol>) :
+  val b = buffer(f, name, `pcb-attach)
+  add-tstmt(DefAttach(name, args, b[`pin], b[`stmt]))
+
+;============================================================
+;================== Module Continuation =====================
+;============================================================
+;Split the id for a symbol
+defn split-id (x:Symbol, sc:Char) :
+  val s = to-string(x)
+  val n = length(s)
+  let loop (i:Int = n - 1) :
+    if i >= 0 :
+      val c = s[i]
+      if digit?(c) :
+        loop(i - 1)
+      else if c == sc :
+        if i > 0 and i < n - 1 :
+          val id = to-int!(s[(i + 1) to false])
+          val x* = to-symbol(s[0 to i])
+          [x*, id]
+        else :
+          [x, 0]
+      else : [x, 0]
+    else : [x, 0]    
+      
+defn NameSpace (m:DefModule) :
+  ;Count occurrences of names
+  val name-table = HashTable<Symbol,Int>(0)
+  defn register-name (x:Symbol) :
+    val [x*, id] = split-id(x, '$')
+    update(name-table, max{_, id + 1}, x*)
+  do(register-name{name(_)}, pins(m))
+  for s in filter-by<InstStmt|NodeStmt>(stmts(m)) do :
+    if name(s) is Symbol :
+      register-name(name(s) as Symbol)
+  ;Create namespace from occurrences
+  val ns = NameSpace()
+  for entry in name-table do :
+    init(ns, LOCAL-NAMESPACE, key(entry), value(entry))
+  ;Return namespace
+  ns
+
+public defn reopen-module (f:Buffer -> ?,
+                           module:DefModule,
+                           keep-pins?:True|False,
+                           keep-stmts?:True|False) -> DefModule :
+  ;Recreate namespace
+  val ns = NameSpace(module)
+  ;Reopen and collect new statements
+  val b = buffer(f, Buffer(name(module), `pcb-module, ns))
+  ;Merge with old module
+  defn append?<?T> (xs:Seqable<?T>, ys:List<?T>, keep-xs?:True|False) :
+    append(xs, ys) when keep-xs? else ys
+  val pins* = append?(pins(module), b[`pin], keep-pins?)
+  val stmts* = append?(stmts(module), b[`stmt], keep-stmts?)
+  DefModule(name(module), pins*, stmts*)
+
+;============================================================
+;======================= Current Path =======================
+;============================================================
+
+defn current-ref (type:Symbol) : Ref(name(top-buffer!(type)))
+public defn current-bundle () : current-ref(`pcb-bundle)
+public defn current-component () : current-ref(`pcb-component)
+public defn current-package () : current-ref(`pcb-package)
+public defn current-module () : current-ref(`pcb-module)
+public defn current-attach () : current-ref(`pcb-attach)
+public defn current-part () : current-ref(`pcb-part)
+public defn current-pad () : current-ref(`pcb-pad)
+
+;============================================================
+;===================== Memoization ==========================
+;============================================================
+;Memoizing of top-level generators
+defn memoize<T> (category:Int, f:(T, Symbol) -> False) :
+  fn (t:T, name:Symbol, table:HashTable<Tuple,Ref>, args:Tuple) :
+    match(get?(table,args)) :
+      (r:Ref) :
+        r
+      (_:False) :
+        val r = make-ref(MAIN-BUFFER, category, name, true)        
+        f(t, ref-name(r))
+        table[args] = r
+        r
+        
+;Memoizing of scoped generators
+defn memoize<T> (category:Int, f:(T, Buffer, Symbol) -> False) :
+  fn (t:T, scope:Buffer, name:Symbol, table:HashTable<Tuple,Ref>, args:Tuple) :
+    match(get?(table,args)) :
+      (r:Ref) :
+        r
+      (_:False) :
+        val r = make-ref(scope, category, name, true)
+        f(t, scope, ref-name(r))
+        table[args] = r
+        r
+
+protected val pcb-bundle-gen = memoize<(Buffer -> ?)>(BUNDLE-NAMESPACE, pcb-bundle)
+protected val pcb-component-gen = memoize<(Buffer ->?)>(COMPONENT-NAMESPACE, pcb-component)
+protected val pcb-package-gen = memoize<(Buffer ->?)>(PACKAGE-NAMESPACE, pcb-package)
+protected val pcb-module-gen = memoize<(Buffer ->?)>(COMPONENT-NAMESPACE, pcb-module)
+protected val pcb-part-gen = memoize<(Buffer ->?)>(PART-NAMESPACE, pcb-part)
+protected val pcb-capability-gen = memoize<PinType|False>(CAPABILITY-NAMESPACE, pcb-capability)
+protected val pcb-pad-gen = memoize<(Buffer ->?)>(LOCAL-NAMESPACE, pcb-pad)
+
+;Recording refs
+defn recorded<T> (category:Int, f:(T, Symbol) -> False) :
+  fn (t:T, name:Symbol) :
+    record-ref(MAIN-BUFFER, category, name)
+    f(t, name)
+defn recorded<T> (category:Int, f:(T, Buffer, Symbol) -> False) :
+  fn (t:T, scope:Buffer, name:Symbol) :
+    record-ref(scope, category, name)
+    f(t, scope, name)
+protected val pcb-bundle-new = recorded<(Buffer -> ?)>(BUNDLE-NAMESPACE, pcb-bundle)
+protected val pcb-component-new = recorded<(Buffer ->?)>(COMPONENT-NAMESPACE, pcb-component)
+protected val pcb-package-new = recorded<(Buffer ->?)>(PACKAGE-NAMESPACE, pcb-package)
+protected val pcb-module-new = recorded<(Buffer ->?)>(COMPONENT-NAMESPACE, pcb-module)
+protected val pcb-part-new = recorded<(Buffer ->?)>(PART-NAMESPACE, pcb-part)
+protected val pcb-capability-new = recorded<PinType|False>(CAPABILITY-NAMESPACE, pcb-capability)
+protected val pcb-pad-new = recorded<(Buffer ->?)>(LOCAL-NAMESPACE, pcb-pad)
+
+;============================================================
+;================= References/Utilities =====================
+;============================================================
+
+protected defn make-ref (scope:Buffer, category:Int, x:Symbol, fresh?:True|False) :
+  if fresh? :    
+    Ref(gen-name(namespace(scope), category, x))
+  else :
+    add(namespace(scope), category, x)
+    Ref(x)
+
+protected defn record-ref (scope:Buffer, category:Int, x:Symbol) :
+  add(namespace(scope), category, x)
+  x
+  
+protected defn ref-name (r:Ref) :
+  match(r) :
+    (r:VarRef) : name(r)
+    (r) : fatal("Cannot retrieve name from non-var reference %_." % [r])
+
+protected defn flatten-refs (rs:Seqable<Ref|Seqable>) -> List<Ref> :
+  val accum = Vector<Ref>()
+  defn not-ref! (x) :
+    fatal("Argument %~ is not a Ref." % [x])
+  let loop (r = rs) :
+    match(r) :
+      (r:Ref) : add(accum,r)
+      (r:String|Symbol) : not-ref!(r)
+      (r:Seqable) : do(loop, r)
+      (r) : not-ref!(r)
+  to-list(accum)
+
+;============================================================
+;======================= Includes ===========================
+;============================================================
+
+public defn pcb-include (filename:String) :
+  do(add-tstmt, parse-rtm(filename))
+
+;============================================================
+;======================= Shapes =============================
+;============================================================
+
+public defn union (ss:Seqable<Shape|Seqable>) : Union(ss)
+public defn polygon (ss:Seqable<Point|Seqable>) : Polygon(ss)
+public defn line (w:Double, ss:Seqable<Point|Seqable>) : Line(w, ss)
+public defn point (x:Double, y:Double) : Point(x, y)
+public defn subtraction (a:Shape, b:Shape) : Subtraction(a, b)
+
+public defn circle (anchor:Anchor, x:Double, y:Double, radius:Double) :
+  val [vt, hr] = components(anchor)
+  val x* = match(hr) :
+    (hr:W) : x + radius
+    (hr:C) : x
+    (hr:E) : x - radius
+  val y* = match(vt) :
+    (vt:S) : y + radius
+    (vt:C) : y
+    (vt:N) : y - radius
+  Circle(Point(x*,y*), radius)
+public defn circle (anchor:Anchor, radius:Double) : circle(C, 0.0, 0.0, radius)
+public defn circle (x:Double, y:Double, radius:Double) : circle(C, x, y, radius)
+public defn circle (radius:Double) : circle(C, 0.0, 0.0, radius)
+
+public defn rectangle (w:Double, h:Double, p:Pose) : Rectangle(w, h, p)
+public defn rectangle (w:Double, h:Double) : Rectangle(w, h, loc(0.0, 0.0))
+  
+public defn rectangle (anchor:Anchor, w:Double, h:Double) :
+  val [vt, hr] = components(anchor)
+  val dx = match(hr) :
+    (hr:W) : w / 2.0
+    (hr:C) : 0.0
+    (hr:E) : w / -2.0
+  val dy = match(vt) :
+    (vt:S) : h / 2.0
+    (vt:C) : 0.0
+    (vt:N) : h / -2.0
+  rectangle(w, h, loc(dx, dy))
+
+public defn text (string:String, font:Symbol, size:Double, anchor:Anchor, p:Pose) :
+  Text(string, font, size, anchor, p)
+public defn text (string:String, font:Symbol, size:Double, anchor:Anchor) :
+  Text(string, font, size, anchor, loc(0.0,0.0))    
+
+;============================================================
+;=================== Electrical States ======================
+;============================================================
+
+public defn drives (voltage:Double) : Driver(voltage)
+public defn highz (min:Double, max:Double) : HighZ(min,max)
+
+;============================================================
+;======================== Driver ============================
+;============================================================
+
+public defn ir-statements () -> List<TStmt> :
+  val stmts = MAIN-BUFFER[`tstmt]
+  clear(MAIN-BUFFER)
+  stmts

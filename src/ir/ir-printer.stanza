@@ -1,0 +1,487 @@
+defpackage rtm/ir-printer :
+  import core
+  import collections
+  import rtm/utils
+  import rtm/ir
+  import rtm/ir-utils
+
+;============================================================
+;===================== Escaping =============================
+;============================================================
+
+defn dot-space (x:Symbol) :
+  match(parse-as?(x)) :
+    (c:NumberClass) : ""
+    (c:IdentifierClass) : ""
+    (c:OperatorClass) : " "
+    (c:False) : ""
+
+defn dot-space (r:Ref) :
+  match(r) :
+    (r:VarRef) : dot-space(name(r))
+    (r:FieldRef) : dot-space(name(r))
+    (r) : ""
+
+defn star-escape (x:Symbol) :
+  match(parse-as?(x)) :
+    (c:NumberClass) : "%~" % [x]
+    (c:IdentifierClass) : x
+    (c:OperatorClass) : "\\|%_|" % [x]
+    (c:False) : "%~" % [x]
+
+defn star-escape (x:Symbol, star?:True|False) :
+  if star? : star-escape(x)
+  else : "%~" % [x]
+
+;============================================================
+;===================== Printer ==============================
+;============================================================
+
+defmethod print (o:OutputStream, r:Ref) :
+  defn escape (r:Ref, star?:True|False) :
+    match(r) :
+      (r:VarRef) :
+        star-escape(name(r), star?)
+      (r:FieldRef) :
+        val dot = "%_.%_" % [dot-space(ref(r)), dot-space(name(r))]
+        "%_%_%~" % [escape(ref(r), false), dot, name(r)]
+      (r:IndexRef) :
+        "%_[%~]" % [escape(ref(r), true), index(r)]
+  print(o, escape(r, false))
+
+defmethod print (o:OutputStream, d:DefBundle) :
+  if empty?(pins(d)) :
+    print(o, "pcb-bundle %~ : ()" % [name(d)])
+  else :
+    print(o, "pcb-bundle %~ :" % [name(d)])
+    for o in o do-indented :
+      print-all(o, pre-nl(pins(d)))
+
+defmethod print (o:OutputStream, d:DefCapability) :
+  val type-string = match(type(d)) :
+    (t:PinType) : " : %_" % [t]
+    (t:False) : ""
+  print(o, "pcb-capability %~%_" % [name(d), type-string])
+
+defmethod print (o:OutputStream, p:Pin) :
+  print{o, _} $ match(type(p)) :
+    (t:SinglePin) : "pin %~" % [name(p)]
+    (t) : "port %~ : %_" % [name(p), t]
+
+defmethod print (o:OutputStream, t:PinType) :
+  defn loop (t:PinType, star?:True|False) :
+    match(t) :
+      (t:SinglePin) : `pin
+      (t:PinArray) : "%_[%_]" % [loop(type(t), true), length(t)]
+      (t:PinBundle) : star-escape(name(t), star?)
+  print(o, loop(inside-out(t), false))
+
+defmethod print (o:OutputStream, s:CStmt) :
+  defn P (x) : print(o, x)
+  match(s) :
+    (s:GroundStmt) :
+      P $ "ground(%,)" % [refs(s)]
+    (s:PowerStmt) :
+      P $ "power(%,) :" % [refs(s)]
+      P $ "\n  voltage = %~" % [voltage(s)]
+      P $ "\n  current = %~" % [current(s)]
+    (s:DiffPairStmt) :
+      defn ppair ([x,y]:[Ref,Ref]) :
+        "(%_, %_)" % [x,y]
+      defn prop? (name:String, p) :
+        match(p:False) : false
+        else : "%_ = %~" % [name, p]
+      P $ "diffpairs(%,)" % [seq(ppair,pairs(s))]
+      print-property-block(o, [
+        prop?("line-type", line-type(s))
+        prop?("impedance", impedance(s))
+        prop?("skew", skew(s))
+        prop?("max-loss", max-loss(s))
+        prop?("spacing", spacing(s))])
+    (s:DefaultPackageStmt) :
+      val m? = not empty?(mapping(s))
+      P $ "package = %_%_" % [star-escape(package(s), m?), mapping(s)]
+    (s:DefaultEModelStmt) :
+      P $ "emodel = %_" % [model(s)]
+    (s:DefaultPartStmt) :
+      P $ "part = %~" % [part(s)]
+    (s:ReferencePrefixStmt) :
+      P $ "reference-prefix = %~" % [prefix(s)]
+
+defmethod print (o:OutputStream, s:PinPropertiesStmt) :
+  val level-str = "" when level(s) == 0
+             else " (level = %_)" % [level(s)]
+  if empty?(entries(s)) :
+    print(o, "properties(%_)%_ : ()" % [ref(s), level-str])
+  else :
+    val o2 = IndentedStream(o)
+    print(o, "properties(%_)%_ :" % [ref(s), level-str])
+    for e in entries(s) do :
+      lnprint(o2, "%~ => " % [key(e)])
+      print-kv(o2, value(e))
+
+;<doc>===================================
+;=========== Literal Values =============
+;========================================
+The reading and printing of literal values:
+All supported value types:
+  - True
+  - False
+  - Char
+  - Byte
+  - Int
+  - Long
+  - Float
+  - Double
+  - String    
+  - Symbol
+  - List
+  - Tuple
+  - Ref
+  
+Overarching invariant: ESIR should be able to be copied-and-pasted
+into the generator system and ran.
+
+Self-evaluating primitives, Char,Byte,Int,Long,Float,Double,String,
+can be written out using Stanza's formatted write utility. Symbols
+must be quoted. Lists are written out using the #L(...) generator
+syntax. Tuples are written out using [...] syntax. Refs are written
+using the #R(...) generator syntax.
+;========================================
+;===================================<doc>
+
+defn print-kv (o:OutputStream, v) :
+  defn P (v) :
+    match(v) :
+      (v:True|False|Char|Byte|Int|Long|
+         Float|Double|String) : "%~" % [v]
+      (v:Symbol) : "`%~" % [v]
+      (v:Ref) : "#R(%~)" % [v]
+      (v:List) : "#L(%,)" % [seq(P,v)]
+      (v:Tuple) : "[%,]" % [seq(P,v)]
+  print(o, P(v))
+
+defmethod print (o:OutputStream, s:SupportsStmt) :
+  defn id-str (o:SupportOption) :
+    match(id(o)) :
+      (r:Ref) : " (%_)" % [r]
+      (r:False) : ""
+
+  val o2 = IndentedStream(o)    
+  if length(options(s)) == 1 :
+    val opt = head(options(s))
+    val empty-opt? = empty?(requires(opt)) and
+                     empty?(properties(opt)) and
+                     empty?(mappings(mapping(opt)))
+    if empty-opt? :
+      print(o, "supports %~%_" % [capability(s), id-str(opt)])
+    else :
+      val o2 = IndentedStream(o)
+      print(o, "supports %~%_ :" % [capability(s), id-str(opt)])
+      do(lnprint{o2, _}, requires(opt))
+      do(lnprint{o2, _}, properties(opt))      
+      do(lnprint{o2, _}, mappings(mapping(opt)))
+  else :
+    print(o, "supports %~ :" % [capability(s)])
+    for opt in options(s) do :
+      lnprint(o, "  option%_ :" % [id-str(opt)])
+      val o2 = IndentedStream(o, 4)        
+      do(lnprint{o2, _}, requires(opt))
+      do(lnprint{o2, _}, properties(opt))      
+      do(lnprint{o2, _}, mappings(mapping(opt)))
+
+defmethod print (o:OutputStream, s:MaxCurrentDrawStmt) :
+  print(o, "max-current-draw(%,) = %~" % [refs(s), current(s)])
+
+defmethod print (o:OutputStream, s:EStateStmt) :
+  print(o, "estate(%_) = [%,]" % [ref(s), states(s)])
+
+defmethod print (o:OutputStream, s:EState) :
+  print{o, _} $ match(s) :
+    (s:Driver) : "drives(%_)" % [voltage(s)]
+    (s:HighZ) : "highz(%_, %_)" % [min-voltage(s), max-voltage(s)]
+
+defmethod print (o:OutputStream, c:DefComponent) :
+  if empty?(pins(c)) and empty?(stmts(c)) :
+    print(o, "pcb-component %~ : ()" % [name(c)])
+  else :
+    print(o, "pcb-component %~ :" % [name(c)])
+    for o in o do-indented :
+      print-all(o, pre-nl(pins(c)))
+      print-all(o, pre-nl(stmts(c)))
+
+defmethod print (o:OutputStream, t:LineType) :
+  print{o, _} $ match(t) :
+    (t:Microstrip) : "Microstrip"
+    (t:Stripline) : "Stripline"
+
+
+
+
+defmethod print (o:OutputStream, p:DefPackage) :
+  val all-defs = cat-all $ [
+    pad-defs(p),
+    pads(p),
+  ]
+  if empty?(all-defs) :
+    print(o, "pcb-package %~ : ()" % [name(p)])
+  else :
+    print(o, "pcb-package %~ :" % [name(p)])
+    for o in o do-indented :
+      print-all(o, pre-nl(pad-defs(p)))
+      print-all(o, pre-nl(pads(p)))
+
+defmethod print (o:OutputStream, p:Pad) :
+  val side-str = match(side(p)) :
+    (side:Top) : ""
+    (side:Bottom) : " on %_" % [side]
+  print(o, "pad %_ : %~ at %_%_" % [ref(p), pad(p), pose(p), side-str])
+
+defmethod print (o:OutputStream, d:DefPad) :
+  print(o, "pcb-pad %~ :" % [name(d)])
+  for o in o do-indented :
+    print(o, "\ntype = %_" % [type(d)])
+    print(o, "\nshape = %_" % [shape(d)])
+
+defmethod print (o:OutputStream, p:PadType) :
+  print{o, _} $ match(p) :
+    (p:SMD) : "SMD"
+    (p:TH) : "TH"
+
+
+defmethod print (o:OutputStream, d:DefPart) :
+  val o2 = IndentedStream(o)
+  print(o, "pcb-part %~ :" % [name(d)])
+  print(o2, "\nmanufacturer = %~" % [manufacturer(d)])
+  print(o2, "\nmpn = %~" % [mpn(d)])
+  print(o2, "\npackage = %~" % [package(d)])
+  print(o2, "\ncomponent = %~" % [component(d)]) when component(d) is-not False
+  print(o2, "\nemodel = %_" % [emodel(d)]) when emodel(d) is-not False
+
+
+
+
+
+
+
+defmethod print (o:OutputStream, s:NetStmt) :
+  val name-str = match(name(s)) :
+    (name:Symbol) : "%~" % [name]
+    (name:False) : "-"
+  print(o, "net %_ (%,)" % [name-str, refs(s)])
+
+defmethod print (o:OutputStream, s:InstStmt) :
+  print(o, "inst %~ : %_" % [name(s), type(s)])
+
+defmethod print (o:OutputStream, r:RequireStmt) :
+  val name-str = match(name(r)):
+    (name:Symbol) : "%~:" % [name]
+    (name:False) : ""
+  val with-str = "" when empty?(mapping(r)) else " with :"
+  print(o, "require %_%_ from %_%_" % [name-str, capability(r), inst(r), with-str])
+  if not empty?(mapping(r)) :
+    val o2 = IndentedStream(o)
+    do(lnprint{o2, _}, mappings(mapping(r)))
+
+defmethod print (o:OutputStream, s:NodeStmt) :
+  print(o, "node %~ : %_" % [name(s), type(s)])
+
+defmethod print (o:OutputStream, s:InstSupportsStmt) :
+  print(o, "inst %~ %_" % [inst(s), supports-stmt(s)])
+
+defmethod print (o:OutputStream, s:SupportedByStmt) :
+  val port-str = "port" when port?(s) else "capability"
+  print(o, "required %_ %_ supported-by %_" % [port-str, ref(s), option-id(s)])
+  if not empty?(nested-supports(s)) :
+    print(o, " where :")
+    val o2 = IndentedStream(o)
+    do(lnprint{o2, _}, nested-supports(s))
+
+
+
+defmethod print (o:OutputStream, s:PackageStmt) :
+  val selector = "" when instance?(s) else "insts-of "
+  val package = match(package(s)) :
+                 ([p m]:[Symbol Mapping]) : " = %_%_" % [star-escape(p, not empty?(m)), m]
+                 (p:False) : ""
+  val loc = match(pose(s)) :
+              (p:Pose) : " at %_" % [p]
+              (p:False) : ""
+  val side = match(side(s)) :
+               (s:Side) : " on %_" % [s]
+               (s:False) : ""
+  print(o, "package(%_%~)%_%_%_%_" % [selector, ref(s), package, loc, side, anchor-str(anchor(s))])
+
+defmethod print (o:OutputStream, s:EModelStmt) :
+  print(o, "emodel(%_) = %_" % [ref(s), model(s)])
+
+defmethod print (o:OutputStream, p:PartStmt) :
+  print(o, "part(%_) = %~" % [ref(p), part(p)])
+
+
+defmethod print (o:OutputStream, s:SchematicGroupStmt) :
+  if unit(s) is False :
+    print(o, "schematic-group(%_) = %~" % [ref(s), group(s)])
+  else :
+    print(o, "schematic-group(%_, %_) = %~" % [ref(s), unit(s), group(s)])
+
+
+defmethod print (o:OutputStream, s:AttachStmt) :
+  print(o, "attach %~ (%,)" % [attach(s), args(s)])
+
+defmethod print (o:OutputStream, s:ConnectionStmt) :
+  print(o, "connect (%,)" % [args(s)])
+
+
+defmethod print (o:OutputStream, s:ReferenceStmt) :
+  print(o, "reference-designator(%_) = %~" % [ref(s), value(s)])
+
+
+defmethod print (o:OutputStream, c:CapabilityType) :
+  defn loop (c:CapabilityType, star?:True|False) :
+    match(c) :
+      (c:Capability) : star-escape(name(c), star?)
+      (c:CapabilityArray) : "%_[%_]" % [loop(capability(c), true), length(c)]
+  print(o, loop(inside-out(c), false))
+
+defmethod print (o:OutputStream, c:ComponentType) :
+  defn loop (c:ComponentType, star?:True|False) :
+    match(c) :
+      (c:SingleComponent) : star-escape(name(c), star?)
+      (c:ComponentArray) : "%_[%_]" % [loop(type(c), true), length(c)]
+  print(o, loop(inside-out(c), false))
+
+defn written (x) :
+  match(x) :
+    (x:None) : "None()"
+    (x:Symbol) : "`%~" % [x]
+    (x) : "%~" % [x]
+defmethod print (o:OutputStream, r:Resistor) :
+  val args = trim-trailing-false $ [resistance(r), tolerance(r), max-power(r)]
+  print(o, "Resistor(%,)" % [seq(written,args)])
+defmethod print (o:OutputStream, c:Capacitor) :
+  val args = trim-trailing({_ is False|None}, [
+               capacitance(c), tolerance(c), max-voltage(c), polarized?(c), low-esr?(c),
+               temperature-coefficient(c), dielectric(c)])
+  print(o, "Capacitor(%,)" % [seq(written, args)])
+defmethod print (o:OutputStream, i:Inductor) :
+  val args = trim-trailing-false $ [inductance(i), tolerance(i), max-current(i)]
+  print(o, "Inductor(%,)" % [seq(written, args)])
+defmethod print (o:OutputStream, d:Diode) :
+  val args = trim-trailing-false $ [
+    forward-current(d), forward-voltage(d), max-current(d), max-reverse-voltage(d),
+    color(d), luminous-intensity(d)]
+  print(o, "Diode(%,)" % [seq(written, args)])
+
+defmethod print (o:OutputStream, c:NamedColor) :
+  print(o, "NamedColor(`%~)" % [name(c)])
+
+
+defmethod print (o:OutputStream, s:Side) :
+  print{o, _} $ match(s) :
+    (s:Top) : "Top"
+    (s:Bottom) : "Bottom"
+
+defmethod print (o:OutputStream, d:Dir) :
+  print{o, _} $ match(d) :
+    (d:Up) : "Up"
+    (d:Down) : "Down"
+    (d:Left) : "Left"
+    (d:Right) : "Right"
+
+defmethod print (o:OutputStream, m:Mapping) :
+  if not empty?(m) :
+    print(o, "(%,)" % [mappings(m)])
+
+defmethod print (o:OutputStream, d:DefModule) :
+  if empty?(pins(d)) and empty?(stmts(d)) :
+    print(o, "pcb-module %~ : ()" % [name(d)])
+  else :
+    print(o, "pcb-module %~ :" % [name(d)])
+    for o in o do-indented :
+      print-all(o, pre-nl(pins(d)))
+      print-all(o, pre-nl(stmts(d)))
+
+defmethod print (o:OutputStream, a:DefAttach) :
+  defn wr (xs:Seqable) : for x in xs seq : "%~" % [x]
+  if empty?(pins(a)) and empty?(stmts(a)) :
+    print(o, "pcb-attach %~ (%,) : ()" % [name(a), wr(args(a))])
+  else :
+    print(o, "pcb-attach %~ (%,) :" % [name(a), wr(args(a))])
+    for o in o do-indented :
+      print-all(o, pre-nl(pins(a)))
+      print-all(o, pre-nl(stmts(a)))
+
+defmethod print (o:OutputStream, p:RPin) :
+  print{o, _} $ match(type(p)) :
+    (t:SinglePin) : "pin %~" % [ref(p)]
+    (t) : "port %~ : %_" % [ref(p), t]
+
+
+defmethod print (o:OutputStream, b:MakeSchematic) :
+  print(o, "make-schematic(%~)" % [module(b)])
+
+defmethod print (o:OutputStream, s:Point) :
+  print(o, "point(%~, %~)" % [x(s),y(s)])
+defmethod print (o:OutputStream, s:Polygon) :
+  print(o, "polygon(%*)" % [join(points(s), One("\n  "), One(",\n  "), None())])
+defmethod print (o:OutputStream, s:Circle) :
+  print(o, "circle(%~, %~, %~)" % [x(center(s)), y(center(s)), radius(s)])
+defmethod print (o:OutputStream, s:Rectangle) :
+  print(o, "rectangle(%~, %~, %_)" % [width(s), height(s), pose(s)])
+defmethod print (o:OutputStream, s:Line) :
+  print(o, "line(%~%*)" % [width(s), join(points(s), One("\n  "), One(",\n  "), None())])
+defmethod print (o:OutputStream, s:Union) :
+  print(o, "union(%_)" % [add-indents("%*" % [pre-nl(shapes(s))])])
+defmethod print (o:OutputStream, s:Subtraction) :
+  print(o, "subtraction(%_, %_)" % [a(s), b(s)])
+defmethod print (o:OutputStream, s:Text) :
+  print(o, "text(%~, %~, %~, %_, %_)" % [string(s), font(s), size(s), anchor(s), pose(s)])
+
+defmethod print (o:OutputStream, a:Anchor) :
+  print{o, _} $ match(a) :
+    (a:N) : "N"
+    (a:S) : "S"
+    (a:E) : "E"
+    (a:W) : "W"
+    (a:NE) : "NE"
+    (a:SE) : "SE"
+    (a:SW) : "SW"
+    (a:NW) : "NW"
+    (a:C) : "C"
+
+defmethod print (o:OutputStream, p:Pose) :
+  val angle? = angle(p) != 0.0 or flip-x?(p)
+  val flip? = flip-x?(p)
+  val angle = (", %_" % [angle(p)]) when angle? else ""
+  val flip = ", FlipX" when flip? else ""
+  val c = center(p)
+  print(o, "loc(%_, %_%_%_)" % [x(c), y(c), angle, flip])
+
+;============================================================
+;================== Utilities ===============================
+;============================================================
+
+defn format? (fmt:String, x) :
+  (fmt % [x]) when x is-not False else ""
+
+defn print-property-block (o:OutputStream, props:Seqable) :
+  val ps = filter({_ is-not False}, props)
+  if not empty?(ps) :
+    print(o, " :")
+    print-all(IndentedStream(o,2), pre-nl(ps))
+
+defn trim-trailing<?T> (f:T -> True|False, xs0:Seqable<?T>) :
+  val xs = to-vector<?>(xs0)
+  val n = length(xs)
+  match(find({not f(xs[_])}, reverse(0 to n))) :
+    (i:Int) : take-n(i + 1, xs)
+    (i:False) : []
+
+defn trim-trailing-false (xs:Seqable) :
+  trim-trailing({_ is False}, xs)
+
+defn anchor-str (a:Ref|False) :
+  match(a) :
+    (a:Ref) : " (relative-to %_)" % [a]
+    (a:False) : ""

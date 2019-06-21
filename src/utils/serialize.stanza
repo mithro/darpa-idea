@@ -1,0 +1,263 @@
+#use-added-syntax(serializer)
+
+defpackage serialize :
+  import core
+  import collections
+  import rtm/utils
+  import parser
+  import jitpcb/dlopen
+
+;Deserializer Object
+protected deftype Deserializer
+protected defmulti name (d:Deserializer) -> Symbol
+protected defmulti tag (d:Deserializer) -> Int
+protected defmulti #deserialize (d:Deserializer, i:InputStream) -> ?
+
+;Multis to be extended
+protected defmulti deserializer (obj) -> Deserializer
+protected defmulti #serialize (o:OutputStream, obj) -> False
+
+;============================================================
+;============= Registration of Deserializers ================
+;============================================================
+val DESERIALIZERS = IntTable<Deserializer>()
+protected defn register (d:Deserializer) -> Deserializer :
+  if key?(DESERIALIZERS, tag(d)) :
+    val d0 = DESERIALIZERS[tag(d)]
+    fatal("Could not register %_ deserializer. It conflicts with existing %_ deserializer." % [name(d), name(d0)])
+  DESERIALIZERS[tag(d)] = d
+  d
+
+public defn registered-serializers () :
+  values(DESERIALIZERS)
+
+;============================================================
+;====================== Main Engine =========================
+;============================================================
+public defn serialize (o:OutputStream, obj) -> False :
+  ;Write out: [DTAG, bytes ...]
+  val d = deserializer(obj)
+  put(o, tag(d))
+  #serialize(o, obj)
+  
+public defn deserialize (str:InputStream) -> ? :
+  ;Input: [DTag, bytes ...]
+  val dtag = match(get-int(str)) :
+    (i:Int) : i
+    (i:False) : throw(DeserializationError("Read error"))
+  ;Lookup deserializer
+  if not key?(DESERIALIZERS, dtag) :
+    fatal("No deserializer registered for tag %_." % [dtag])
+  ;Deserialize
+  val d = DESERIALIZERS[dtag]
+  #deserialize(d, str)
+
+;============================================================
+;================== Errors ==================================
+;============================================================
+
+public defstruct DeserializationError <: Exception : (msg:String)
+defmethod print (o:OutputStream, e:DeserializationError) :
+  print(o, msg(e))
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  serialize/DeserializationError :
+    msg:String
+
+;============================================================
+;================= Primitive Deserializers ==================
+;============================================================
+
+defn get! (f: InputStream -> ?, i:InputStream) :
+  val x = f(i)
+  throw(DeserializationError("Read Error")) when x is False
+  x
+defn gets! (f:InputStream -> ?, n:Int, i:InputStream) :
+  repeatedly(get!{f,i}, n)
+defn deserialize (n:Int, i:InputStream) :
+  repeatedly(deserialize{i}, n)
+
+#for (core/Type in [core/Byte, core/Char, core/Int, core/Long, core/Float, core/Double]
+      get-type in [get-byte, get-char, get-int, get-long, get-float, get-double]) :
+  register-serializer :
+    serialize (o:OutputStream, x:core/Type) : put(o, x)
+    deserialize (i:InputStream) : get!(get-type, i)
+
+register-serializer :
+  serialize (o:OutputStream, x:core/String) :
+    put(o, length(x))
+    do(put{o, _}, x)
+  deserialize (i:InputStream) :
+    val n = get!(get-int, i)
+    String(gets!(get-char, n, i))
+
+register-serializer :
+  serialize (o:OutputStream, x0:core/Symbol) :
+    val x = to-string(x0)
+    put(o, length(x))
+    do(put{o, _}, x)
+  deserialize (i:InputStream) :
+    val n = get!(get-int, i)
+    to-symbol(String(gets!(get-char, n, i)))
+
+register-serializer :
+  serialize (o:OutputStream, x:core/List) :
+    put(o, length(x))
+    do(serialize{o, _}, x)
+  deserialize (i:InputStream) :
+    val n = get!(get-int, i)
+    to-list(deserialize(n, i))
+
+register-serializer :
+  serialize (o:OutputStream, x:core/Tuple) :
+    put(o, length(x))
+    do(serialize{o, _}, x)
+  deserialize (i:InputStream) :
+    val n = get!(get-int, i)
+    to-tuple(deserialize(n, i))
+
+register-serializer :
+  serialize (o:OutputStream, x:core/Array) :
+    put(o, length(x))
+    do(serialize{o, _}, x)
+  deserialize (i:InputStream) :
+    val n = get!(get-int, i)
+    to-array<?>(deserialize(n, i))
+
+register-serializer :
+  serialize (o:OutputStream, x:collections/Vector) :
+    put(o, length(x))
+    do(serialize{o, _}, x)
+  deserialize (i:InputStream) :
+    val n = get!(get-int, i)
+    to-vector<?>(deserialize(n, i))
+
+register-serializer :
+  serialize (o:OutputStream, x:core/True) : false
+  deserialize (i:InputStream) : true
+
+register-serializer :
+  serialize (o:OutputStream, x:core/False) : false
+  deserialize (i:InputStream) : false
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  core/Token :
+    item:?
+    info:FileInfo
+  core/FileInfo :
+    filename:String
+    line:Int
+    column:Int
+  core/KeyValue :
+    key:?
+    value:?
+  core/None
+  core/One :
+    value:?
+
+;============================================================
+;================= IOException Serializers ==================
+;============================================================
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  core/FileStatException :
+    filename: String
+    cause: String
+  core/FileOpenException :
+    filename: String
+    cause: String
+  core/FileCloseException :
+    cause: String
+  core/FileFlushException :
+    cause: String
+  core/FileReadException :
+    cause: String
+  core/FileWriteException :
+    cause: String
+  core/FileSeekException :
+    cause: String
+  core/FileSetLengthException :
+    cause: String  
+
+;============================================================
+;================ OutputStream Serialization ================
+;============================================================
+
+register-serializer :
+  serialize (o:OutputStream, x:core/FileOutputStream) :
+    put(o, hs-file(x))
+    put(o, hs-closable?(x))    
+  deserialize (i:InputStream) :
+    val file = get!(get-long, i)
+    val closable? = get!(get-long, i)
+    FileOutputStream(file, closable?)
+
+lostanza defn FileOutputStream (file:ref<Long>, closable?:ref<Long>) -> ref<FileOutputStream> :
+  return new FileOutputStream{file.value as ptr<?>, closable?.value}
+lostanza defn hs-file (s:ref<FileOutputStream>) -> ref<Long> : return new Long{s.file as long}
+lostanza defn hs-closable? (s:ref<FileOutputStream>) -> ref<Long> : return new Long{s.closable?}
+
+;============================================================
+;================== Lexer Errors ============================
+;============================================================
+
+register-serializer :
+  serialize (o:OutputStream, e:reader/LexerException) :
+    serialize(o, to-string(e))
+  deserialize (i:InputStream) :
+    val str = deserialize(i)
+    throw(DeserializationError("Read error")) when str is-not String
+    new reader/LexerException :
+      defmethod print (o:OutputStream, this) : print(o, str)
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  parser/NoMatchException :
+    causes: List<Exception>
+
+;============================================================
+;====================== Util Errors =========================
+;============================================================
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/utils/FileTypeException :
+    filename: String
+    cause: String|False
+  rtm/utils/DirException :
+    filename: String
+    cause: String
+  rtm/utils/CreateDirException :
+    filename: String
+    cause: String
+  rtm/utils/PathEndsWithSlash :
+    path: String
+  rtm/utils/EmptyPath
+  rtm/utils/FlagNotANumber :
+    flag:String
+    value:String
+  rtm/utils/MissingProperty :
+    name:Symbol
+  rtm/utils/DuplicateProperty :
+    name:Symbol
+  rtm/utils/UnknownProperty :
+    name:Symbol
+
+;============================================================
+;===================== Catch All Error ======================
+;============================================================
+
+register-serializer :
+  serialize (o:OutputStream, e:core/Exception) :
+    serialize(o, to-string(e))
+  deserialize (i:InputStream) :
+    val str = deserialize(i)
+    throw(DeserializationError("Read error")) when str is-not String
+    new Exception :
+      defmethod print (o:OutputStream, this) : print(o, str)    
+
+;============================================================
+;====================== DL Errors ===========================
+;============================================================
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  jitpcb/dlopen/DLError :
+    msg:String

@@ -1,0 +1,712 @@
+defpackage pin-state :
+  import core
+  import collections
+  import rtm/utils
+  import keyed-set
+
+;<Comment>
+# State Definitions #
+- Pins are either taken/free.
+- Options are either taken/free.
+- Groups are either skipped/allowed.
+- Classes count number reserved.
+
+# Status Relationships #
+- An option is available if:
+  1. All its pins are free, AND
+  2. All its classes are reservable
+- A group is available if:
+  1. It is not skipped, AND
+  2. Any of its options are available
+  3. None of its options are taken.
+- A class is reservable:
+  - num available groups > num reserved
+- A class is satisfiable:
+  - num available groups >= num reserved
+- A class is available:
+  - num available groups > 0
+- Assignment is satisfiable:
+  - all classes are satisfiable
+
+# Available Controls #
+- Take/Free Option
+- Skip/Allow Group
+- Reserve/Release Class
+;<Comment>
+
+;============================================================
+;================== Input Datastructure =====================
+;============================================================
+
+public deftype PinSource
+public defstruct PinInput <: PinSource: (data)
+with:(printer => true)
+public defstruct ArgInput <: PinSource: (index:Int)
+with:(printer => true)
+public defstruct NoInput <: PinSource
+with:(printer => true)
+
+public defstruct ClassReq :
+  id: Int
+  class: Int
+  sources: Tuple<PinSource>
+  constraints: Tuple<Int|False>
+with:(printer => true)
+public defstruct Option :
+  pins: Tuple<Int|False>
+  classes: Tuple<ClassReq>
+with:(printer => true)
+public defstruct Group :
+  options: Tuple<Option> with: (ensure => non-empty!)
+with:(printer => true)
+public defstruct Class :
+  id: Int
+  groups: Tuple<Group> with: (ensure => non-empty!)
+with:(printer => true)
+
+;============================================================
+;===================== Preconditions ========================
+;============================================================
+
+defn non-empty! (description:String, v:Tuple) :
+  fatal("The tuple given to %_ is empty." % [description]) when empty?(v)
+
+;<doc>=======================================================
+;====================== Driver ==============================
+;============================================================
+
+Input:
+  preassigned:Tuple<KeyValue<Int,Int>>
+    - The preassigned requests to selected options.
+    - Keys are the identifiers of the class requests.
+    - Values are the indices of the options selected for them.
+    - Options are counted in order that they appear in the input class list.
+    - Note that the preassigned list must be sorted by level:
+      - Nested requirements must be assigned after the assignment for its
+        parent requirement.
+
+;============================================================
+;=======================================================<doc>
+
+public defn solve-requests (ps:PinState,
+                            classes:Tuple<Class>,
+                            reqs:Tuple<ClassReq>,
+                            preassigned:Tuple<KeyValue<Int,Int>>) -> Seq<Tuple<Soln>> :
+  ;Make reservations
+  val reserved? = reserve(ps, reqs)
+
+  ;No solutions if reservation fails
+  if not reserved? :
+    to-seq([])
+  else :
+    ;Construct table of identifiers to requests
+    val req-table = to-inttable(id, rs) where :
+      defn all-reqs (c:Class) : seq-cat(all-reqs, groups(c))
+      defn all-reqs (g:Group) : seq-cat(all-reqs, options(g))
+      defn all-reqs (o:Option) : /classes(o)
+      val rs = cat(reqs, seq-cat(all-reqs,classes))
+    
+    ;Take preassigned options
+    val preassigned-solns = Vector<Soln>()
+    for entry in preassigned do :
+      val req = req-table[key(entry)]
+      val option = value(entry)
+      take-option(ps, option, req)
+      add(preassigned-solns, Soln(req, option))
+
+    ;Generate permuted solutions
+    generate<Tuple<Soln>> :
+      within soln = solve(ps) :
+        for soln* in permute-solns(to-tuple(soln)) do :
+          yield(to-tuple(cat(preassigned-solns, soln*)))
+
+;Returns false if reservation was unsuccessful
+defn reserve (ps:PinState, reqs:Seqable<ClassReq>) -> True|False :
+  label<True|False> return :
+    for r in reqs do :
+      val c = class(r)
+      if class-num-reserved(ps,c) < class-num-available(ps,c) :
+        reserve-class(ps, r)
+      else : return(false)
+    true
+
+;============================================================
+;================= PinState Datastructure ===================
+;============================================================
+
+defstruct OptionRecord :
+  pins: Tuple<Int|False>
+  classes: Tuple<ClassReq>
+  parent-class: Int 
+  free?: RootNode<True|False>
+  class-keys: Tuple<ItemKey> with: (init => void, setter => set-class-keys)
+  available?: DNode<True|False> with: (init => void, setter => set-available?)
+defstruct GroupRecord :
+  options: Tuple<Int>
+  allowed?: RootNode<True|False>
+  available?: DNode<True|False> with: (init => void, setter => set-available?)
+defstruct ClassRecord :
+  groups: Tuple<Int>
+  num-reserved: RootNode<Int>
+  num-satisfied: RootNode<Int>
+  reservations: KeyedSet<ClassReq> with: (init => KeyedSet<ClassReq>())
+  num-available: DNode<Int> with: (init => void, setter => set-num-available)
+  available?: DNode<True|False> with: (init => void, setter => set-available?)
+  initialized?: True|False with: (init => false, setter => set-initialized?)
+  level:Int with: (init => void, setter => set-level)
+
+public deftype PinState
+defmulti satisfiable? (ps:PinState) -> True|False
+defmulti num-class-levels (ps:PinState) -> Int
+defmulti classes (ps:PinState) -> Seqable<Int>
+defmulti class-level (ps:PinState, class:Int) -> Int
+defmulti class-num-reserved (ps:PinState, class:Int) -> Int
+defmulti class-num-satisfied (ps:PinState, class:Int) -> Int
+defmulti class-num-available (ps:PinState, class:Int) -> Int
+defmulti class-reservations (ps:PinState, class:Int) -> Seqable<ClassReq>
+public defmulti class-groups (ps:PinState, class:Int) -> Tuple<Int>
+public defmulti group-options (ps:PinState, group:Int) -> Tuple<Int>
+public defmulti option-pins (ps:PinState, option:Int) -> Tuple<Int|False>
+public defmulti option-recs (ps:PinState, option:Int) -> Tuple<ClassReq>
+
+defmulti class-available? (ps:PinState, class:Int) -> True|False
+defmulti group-available? (ps:PinState, group:Int) -> True|False
+defmulti option-available? (ps:PinState, option:Int) -> True|False
+defmulti option-satisfies? (ps:PinState, option:Int, req:ClassReq) -> True|False
+defmulti request-satisfied? (ps:PinState, req:ClassReq) -> True|False
+
+defmulti take-option (ps:PinState, option:Int, req:ClassReq) -> False
+defmulti free-option (ps:PinState, option:Int, req:ClassReq) -> False
+defmulti skip-group (ps:PinState, group:Int) -> False
+defmulti allow-group (ps:PinState, group:Int) -> False
+defmulti reserve-class (ps:PinState, req:ClassReq) -> False
+
+public defn PinState (num-pins:Int, input:Seqable<Class>) -> PinState :
+  ;===== Construct records =====
+  val satisfied-reqs = IntSet()
+  val [pin-free, option-recs, group-recs, class-recs] = let :
+    val pin-free = Vector<RootNode<True|False>>()
+    val option-records = Vector<OptionRecord>()
+    val group-records = Vector<GroupRecord>()
+    val class-records = Vector<ClassRecord>()
+    defn add-ids<?T> (rs:Vector<?T>) :
+      fn (ts:Seqable<T>) -> Tuple<Int> :
+        val start = length(rs)
+        add-all(rs, ts)
+        to-tuple(start to length(rs))
+    ;Compute all records
+    for pi in 0 to num-pins do :
+      add(pin-free, RootNode<True|False>(true))
+    for (c in input, ci in 0 to false) do :
+      fatal("Invalid index") when id(c) != ci
+      val gids = add-ids(group-records) $
+        for g in groups(c) seq :
+          val oids = add-ids(option-records) $
+            for o in options(g) seq :
+              OptionRecord(pins(o), classes(o), ci, RootNode<True|False>(true))
+          GroupRecord(oids, RootNode<True|False>(true))
+      add(class-records, ClassRecord(gids, RootNode<Int>(0), RootNode<Int>(0)))
+    ;Return records
+    [to-tuple(pin-free), to-tuple(option-records),
+     to-tuple(group-records), to-tuple(class-records)]
+
+  ;===== Compute dependencies =====
+  defn init-option (oi:Int) :
+    val o = option-recs[oi]
+    val pins-available = seq({pin-free[_]}, filter-by<Int>(pins(o)))
+    val class-pins-available = for req in classes(o) seq-cat :
+      seq({pin-free[_]}, filter-by<Int>(constraints(req)))        
+    val classes-reservable = for entry in group-by(class, classes(o)) seq :
+      val ci = key(entry)
+      val c = class-recs[ci]
+      val num-wanted = length(value(entry))
+      init-class(ci)
+      PredNode({_ - _ + num-wanted <= _}, num-reserved(c), num-satisfied(c), num-available(c))
+    val available? = AndNode $ cat-all $ [
+      pins-available
+      class-pins-available
+      classes-reservable
+      [free?(o)]]
+    set-available?(o, available?)
+  defn init-group (gi:Int) :
+    val g = group-recs[gi]
+    do(init-option, options(g))
+    val options-available = seq(available?{option-recs[_]}, options(g))
+    val available? = AndNode $ cat-all $ [
+     [allowed?(g),
+      OrNode(options-available)]
+      seq(free?{option-recs[_]}, options(g))]    
+    set-available?(g, available?)
+  defn init-class (ci:Int) :
+    val c = class-recs[ci]
+    if not initialized?(c) :
+      do(init-group, groups(c))
+      val num-available = CountNode(seq(available?{group-recs[_]}, groups(c)))
+      set-num-available(c, num-available)
+      set-available?(c, PredNode({_ > 0}, num-available))
+      set-initialized?(c, true)
+  do(init-class, 0 to length(class-recs))
+  val assignment-satisfiable? = AndNode(seq(satisfiable?, class-recs)) where :
+    defn satisfiable? (c:ClassRecord) :
+      PredNode({_ - _ <= _}, num-reserved(c), num-satisfied(c), num-available(c))
+
+  ;===== Compute Level =====
+  val num-class-levels = (maximum(-1, seq(class-level, 0 to length(class-recs))) + 1) where :
+    val level-calculated = Array<True|False>(length(class-recs), false)
+    defn class-level (ci:Int) :
+      val c = class-recs[ci]
+      if not level-calculated[ci] :
+        val child-classes =
+          for g in groups(c) seq-cat :
+            for o in options(group-recs[g]) seq-cat :              
+              seq(class, classes(option-recs[o]))
+        set-level(c, maximum(-1, seq(class-level, child-classes)) + 1)
+        level-calculated[ci] = true
+      level(c)
+
+  ;===== Control Functions =====
+  ;Controls for taking/freeing options
+  defn take (o:OptionRecord, req:ClassReq) :
+    ;Precondition
+    fatal("Option is not free.") when not value(free?(o))
+    ;Mark reservation as satisfied
+    add(satisfied-reqs, id(req))
+    inc-satisfied(class-recs[parent-class(o)])
+    ;Take pins
+    for p in filter-by<Int>(pins(o)) do :
+      set-value(pin-free[p], false)
+    ;Reserve classes    
+    set-class-keys{o, _} $ for c-req in classes(o) map :
+      ;Forward new constraints
+      val constraints* = to-tuple $ for (s in sources(c-req), c in constraints(c-req)) seq :
+        match(s:ArgInput) : constraints(req)[index(s)]
+        else : c
+      val sources* = to-tuple $ for (s in sources(c-req), s0 in sources(c-req)) seq :
+        match(s:ArgInput) : sources(req)[index(s)]
+        else : s0
+      val c-req* = ClassReq(id(c-req), class(c-req), sources*, constraints*)
+      ;Reserve class
+      reserve(class-recs[class(c-req*)], c-req*)
+    ;Mark as taken
+    set-value(free?(o), false)
+
+  defn free (o:OptionRecord, req:ClassReq) :
+    ;Precondition
+    fatal("Option is free.") when value(free?(o))
+    ;Mark as free
+    set-value(free?(o), true)
+    ;Release classes
+    for (c in classes(o), k in class-keys(o)) do :
+      release(class-recs[class(c)], k)
+    set-class-keys(o, [])
+    ;Free pins
+    for p in filter-by<Int>(pins(o)) do :
+      set-value(pin-free[p], true)
+    ;Mark reservation as unsatisfied
+    remove(satisfied-reqs, id(req))
+    dec-satisfied(class-recs[parent-class(o)])
+
+  ;Controls for skipping/allowing groups
+  defn skip (g:GroupRecord) :
+    fatal("Group skipped.") when not value(allowed?(g))
+    set-value(allowed?(g), false)
+  defn allow (g:GroupRecord) :
+    fatal("Group allowed.") when value(allowed?(g))  
+    set-value(allowed?(g), true)
+
+  ;Controls for reserving/releasing requests
+  defn reserve (c:ClassRecord, req:ClassReq) :
+    val num-r = num-reserved(c)
+    fatal("Class not reservable") when value(num-r) >= value(num-available(c))
+    set-value(num-r, value(num-r) + 1)
+    add(reservations(c), req)
+  defn release (c:ClassRecord, k:ItemKey) :
+    val num-r = num-reserved(c)
+    fatal("Class not reserved") when value(num-r) == 0 
+    set-value(num-r, value(num-r) - 1)
+    remove(reservations(c), k)  
+    
+  ;Controls for satisfying/unsatisfying a class request
+  defn inc-satisfied (c:ClassRecord) :
+    val num-s = num-satisfied(c)
+    fatal("No more requests") when value(num-s) >= value(num-reserved(c))
+    set-value(num-s, value(num-s) + 1)
+  defn dec-satisfied (c:ClassRecord) :
+    val num-s = num-satisfied(c)
+    fatal("No satisfied requests") when value(num-s) == 0
+    set-value(num-s, value(num-s) - 1)
+
+  ;Create datastructure
+  new PinState :
+    defmethod satisfiable? (this) :
+      value(assignment-satisfiable?)
+    defmethod num-class-levels (this) :
+      num-class-levels
+
+    defmethod classes (this) :
+      0 to length(class-recs)
+    defmethod class-level (this, class:Int) :
+      level(class-recs[class])
+    defmethod class-num-reserved (this, class:Int) :
+      value(num-reserved(class-recs[class]))
+    defmethod class-num-satisfied (this, class:Int) :
+      value(num-satisfied(class-recs[class]))
+    defmethod class-num-available (this, class:Int) :
+      value(num-available(class-recs[class]))
+    defmethod class-reservations (this, class:Int) :
+      reservations(class-recs[class])
+    defmethod class-groups (this, class:Int) :
+      groups(class-recs[class])
+    defmethod group-options (this, group:Int) :
+      options(group-recs[group])
+    defmethod option-pins (this, option:Int) :
+      pins(option-recs[option])
+    defmethod option-recs (this, option:Int) :
+      classes(option-recs[option])
+
+    defmethod class-available? (this, class:Int) :
+      value(available?(class-recs[class]))
+    defmethod group-available? (this, group:Int) :
+      value(available?(group-recs[group]))
+    defmethod option-available? (this, option:Int) :
+      value(available?(option-recs[option]))
+    defmethod option-satisfies? (this, optioni:Int, req:ClassReq) :
+      val option = option-recs[optioni]
+      fatal("Class mismatch!") when parent-class(option) != class(req)
+      for (p in pins(option), pc in constraints(req)) all? :
+        match(p:Int, pc:Int) : p == pc
+        else : true
+    defmethod request-satisfied? (this, req:ClassReq) :
+      satisfied-reqs[id(req)]
+
+    defmethod take-option (this, option:Int, req:ClassReq) :
+      take(option-recs[option], req)
+    defmethod free-option (this, option:Int, req:ClassReq) :
+      free(option-recs[option], req)
+    defmethod skip-group (this, group:Int) :
+      skip(group-recs[group])
+    defmethod allow-group (this, group:Int) :
+      allow(group-recs[group])
+    defmethod reserve-class (this, req:ClassReq) :
+      reserve(class-recs[class(req)], req)
+      false
+
+    defmethod print (o:OutputStream, this) :
+      print(o, "PinState(%_):" % [satisfiable?(this)])
+      for o in o do-indented :      
+        for ci in 0 to length(class-recs) do :
+          val num-available = value(num-available(class-recs[ci]))
+          val c-num-reserved = value(num-reserved(class-recs[ci]))
+          val c-num-satisfied = value(num-satisfied(class-recs[ci]))
+          lnprint(o, "C%_(%_ available, %_ reserved, %_ satisfied, level %_)[" % [
+            ci, num-available, c-num-reserved, c-num-satisfied, level(class-recs[ci])])
+          val o2 = IndentedStream(o)
+          for gi in class-groups(this, ci) do :
+            lnprint(o2, "G%_(%_)[" % [gi, group-available?(this, gi)])
+            val o3 = IndentedStream(o2)
+            for oi in group-options(this, gi) do :
+              lnprint(o3, "O%_(%_)[" % [oi, option-available?(this, oi)])
+              val o4 = IndentedStream(o3)
+              for pi in filter-by<Int>(pins(option-recs[oi])) do :
+                lnprint(o4, "P%_(%_)" % [pi, value(pin-free[pi])])
+              for cr in classes(option-recs[oi]) do :
+                val ci = class(cr)
+                lnprint(o4, "C%_(%_ reserved)" % [ci, value(num-reserved(class-recs[ci]))])
+              lnprint(o3, "]")
+            lnprint(o2, "]")
+          lnprint(o, "]")
+
+;============================================================
+;======================= Solver =============================
+;============================================================
+
+public defstruct Soln: (req:ClassReq, option:Int)
+with:(printer => true)
+
+defn solve (return:List<Soln> -> ?, ps:PinState) :
+  ;Compute the degrees of freedom of a class
+  defn degrees-of-freedom (c:Int) :
+    val num-r = class-num-reserved(ps,c)
+    val num-a = class-num-available(ps,c)
+    choose(num-a, num-r)
+
+  ;Find next layer of requests to solve
+  defn next-requests (l:Int) :
+    val unconstrained = Vector<ClassReq>()
+    val constrained = Vector<ClassReq>()
+    defn constrained? (r:ClassReq) : any?({_ is Int}, constraints(r))
+    for c in classes(ps) do :
+      if class-level(ps,c) == l and
+         class-num-satisfied(ps,c) < class-num-reserved(ps,c) :
+        for r in class-reservations(ps,c) do :
+          if not request-satisfied?(ps,r) :
+            add(constrained when constrained?(r) else unconstrained, r)
+    [to-list(constrained), to-list(unconstrained)]
+  
+  ;Solve level by level
+  defn loopl (return:List<Soln> -> ?, l:Int, solns:List<Soln>) :
+    if l < 0 :
+      return(solns)
+    else :
+      val [constrained, unconstrained] = next-requests(l)
+      within solns = loopc(constrained, solns) :
+        within solns = loopuc(unconstrained, solns) :
+          loopl(return, l - 1, solns)
+  ;Solve constrained requests
+  defn loopc (return:List<Soln> -> ?, rs:List<ClassReq>, solns:List<Soln>) :
+    if satisfiable?(ps) :
+      if empty?(rs) :
+        return(solns)
+      else :
+        val r = head(rs)
+        for g in class-groups(ps, class(r)) do :
+          if group-available?(ps,g) :
+            for o in group-options(ps,g) do :
+              if option-available?(ps,o) and option-satisfies?(ps,o,r) :
+                take-option(ps,o,r)
+                loopc(return, tail(rs), cons(Soln(r,o), solns))
+                free-option(ps,o,r)
+  ;Solve unconstrained requests
+  defn loopuc (return:List<Soln> -> ?, rs:List<ClassReq>, solns:List<Soln>) :
+    if satisfiable?(ps) :
+      if empty?(rs) :
+        return(solns)
+      else :
+        val c = class(head(rs))
+        val gs = to-list(class-groups(ps,c))
+        within (rs, solns) = loopg(c, rs, gs, solns) :
+          loopuc(return, rs, solns)
+  ;Solve all unconstrained requests for given class, c
+  defn loopg (return:(List<ClassReq>, List<Soln>) -> ?, c:Int,
+              rs:List<ClassReq>, gs:List<Int>, solns:List<Soln>) :
+    if satisfiable?(ps) :
+      if class-num-satisfied(ps,c) < class-num-reserved(ps,c) :
+        ;There are still unsatisfied reservations.
+        ;g is the next one.
+        val g = head(gs)
+        if group-available?(ps,g) :
+          ;Choose to use the group
+          for o in group-options(ps,g) do :
+            if option-available?(ps,o) :
+              val r = head(rs)
+              take-option(ps,o,r)
+              loopg(return, c, tail(rs), tail(gs), cons(Soln(r,o),solns))
+              free-option(ps,o,r)
+          ;Choose to skip the group
+          skip-group(ps,g)
+          loopg(return, c, rs, tail(gs), solns)
+          allow-group(ps,g)
+        else :
+          loopg(return, c, rs, tail(gs), solns)
+      else :
+        ;There are no more unsatisfied reservations.
+        ;We are done.
+        return(rs, solns)
+              
+  ;Driver
+  loopl(return, num-class-levels(ps) - 1, List())
+
+;============================================================
+;================== Request Permuter ========================
+;============================================================
+
+defn permute<?T> (xs:Tuple<?T>) :
+  val n = length(xs)
+  if n < 2 :
+    [xs]
+  else :
+    val xs = to-array<T>(xs)    
+    generate<Tuple<T>> :
+      ;Swap elements at two indices
+      defn swap (i:Int, j:Int) :
+        if i != j :
+          val xi = xs[i]
+          val xj = xs[j]
+          xs[i] = xj
+          xs[j] = xi
+      defn permute (i:Int) :
+        if i == n :
+          yield(to-tuple(xs))
+        else :
+          for j in i to n do :
+            swap(i,j)
+            permute(i + 1)
+            swap(i,j)
+      permute(0)
+
+;Input: Tuple<Soln>
+;Output: Seqable<Seqable<Soln>>
+defn permute-solns (solns:Tuple<Soln>) :
+  for permutation in permute-requests(map(req, solns)) seq :
+    for entry in permutation seq :
+      val old-index = key(entry)
+      val new-index = value(entry)
+      val req* = req(solns[new-index])
+      val option* = option(solns[old-index])
+      Soln(req*, option*)
+
+;Input: The input is a tuple of requests.
+;Output: Sequence of binding maps, where each binding map is a
+;        List<KeyValue<Int,Int>>.
+;        Each key is the original index of the request.
+;        Each value is the new index of the request.
+defn permute-requests (reqs:Tuple<ClassReq>) :
+  defn constrained? (ri:Int) : any?({_ is Int}, constraints(reqs[ri]))
+  val [constrained, unconstrained] = split!(constrained?, 0 to length(reqs))
+  val constrained-bindings = to-list $ for i in constrained seq : i => i
+  for result in permute-unconstrained-reqs(unconstrained, reqs) seq :
+    append(constrained-bindings, result)
+
+defn permute-unconstrained-reqs (req-idx:Seqable<Int>, reqs:Tuple<ClassReq>) :
+  val groups = group-by(class{reqs[_]}, req-idx)
+  defn permute-group (idx-list:List<List<Int>>) -> Seqable<List<KeyValue<Int,Int>>> :
+    if empty?(idx-list) :
+      List(List())
+    else :
+      val idx = head(idx-list)
+      for idx* in permute(to-tuple(idx)) seq-cat :
+        val bindings = map(KeyValue, idx, idx*)
+        for bindings-tail in permute-group(tail(idx-list)) seq :
+          append(bindings, bindings-tail)
+  permute-group(to-list(values(groups)))
+
+;============================================================
+;=============== Convert a Solution into a PinMap ===========
+;============================================================
+;
+;val BINDING-MAP = Vector<ClassReq|False>()
+;defn to-pin-map<?T> (ps:PinState, pins:Tuple<?T>, solns:List<Soln>,
+;                     bindings:List<KeyValue<Int,Int>>, reqs:Tuple<ClassReq>) :
+;  ;println("Convert to pin-map:")
+;  ;println("solns:")
+;  ;within indented() : 
+;  ;  do(println, solns)
+;  ;println("bindings:")
+;  ;within indented() : 
+;  ;  do(println, bindings)
+;  ;println("reqs:")
+;  ;within indented() : 
+;  ;  do(println, reqs)    
+;    
+;  ;Ensure binding map is long enough                   
+;  set-length(BINDING-MAP, length(reqs), false)
+;  for e in bindings do :
+;    BINDING-MAP[key(e)] = reqs[value(e)]
+;  
+;  to-tuple $ for soln in solns seq-cat :
+;    ;println("Convert soln = %_" % [soln])
+;    val opins = option-pins(ps, option(soln))
+;    ;println("opins = %_" % [opins])
+;    for (s in sources(req(soln)), p in opins) seq? :
+;      ;println("s = %_, p = %_" % [s, p])
+;      match(s:PinIndex, p:Int) :
+;        val creq = BINDING-MAP[req(s)] as ClassReq
+;        val s* = sources(creq)[pin(s)] as PinInput
+;        ;println("s* = %_" % [s*])
+;        One(data(s*) => pins[p])
+;      else : None()    
+
+;============================================================
+;==================== Dependence Nodes ======================
+;============================================================
+
+deftype DNode<T>
+defmulti value<?T> (n:DNode<?T>) -> T
+defmulti add-parent (n:DNode, parent:DNode) -> False
+defmulti child-changed (parent:DNode, child:DNode, v) -> False
+
+deftype RootNode<T> <: DNode<T>
+defmulti set-value<?T> (n:RootNode<?T>, v:?T) -> False
+defn RootNode<T> (v0:T) :
+  var v:T = v0
+  var parents:List<DNode> = List()
+  new RootNode<T> :
+    defmethod value (this) : v
+    defmethod set-value (this, v*:T) :
+      val v0 = v
+      v = v*
+      notify-parents(parents, this, v0, v)
+    defmethod add-parent (this, p:DNode) :
+      parents = cons(p, parents)
+
+deftype CountNode <: DNode<Int>
+defn CountNode (ns:Seqable<DNode<True|False>>) :
+  val nodes = to-tuple(ns)
+  var num-true:Int = count(value, nodes)
+  var parents:List<DNode> = List()
+  val n = new CountNode :
+    defmethod value (this) :
+      num-true
+    defmethod child-changed (this, child:DNode, v:True|False) :
+      val v0 = value(this)
+      num-true = num-true + 1 when v else -1
+      notify-parents(parents, this, v0, value(this))
+    defmethod add-parent (this, p:DNode) :
+      parents = cons(p, parents)
+  do(add-parent{_, n}, nodes)
+  n
+
+deftype PredNode <: DNode<True|False>
+
+defn PredNode<?T> (pred:T -> True|False, a:DNode<?T>) :
+  var v:True|False = pred(value(a))
+  var parents:List<DNode> = List()
+  val n = new PredNode :
+    defmethod value (this) :
+      v
+    defmethod child-changed (this, child:DNode, v*:T) :
+      val v0 = v
+      v = pred(value(a))
+      notify-parents(parents, this, v0, v)
+    defmethod add-parent (this, p:DNode) :
+      parents = cons(p, parents)
+  add-parent(a, n)
+  n
+
+defn PredNode<?T,?S> (pred:(T,S) -> True|False, a:DNode<?T>, b:DNode<?S>) :
+  var v:True|False = pred(value(a), value(b))
+  var parents:List<DNode> = List()
+  val n = new PredNode :
+    defmethod value (this) :
+      v
+    defmethod child-changed (this, child:DNode, v*:T) :
+      val v0 = v
+      v = pred(value(a), value(b))
+      notify-parents(parents, this, v0, v)
+    defmethod add-parent (this, p:DNode) :
+      parents = cons(p, parents)
+  add-parent(a, n)
+  add-parent(b, n)
+  n
+
+defn PredNode<?T,?S,?V> (pred:(T,S,V) -> True|False, a:DNode<?T>, b:DNode<?S>, c:DNode<?V>) :
+  var v:True|False = pred(value(a), value(b), value(c))
+  var parents:List<DNode> = List()
+  val n = new PredNode :
+    defmethod value (this) :
+      v
+    defmethod child-changed (this, child:DNode, v*:T) :
+      val v0 = v
+      v = pred(value(a), value(b), value(c))
+      notify-parents(parents, this, v0, v)
+    defmethod add-parent (this, p:DNode) :
+      parents = cons(p, parents)
+  add-parent(a, n)
+  add-parent(b, n)
+  add-parent(c, n)
+  n
+
+defn AndNode (ns0:Seqable<DNode<True|False>>) :
+  val ns = to-tuple(ns0)
+  PredNode({_ == length(ns)}, CountNode(ns))
+
+defn OrNode (ns:Seqable<DNode<True|False>>) :
+  PredNode({_ > 0}, CountNode(ns))
+
+;Utility
+defn notify-parents (ps:List<DNode>, n:DNode, v) :
+  do(child-changed{_, n, v}, ps)
+
+defn notify-parents (ps:List<DNode>, n:DNode, v0, v1) :
+  notify-parents(ps, n, v1) when v0 != v1
+

@@ -1,0 +1,159 @@
+#use-added-syntax(serializer)
+defpackage jitpcb/errors :
+  import core
+  import collections
+  import serialize
+  
+public deftype JitPCBError <: Exception
+
+public defstruct NoParamFile <: JitPCBError :
+  filename:String
+defmethod print (o:OutputStream, e:NoParamFile) :
+  print(o, "Parameter file %~ does not exist." % [filename(e)])
+
+public defstruct InvalidParam <: Exception :
+  config:Symbol
+  field:Symbol
+  message:String
+  value  
+defmethod print (o:OutputStream, t:InvalidParam) :
+  print(o, "Parameter %~ in config %~ cannot be assigned value %~: %_" % [
+    field(t), config(t), value(t), message(t)])
+
+public defstruct ParamException <: Exception :
+  info: FileInfo|False with: (default => false)
+  msg: String
+defmethod print (o:OutputStream, e:ParamException) :
+  print(o, "%_: " % [info(e)]) when info(e) is-not False    
+  print(o, msg(e))
+
+public defstruct InvalidPassPath <: JitPCBError :
+  start:Symbol
+  passes:Tuple<Symbol>
+defmethod print (o:OutputStream, e:InvalidPassPath) :
+  print(o, "There is no valid sequence of passes through the %_ pass and the following passes: %,." % [
+    start(e), passes(e)])
+
+public defstruct NoJitPCBFiles <: JitPCBError
+defmethod print (o:OutputStream, e:NoJitPCBFiles) :
+  print(o, "No JitPCB input files given.")
+
+public defstruct NoJitPCBRoot <: JitPCBError
+defmethod print (o:OutputStream, e:NoJitPCBRoot) :
+  print(o, "JitPCB requires the JITPCB_ROOT environment variable to be set.")
+
+public defstruct NoLicenseBadInstall <: JitPCBError :
+  dir: String
+defmethod print (o:OutputStream, e:NoLicenseBadInstall) :
+  val lfile = norm-path("%_/License.txt" % [dir(e)])
+  print(o, "JitPCB root directory is set to %_, but license file %_ could not be found." % [
+    dir(e), lfile])
+
+public defstruct CommandCannotTakeArgs <: JitPCBError :
+  name: String
+  args: List
+defmethod print (o:OutputStream, e:CommandCannotTakeArgs) :
+  print(o, "Command %_ does not accept any arguments, but received %_.)" % [name(e), args(e)])
+
+public defstruct NoPkgDir <: JitPCBError :
+  dir: String
+defmethod print (o:OutputStream, e:NoPkgDir) :
+  val pkg-dir = norm-path("%_/pkgs" % [dir(e)])
+  print(o, PKG-DIR-FORMAT % [pkg-dir, pkg-dir])
+val PKG-DIR-FORMAT =
+\<S>The JitPCB pkg directory '%_' is not registered with Stanza. Please add the line:
+  pkg-dirs = (%~) 
+to the .stanza configuration file.<S>
+  
+public defstruct NoFastPkgDir <: JitPCBError :
+  dir: String
+defmethod print (o:OutputStream, e:NoFastPkgDir) :
+  val pkg-dir = norm-path("%_/fast-pkgs" % [dir(e)])
+  print(o, FAST-PKG-DIR-FORMAT % [pkg-dir, pkg-dir])
+val FAST-PKG-DIR-FORMAT =
+\<S>The JitPCB fast pkg directory '%_' is not registered with Stanza. Please add the line:
+  fast-pkg-dirs = (%~) 
+to the .stanza configuration file.<S>
+  
+public defstruct KicadRequiresName <: JitPCBError :
+  args:List
+defmethod print (o:OutputStream, e:KicadRequiresName) :
+  print(o, "Option export-kicad requires one argument for indicating project name.")
+  if empty?(args(e)) :
+    print(o, " No arguments were given.")
+  else :
+    print(o, " Received arguments: %_." % [args(e)])
+
+public defstruct UnrecognizedStage <: JitPCBError :
+  stage:String
+defmethod print (o:OutputStream, e:UnrecognizedStage) :
+  print(o, "Unrecognized stage: '%_'." % [stage(e)])
+
+public defstruct NoESIRFiles <: JitPCBError :
+  command:String
+defmethod print (o:OutputStream, e:NoESIRFiles) :
+  print(o, "No .esir files provided to command %_." % [command(e)])
+
+public defstruct TooManyESIRFiles <: JitPCBError :
+  command:String
+defmethod print (o:OutputStream, e:TooManyESIRFiles) :
+  print(o, "Too many .esir files provided to command %_." % [command(e)])
+
+public defstruct NoFlagValue <: JitPCBError :
+  flag:String
+defmethod print (o:OutputStream, e:NoFlagValue) :
+  print(o, "No value given for flag %~." % [flag(e)])
+
+public defstruct PruneError <: JitPCBError :
+  msg:String
+defmethod print (o:OutputStream, e:PruneError) :
+  print(o, msg(e))
+
+public defstruct ShellError <: JitPCBError :
+  msg:String
+defmethod print (o:OutputStream, e:ShellError) :
+  print(o, msg(e))
+
+;============================================================
+;=================== Register Serializers ===================
+;============================================================
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  jitpcb/errors/NoParamFile :
+    filename:String
+  jitpcb/errors/InvalidParam :
+    config:Symbol
+    field:Symbol
+    message:String
+    value:?
+  jitpcb/errors/ParamException :
+    info: FileInfo|False
+    msg: String
+  jitpcb/errors/InvalidPassPath :
+    start:Symbol
+    passes:Tuple<Symbol>
+  jitpcb/errors/NoJitPCBFiles
+  jitpcb/errors/NoJitPCBRoot
+  jitpcb/errors/NoLicenseBadInstall :
+    dir: String
+  jitpcb/errors/CommandCannotTakeArgs :
+    name: String
+    args: List
+  jitpcb/errors/NoPkgDir :
+    dir: String    
+  jitpcb/errors/NoFastPkgDir :
+    dir: String    
+  jitpcb/errors/KicadRequiresName :
+    args:List
+  jitpcb/errors/UnrecognizedStage :
+    stage:String
+  jitpcb/errors/NoESIRFiles :
+    command:String
+  jitpcb/errors/TooManyESIRFiles :
+    command:String
+  jitpcb/errors/NoFlagValue :
+    flag:String
+  jitpcb/errors/PruneError :
+    msg:String
+  jitpcb/errors/ShellError :
+    msg:String

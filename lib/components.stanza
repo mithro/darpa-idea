@@ -1,0 +1,3707 @@
+defpackage components :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-utils
+  import footprints
+  import symbols
+  import interfaces
+  import parts
+
+#use-added-syntax(ir-gen)
+
+; ====== Pad Range Map Helpers =================================================
+
+; TODO: Update all components to use range map helpers
+
+public defn expand-range (base:Ref|Symbol|String, start:Int, end:Int, maybe-step:Int|False) :
+  val base-ref-gen = match(base) :
+    (r:Ref) : {r[_]}
+    (s:Symbol) : {Ref(s)[_]}
+    (t:String) :
+      match(index-of-chars(t, "%_")) :
+        (i:Int) : {Ref(t % [_])}
+        (o) : {Ref(t)[_]}
+
+  val step = match(maybe-step) :
+    (i:Int) : i
+    (o) : if (end > start) : 1 else : -1
+  
+  to-list(seq(base-ref-gen{_}, start through end by step))
+
+public defn expand-range (base:Ref|Symbol|String, start:Int, end:Int) :
+  expand-range(base, start, end, false)
+
+public defn expand-range (base:Ref|Symbol|String, n:Int) :
+  expand-range(base, 0, n - 1)
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable, p-refs:Collection<Ref|False>&Lengthable) :
+  inside mapping :
+    for (c in c-refs, p in p-refs) do :
+      if c is-not False and p is-not False :
+        {c as Ref} => {p as Ref}
+
+; ====== com(base, start, end) ======
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-start:Int, c-end:Int, p-base:Ref|Symbol|String, p-start:Int, p-end:Int) :
+  cmp-pad-map(expand-range(c-base, c-start, c-end), expand-range(p-base, p-start, p-end))
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-start:Int, c-end:Int, p-base:Ref|Symbol|String, p-start:Int) :
+  cmp-pad-map(c-base, c-start, c-end, p-base, p-start, p-start + abs(c-end - c-start))
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-start:Int, c-end:Int, p-base:Ref|Symbol|String) :
+  cmp-pad-map(c-base, c-start, c-end, p-base, 0)
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-start:Int, c-end:Int, p-start:Int, p-end:Int) :
+  cmp-pad-map(c-base, c-start, c-end, "p", p-start, p-end)
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-start:Int, c-end:Int, p-start:Int) :
+  cmp-pad-map(c-base, c-start, c-end, "p", p-start)
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-start:Int, c-end:Int) :
+  cmp-pad-map(c-base, c-start, c-end, "p")
+
+; ====== com(base, end) ======
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-end:Int, p-base:Ref|Symbol|String, p-start:Int, p-end:Int) :
+  cmp-pad-map(c-base, 0, c-end, p-base, p-start, p-end)
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-end:Int, p-base:Ref|Symbol|String, p-start:Int) :
+  cmp-pad-map(c-base, c-end, p-base, p-start, p-start + c-end)
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-end:Int, p-base:Ref|Symbol|String) :
+  cmp-pad-map(c-base, c-end, p-base, 0)
+
+public defn cmp-pad-map (c-base:Ref|Symbol|String, c-end:Int) :
+  cmp-pad-map(c-base, c-end, "p")
+
+; ====== com(c-refs) ======
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable, p-base:Ref|Symbol|String, p-start:Int, p-end:Int) :
+  cmp-pad-map(c-refs, expand-range(p-base, p-start, p-end))
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable, p-base:Ref|Symbol|String, p-start:Int) :
+  cmp-pad-map(c-refs, p-base, p-start, p-start + length(c-refs) - 1)
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable, p-base:Ref|Symbol|String) :
+  cmp-pad-map(c-refs, p-base, 0)
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable, p-start:Int, p-end:Int) :
+  cmp-pad-map(c-refs, "p", p-start, p-end)
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable, p-start:Int) :
+  cmp-pad-map(c-refs, "p", p-start)
+
+public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable) :
+  cmp-pad-map(c-refs, "p")
+
+; Pad map from PinSpec
+
+; TODO: make this work for all pin specs. Need to canonicalize pin spec
+; constructor to resolve pin mapping
+public defn cmp-pad-map (ps:PinSpec) :
+  val c-refs = Vector<Ref>()
+  val p-refs = Vector<Ref>()
+
+  defn addToRefs (c : Ref, v : Int|Symbol|Seqable<Int|Symbol>) :
+    match(v) :
+      (v:Int) :
+        ;  pads in PinSpec are 1-indexed
+        add(c-refs, c)
+        add(p-refs, Ref("p")[v - 1])
+      (v:Symbol) :
+        add(c-refs, c)
+        add(p-refs, Ref(v))
+      (v:Seqable<Int|Symbol>) :
+        for pad in v do :
+          addToRefs(c, pad)
+      
+
+  for side in [l-pins(ps) r-pins(ps) b-pins(ps) t-pins(ps)] do :
+    match(side) :
+      (ckv:Collection<KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>>>) :
+        for kv in ckv do :
+          addToRefs( key(kv), value(kv) )
+  
+  cmp-pad-map(c-refs, p-refs)
+
+; Helper functions to instantiate pins from names or PinSpec
+
+public defn make-pins (names:Collection<Symbol|String|Ref>) :
+  inside pcb-component :
+    val pin-refs = to-list $ for name in names seq :
+      val ref = match(name) :
+        (r:Ref) : r
+        (s:Symbol|String) : Ref(s)
+      pin {ref}
+      ref
+
+    if length(unique(pin-refs)) != length(pin-refs) :
+      fatal("Pin names must be unique!")
+
+    pin-refs
+
+public defn make-pins (ps:PinSpec) :
+  defn get-ref (r-in:Ref|KeyValue<Ref,Int|Symbol>) :
+    match(r-in) :
+      (r:Ref) : r
+      (kv:KeyValue<Ref,Int|Symbol>) : key(kv)
+  
+  defn false-to-empty (cf:Collection|False) :
+    match(cf) :
+      (c:Collection) : c
+      (f:False) : []
+
+  val all-pins = to-list $ cat-all $ seq(false-to-empty, [
+    l-pins(ps) r-pins(ps) b-pins(ps) t-pins(ps)
+  ])
+
+  make-pins $ to-list $ seq(get-ref, all-pins)
+
+; ====== Supply and Ground =====================================================
+
+public pcb-component supply-cmp :
+  port p : pin[1]
+
+public pcb-component ground-cmp :
+  port p : pin[1]
+
+; ====== RF components ==================
+; NRF52 LPF
+pcb-component johanson-2450FM07A0029-cmp :
+  val ps = PinSpec(
+    [`in => 1]
+    [`out => 2]
+    [`gnd => 3]
+    )
+  make-pins(ps)
+  part = johanson-2450FM07A0029-prt
+  package = johanson-2450FM07A0029-pkg(cmp-pad-map(ps))
+
+; 2.4GHz Chip antenna
+pcb-component johanson-2450AT18A100-cmp :
+  val ps = PinSpec(
+    [`feed => 1 `nc => 2]
+    )
+  make-pins(ps)
+  part = johanson-2450AT18A100-prt
+  package = johanson-2450AT18A100-pkg(cmp-pad-map(ps))
+
+; ====== Discrete Passives (Resistors, Capacitors, Inductors) ==================
+
+public pcb-component gen-res-cmp (r-type:Symbol|False, res:Double, tol:Double, pwr:Double, pkg:String) :
+  if r-type is Symbol and (r-type as Symbol) == `pot :
+    port p : pin[3]
+  else :
+    port p : pin[2]
+  emodel = Resistor(res,tol,pwr)
+  switch(pkg) :
+    "0402" : package = RESC1005X35
+    "0603" : package = RESC1608X45
+    "0805" : package = RESC2012X50
+    "1206" : package = RESC3216X55
+    "1206" : package = RESC6332X35
+  reference-prefix = "R"
+
+public defn gen-res-cmp (res:Double, tol:Double, pkg:String) :
+  gen-res-cmp(false, res, tol, 0.0625, pkg)
+
+public defn gen-res-cmp (res:Double, tol:Double, pwr:Double) :
+  gen-res-cmp(false, res, tol, 0.0625, "0402")
+
+public defn gen-res-cmp (res:Double, tol:Double) :
+  gen-res-cmp(res, tol, 0.0625)
+
+public defn gen-res-cmp (res:Double) :
+  gen-res-cmp(res, 2.0)
+
+pcb-component panasonic-res-array-cmp :
+  port p : pin[4][2]
+
+  val ps = PinSpec(
+    to-tuple $ for i in 0 to 4 seq : p[i][0] => 2 * i + 1
+    to-tuple $ for i in 0 to 4 seq : p[i][1] => 2 * i + 2
+  )
+
+  package = panasonic-res-array-pkg(cmp-pad-map(ps))
+  part = panasonic-res-array-prt
+  reference-prefix = "R"
+
+public pcb-component yageo-RL0805FR-7W0RXL-cmp (r:Double) :
+  port p : pin[2]
+  emodel = Resistor(r, 1.0, 0.25)
+  reference-prefix = "R"
+  part = {yageo-RL0805FR-7W0RXL-prt(r)}
+  package = RESC2012X50
+
+pcb-component bourns-res-0ohm03-cmp :
+  port p : pin[2]
+  part = bourns-res-0ohm03-prt
+  emodel = Resistor(0.03, 1.0, 3.0)
+  reference-prefix = "R"
+  package = RESC6332X35
+
+pcb-component bourns-res-0ohm01-cmp :
+  port p : pin[2]
+  part = bourns-res-0ohm01-prt
+  emodel = Resistor(0.01, 1.0, 3.0)
+  reference-prefix = "R"
+  package = RESC6332X35
+
+public pcb-component gen-cap-cmp (cap:Double, tol:Double, max-v:Double, pol:True|False, pkg:String) :
+  port p : pin[2]
+  emodel = Capacitor(cap, tol, max-v)
+  switch(pkg) :
+    "0402" : package = CAPC1005X55
+    "0603" : package = CAPC1608X80
+    "0805" : package = CAPC2012X125
+    "1206" : package = CAPC3216X160
+    else : fatal("Incorrect capacitor package %_." % [pkg])
+  reference-prefix = "C"
+
+public defn gen-cap-cmp (cap:Double, tol:Double, max-v:Double, pol:True|False) :
+  gen-cap-cmp(cap, tol, max-v, pol, "0402")
+
+public defn gen-cap-cmp (cap:Double, tol:Double, max-v:Double) :
+  gen-cap-cmp(cap, tol, max-v, false)
+
+public defn gen-cap-cmp (cap:Double, tol:Double) :
+  gen-cap-cmp(cap, tol, 10.0)
+
+; 40 is default tolerance due to Yageo cap series 20% tolerance by default
+public defn gen-cap-cmp (cap:Double, pkg:String) :
+  gen-cap-cmp(cap, 20.0, 10.0, false, pkg)
+
+; 40 is default tolerance due to Yageo cap series 20% tolerance by default
+public defn gen-cap-cmp (cap:Double) :
+  gen-cap-cmp(cap, 20.0)
+
+public pcb-component gen-cap-cmp-insertion (cap:Double, tol:Double, max-v:Double, pol:True|False) :
+  port p : pin[2]
+  emodel = Capacitor(cap, tol, max-v)
+  reference-prefix = "C"
+
+public defn gen-cap-cmp-insertion (cap:Double, tol:Double, max-v:Double) :
+  gen-cap-cmp(cap, tol, max-v, false, "0402")
+
+public defn gen-cap-cmp-insertion (cap:Double, tol:Double) :
+  gen-cap-cmp(cap, tol, 10.0)
+
+public defn gen-cap-cmp-insertion (cap:Double) :
+  gen-cap-cmp(cap, 10.0)
+
+public pcb-component murata-cap-cmp (cap:Double) :
+  port p : pin[2]
+  reference-prefix = "C"
+  switch {cap == _} :
+    0.0000005 :
+      package = CAPC1005X55
+      part = murata-cap-0pf5-prt
+      emodel = Capacitor(cap, 10.0, 50.0)
+    0.000001 :
+      package = CAPC1005X55
+      part = murata-cap-1pf0-prt
+      emodel = Capacitor(cap, 5.0, 50.0)
+    0.000006 :
+      package = CAPC1005X55
+      part = murata-cap-6pf0-prt
+      emodel = Capacitor(cap, 5.0, 50.0)
+    0.0000082 :
+      package = CAPC1005X55
+      part = murata-cap-8pf2-prt  
+      emodel = Capacitor(cap, 10.0, 50.0)
+    0.000010 :  
+      package = CAPC1005X55
+      part = murata-cap-10pf-prt
+      emodel = Capacitor(cap, 2.0, 50.0)
+    0.000012 :  
+      package = CAPC1005X55
+      part = murata-cap-12pf-prt  
+      emodel = Capacitor(cap, 2.0, 50.0)
+    0.000015 :  
+      package = CAPC1005X55
+      part = murata-cap-15pf-prt  
+      emodel = Capacitor(cap, 5.0, 25.0)
+    0.000027 :  
+      package = CAPC1005X55
+      part = murata-cap-27pf-prt  
+      emodel = Capacitor(cap, 5.0, 25.0)
+    0.000033 :  
+      package = CAPC1005X55
+      part = murata-cap-33pf-prt  
+      emodel = Capacitor(cap, 2.0, 50.0)
+    0.15 :  
+      package = CAPC1005X55
+      part = murata-cap-0uf15-prt  
+      emodel = Capacitor(cap, 10.0, 16.0)
+    0.47 : 
+      package = CAPC1005X55
+      part = murata-cap-0uf47-prt  
+      emodel = Capacitor(cap, 10.0, 10.0)
+    2.2 :  
+      package = CAPC2012X125
+      part = murata-cap-2uf2-prt  
+      emodel = Capacitor(cap, 10.0, 16.0)
+    4.7 :  
+      package = CAPC2012X125
+      part = murata-cap-4uf7-prt     
+      emodel = Capacitor(cap, 10.0, 10.0)
+    10.0 :  
+      package = CAPC1608X80
+      part = murata-cap-10uf0-prt  
+      emodel = Capacitor(cap, 20.0, 16.0)
+    22.0 :  
+      package = CAPC2012X125
+      part = murata-cap-22uf-prt
+      emodel = Capacitor(cap, 20.0, 6.3)
+    else :
+      fatal("Unsupported murata-cap value %_" % [cap])
+
+pcb-component murata-cap-22pf-cmp :
+  port p : pin[2]
+  reference-prefix = "C"
+  part = murata-cap-22pf-prt
+  package = CAPC1005X55
+  emodel = Capacitor(0.000022, 2.0, 50.0)
+
+pcb-component murata-cap-22uf-25v-cmp :
+  port p : pin[2]
+  reference-prefix = "C"
+  part = murata-cap-22uf-25v-prt
+  package = CAPC2012X125
+  emodel = Capacitor(22.0, 20.0, 25.0)
+
+public pcb-component tdk-cap-cmp (cap:Double) :
+  port p : pin[2]
+  reference-prefix = "C"
+  switch {cap == _} :
+    0.000100 :
+      package = CAPC1608X80
+      part = tdk-cap-100pf-prt
+      emodel = Capacitor(cap, 5.0, 50.0)
+    0.000560 :
+      package = CAPC1608X80
+      part = tdk-cap-560pf-prt
+      emodel = Capacitor(cap, 5.0, 50.0)
+    0.0047 :  
+      package = CAPC1608X80
+      part = tdk-cap-4nf7-prt 
+      emodel = Capacitor(cap, 10.0, 50.0)
+    0.1 :  
+      package = CAPC1608X80
+      part = tdk-cap-0uf1-prt     
+      emodel = Capacitor(cap, 10.0, 50.0)
+    1.0 :  
+      package = CAPC1608X80
+      part = tdk-cap-1uf0-prt 
+      emodel = Capacitor(cap, 16.0, 50.0)
+    2.2 :  
+      package = CAPC1608X80
+      part = tdk-cap-2uf2-prt  
+      emodel = Capacitor(cap, 16.0, 50.0)
+    else : fatal("Unsupported tdk-cap value %_" % [cap])
+
+; TDK 10uF 25V 1206 Capacitor
+pcb-component tdk-C3216X5R1E106K085AC-cmp :
+  port p : pin[2]
+  emodel = Capacitor(10.0, 10.0, 25.0)
+  package = CAPC3216X125 ; TODO: 1mm height
+  part = tdk-C3216X5R1E106K085AC-prt
+  reference-prefix = "C"
+
+; TDK 10uF 10V 1206 Capacitor
+pcb-component kemet-C1206C106M8PACTU-cmp :
+  port p : pin[2]
+  emodel = Capacitor(10.0, 20.0, 10.0)
+  package = CAPC3216X160 ; TODO: 1.8mm height
+  part = kemet-C1206C106M8PACTU-prt
+  reference-prefix = "C"
+
+; Panasonic 1500uF 6.3V 10mm Aluminum Electrolytic Capacitor
+pcb-component panasonic-EEE-FK0J152P-cmp :
+  pin a
+  pin c
+  ; TODO: PinSpec or update symbol to allow for polarization?
+  emodel = Capacitor(1500.0, 20.0, 6.3)
+  package = CAPAE10000X10500(a => p[0], c => p[1])
+  part = panasonic-EEE-FK0J152P-prt
+  reference-prefix = "C"
+
+pcb-component panasonic-cap-22uf-cmp :
+  pin a
+  pin c
+  package = PANASONIC-CAP-SIZE-C(a => p[0], c => p[1])
+  part = panasonic-cap-22uf-prt
+  emodel = Capacitor(22.0, 20.0, 35.0)
+  reference-prefix = "C"
+
+pcb-component panasonic-cap-47uf-cmp :
+  pin a
+  pin c
+  package = PANASONIC-CAP-SIZE-D(a => p[0], c => p[1])
+  part = panasonic-cap-47uf-prt
+  emodel = Capacitor(47.0, 20.0, 25.0)
+  reference-prefix = "C"
+
+; Panasonic 100uF 25V 6.3mm Aluminum Electrolytic Capcitor
+pcb-component panasonic-EEE-1EA101XP-cmp :
+  pin a
+  pin c
+  emodel = Capacitor(100.0, 20.0, 25.0)
+  package = CAPAE6300X7700(a => p[0], c => p[1])
+  part = panasonic-EEE-1EA101XP-prt
+  reference-prefix = "C"
+
+; Panasonic electrolytics
+pcb-component panasonic-cap-4uf7-cmp :
+  pin a
+  pin c
+  package = CAPAE4300X5400(a => p[0], c => p[1])
+  part = panasonic-cap-4uf7-prt
+  emodel = Capacitor(4.7, 20.0, 35.0)
+  reference-prefix = "C"
+
+pcb-component panasonic-cap-220uf-cmp :
+  pin a
+  pin c
+  package = CAPAE8000X10200(a => p[0], c => p[1])
+  part = panasonic-cap-220uf-prt
+  emodel = Capacitor(220.0, 20.0, 35.0)
+  reference-prefix = "C"
+
+pcb-component panasonic-cap-100uf-cmp :
+  pin a
+  pin c
+  package = CAPAE6300X7700(a => p[0], c => p[1])
+  part = panasonic-cap-100uf-prt
+  emodel = Capacitor(100.0, 20.0, 25.0)
+  reference-prefix = "C"
+
+pcb-component panasonic-cap-1500uf-cmp :
+  pin a
+  pin c
+  package = CAPAE16000X16500(a => p[0], c => p[1])
+  part = panasonic-cap-1500uf-prt
+  emodel = Capacitor(1500.0, 20.0, 35.0)
+  reference-prefix = "C"
+
+public pcb-component gen-ind-cmp (ind:Double, tol:Double, max-i:Double) :
+  port p : pin[2]
+  emodel = Inductor(ind, tol, max-i)
+  package = INDC2520X100 ;TODO: Dummy package assigned to make Key-In exporter work
+  reference-prefix = "L"
+
+public defn gen-ind-cmp (ind:Double, tol:Double) :
+  gen-ind-cmp(ind, tol, 0.1)
+
+public defn gen-ind-cmp (ind:Double) :
+  gen-ind-cmp(ind, 10.0)
+
+public pcb-component murata-lqp15-cmp (ind:Double) :
+  port p : pin[2]
+  reference-prefix = "L"
+  switch {ind == _} :
+    0.0027 :
+      package = INDC1005X55
+      part = murata-ind-2nh7-prt
+      emodel = Inductor(ind, 2.5, 0.22)
+    0.0039 :
+      package = INDC1005X55
+      part = murata-ind-3nh9-prt
+      emodel = Inductor(ind, 2.5, 0.17)
+    else :
+      fatal("Unsupported murata-ind value %_" % [ind])
+
+pcb-component murata-ind-4uh7-cmp :
+  port p : pin[2]
+  emodel = Inductor(4.7, 20.0, 0.8)
+  package = INDC2520X100
+  part = murata-ind-4uh7-prt
+  reference-prefix = "L"
+
+pcb-component taiyo-ind-10uh-cmp :
+  port p : pin[2]
+  emodel = Inductor(10.0, 10.0, 0.235)
+  package = INDC2518X200
+  part = taiyo-ind-10uh-prt 
+  reference-prefix = "L"
+
+pcb-component abracon-ind-2uh2-cmp :
+  port p : pin[2]
+  emodel = Inductor(2.2, 20.0, 5.5)
+  package = INDM560520X300
+  part = abracon-ind-2uh2-prt
+  reference-prefix = "L"
+
+pcb-component bourns-ind-68uh-cmp :
+  port p : pin[2]
+  emodel = Inductor(68.0, 20.0, 7.0)
+  package = INDM16901690X670
+  part = bourns-ind-68uh-prt
+  reference-prefix = "L"
+
+; Bourns 10uH Inductor
+pcb-component bourns-SRU1028-100Y-cmp :
+  port p : pin[2]
+  emodel = Inductor(10.0, 30.0, 2.8)
+  package = INDM10001000X280
+  part = bourns-SRU1028-100Y-prt
+  reference-prefix = "L"
+
+
+; ====== Ferrite beads ===============
+pcb-component tdk-fb-1k5-cmp :
+  port p : pin[2]
+  package = RESC1005X35
+  part = tdk-fb-1k5-prt
+
+; Samsung Ferrite Bead
+pcb-component samsung-CIC31P151NE-cmp :
+  port p : pin[2]
+  package = RESC3216X55
+  part = samsung-CIC31P151NE-prt
+  reference-prefix = "FB"
+
+
+; ====== Fuses =================================================================
+
+public pcb-component littlefuse-2090L-cmp (i-hold:Double) :
+  port p : pin[2]
+  part = {littlefuse-2090L-prt(i-hold)}
+  reference-prefix = "F"
+  package = FUSC7351X160
+
+public pcb-component gen-ptc-cmp (i-hold:Double) :
+  port p : pin[2]
+  reference-prefix = "F"
+  if i-hold <= 0.050 :
+    part = belfuse-0ZCJ0005FF2E-prt
+    package = GENERIC-1206
+  else if i-hold <= 0.750 :
+    part = belfuse-0ZCF0075AF2C-prt
+    package = GENERIC-2920
+  else : fatal("Unsupported i-hold: %_" % [i-hold])
+
+; ====== Crystals, Oscillators =================================================
+
+pcb-component txc-7B-12000MAAJ-T-cmp :
+  port p : pin[2]
+  port g : pin[2]
+
+  reference-prefix = "XTAL"
+
+pcb-component epson-MC-146-cmp :
+  port p : pin[2]
+  port g : pin[2]
+  val ps = PinSpec(
+    [p[0] => 1 p[1] => 3]
+    [g[0] => 2 g[1] => 4])
+  package = XTAL-MC-146(cmp-pad-map(ps))
+  part = epson-MC-146-prt
+  reference-prefix = "XTAL"
+
+pcb-component epson-TSX-3225-cmp :
+  port p : pin[2]
+  port g : pin[2]
+  val ps = PinSpec(
+   [p[0] => 2 p[1] => 3]
+   [g[0] => 1 g[1] => 4])
+  package = XTAL-TSX-3225(cmp-pad-map(ps))
+  part = epson-TSX-3225-prt
+  reference-prefix = "XTAL"
+
+pcb-component abracon-ABM12-32-B2X-T3-cmp :
+  port p : pin[2]
+  port g : pin[2]
+  val ps = PinSpec(
+    [p[0] => 2 p[1] => 3]
+    [g[0] => 1 g[1] => 4])
+  part = abracon-ABM12-32-B2X-T3-prt
+  package = XTAL-ABM12-pkg(cmp-pad-map(ps))
+; ====== Discrete Semiconductors (Diodes, Transistors) =========================
+
+public pcb-component gen-diode-cmp (d-type:Symbol|False) :
+  pin a
+  pin c
+  if d-type == `led :
+    package = LEDSC16080X80(a => p[0], c => p[1])
+    ; TODO: update with color spec
+    part = gen-led-prt
+  reference-prefix = "D"
+
+; SBRD10200 Series 200 V 10 A Surface Mount Schottky Rectifier - TO-252-3
+pcb-component smc-SBRD10200TR-cmp :
+  port a : pin[2]
+  pin c
+  val ps = PinSpec([a[0] => 1, c => 2, a[1] => 3])
+  package = TO228P970X238-3-pkg(cmp-pad-map(ps))
+  part = smc-SBRD10200TR-prt
+  reference-prefix = "D"
+
+; 3 A, 100 V Surface Mount Schottky Barrier Rectifiers
+pcb-component on-S310FA-cmp :
+  pin a
+  pin c
+  package = DIOM-3618X133(a => p[0], c => p[1])
+  part = on-S310FA-prt
+  reference-prefix = "D"
+
+public pcb-component nexperia-PDZ5v6BGWJ-cmp:
+  pin a
+  pin c
+  package = SOD123(a => p[0], c => p[1])
+  part = nexperia-PDZ5v6BGWJ-prt
+  reference-prefix = "D"
+
+public pcb-component nexperia-PDZ15BGWX-cmp:
+  pin a
+  pin c
+  package = SOD123(a => p[0], c => p[1])
+  part = nexperia-PDZ15BGWX-prt
+  reference-prefix = "D"
+
+pcb-component on-SMBJ14A-cmp :
+  pin a
+  pin c
+  package = DIOM-5436X220(a => p[0], c => p[1])
+  part = on-SMBJ14A-prt
+  reference-prefix = "D"
+
+pcb-component on-SMBJ24A-cmp :
+  pin a
+  pin c
+  package = DIOM-5436X220(a => p[0], c => p[1])
+  part = on-SMBJ24A-prt
+  reference-prefix = "D"
+
+pcb-component on-SD05T1G-cmp :
+  pin a
+  pin c
+  package = DIOM-1713X90(a => p[0], c => p[1])
+  part = on-SD05T1G-prt
+  reference-prefix = "D"
+
+public pcb-component gen-zener-cmp (v-nom:Double) :
+  pin a
+  pin c
+  reference-prefix = "F"
+  ; TODO: Make this operate on ranges instead of matches
+  part = {
+    if      v-nom <= 05.6 : Ref("nexperia-PDZ5v6BGWJ-prt")
+    else if v-nom <= 15.0 : Ref("nexperia-PDZ15BGWX-prt")
+    else : fatal("Unsupported v-nom: %_" % [v-nom])}
+  package = SOD123(a => p[0], c => p[1])
+
+pcb-component on-BAS16SL-cmp :
+  pin a
+  pin c
+  part = on-BAS16SL-prt
+  reference-prefix = "D"
+  package = SOD923x40(a => p[0], c => p[1])
+
+pcb-component mcc-SK88L-TP-cmp :
+  pin a
+  pin c
+  package = DIOM-7162X200(a => p[0], c => p[1])
+  part = mcc-SK88L-TP-prt
+  reference-prefix = "D"
+
+pcb-component smc-DSS16UTR-cmp :
+  pin a
+  pin c
+  part = smc-DSS16UTR-prt
+  reference-prefix = "D"
+  package = SOD123(a => p[0], c => p[1]) ; Why is this not repeat from the part def?
+
+public pcb-component on-BAT54SLT1G-cmp :
+  ; 2x BAT54 diode in series in single package
+  pin a  ; Anode   
+  pin ca ; Cathode&Anode
+  pin c  ; Cathode
+  val ps = PinSpec(
+    [c => 3]  ; Left
+    [a => 1]  ; Right
+    [ca => 2] ; Bottom
+    []
+  )
+  package = SOT23-3N(cmp-pad-map(ps))
+  part = on-BAT54SLT1G-prt
+  reference-prefix = "D"
+
+pcb-component nexperia-PESD1CAN-UX-cmp :
+  pin c0
+  pin c1
+  pin common
+  ; TODO: go back to diode sym when we have pin to multiple pad assignment working
+  val ps = PinSpec(
+    []
+    []
+    [common => 3]
+    [c0 => 1, c1 => 2]
+  )
+  package = SOT65P235X100-3N(cmp-pad-map(ps))
+  part = nexperia-PESD1CAN-UX-prt
+  reference-prefix = "D"
+  
+; 90 degree through-hole led
+pcb-component dialight-5511109F-cmp :
+  pin a
+  pin c
+  package = LED-5511109F-pkg(a => p[0], c => p[1])
+  part = dialight-5511109F-prt
+  reference-prefix = "D"
+
+pcb-component osr-LG-L29K-F2J1-24-cmp :
+  pin a
+  pin c
+  package = LEDSC16080X80(a => p[0], c => p[1])
+  part = osr-LG-L29K-F2J1-24-prt
+  reference-prefix = "D"
+
+pcb-component vishay-VLMKG3400-cmp :
+  port a : pin[2]
+  port c : pin[2]
+  part = vishay-VLMKG3400-prt
+  package = PLCC-4(c[0] => p[0], a[0] => p[1], a[1], => p[2], c[1] => p[3])
+  reference-prefix = "D"
+
+;Common anode RGB LED
+pcb-component SX-3528-cmp :
+  val ps = PinSpec(
+    []
+    []
+    [`r => 4 `g => 2 `b => 3]
+    [`anode => 1])
+  reference-prefix = "D"
+  make-pins(ps)
+  package = PLCC-4(cmp-pad-map(ps))
+  part = SX-3528-prt
+
+; Edge-firing RGB LED
+pcb-component rohm-MSL0104RGB-cmp :
+  val ps = PinSpec(
+    [`ar0 => 1 `ar1 => 7 `ag =>2 `ab => 6]
+    [`kr => 4 `kg => 3 `kb => 5]
+    )
+  make-pins(ps)
+  reference-prefix = "D"
+  package = D-MSL0104RGB-pkg(cmp-pad-map(ps))
+  part = rohm-MSL0104RGB-prt
+
+public defn gen-diode-cmp () :
+  gen-diode-cmp(false)
+
+public pcb-component gen-bjt-cmp (bjt-type:Symbol) :
+  pin b
+  pin c
+  pin e
+  reference-prefix = "Q"
+
+public defn gen-bjt-cmp () :
+  gen-bjt-cmp(`npn)
+
+public pcb-component gen-fet-cmp (type:Symbol, mode:Symbol, diode?:True|False, bulk?:True|False) :
+  pin g
+  pin s
+  pin d
+  
+  if bulk? :
+    pin bulk
+  
+  reference-prefix = "Q"
+
+public defn gen-fet-cmp (type:Symbol, mode:Symbol, diode?:True|False) :
+  gen-fet-cmp(type, mode, diode?, false)
+
+public defn gen-fet-cmp (type:Symbol, mode:Symbol) :
+  gen-fet-cmp(type, mode, true)
+
+public defn gen-fet-cmp (type:Symbol) :
+  gen-fet-cmp(type, `enhancement)
+
+public defn gen-fet-cmp () :
+  gen-fet-cmp(`n-type)
+
+; NPN transistor
+pcb-component nxp-PMBT3904-cmp :
+  val ps = PinSpec(
+  [`b => 1 `e => 2 `c => 3]
+  false
+  )
+  make-pins(ps)
+  reference-prefix = "Q"
+  part = nxp-PMBT3904-prt
+  package = SOT95P280X100-3N(cmp-pad-map(ps))
+
+; TODO: Make generic and assign with part solver
+; N-FET
+pcb-component di-2N7002A-7-cmp :
+  val ps = PinSpec(
+    [`g => 1 `s => 2 `d => 3]
+    false
+  )
+  make-pins(ps)
+  reference-prefix = "Q"
+  part = di-2N7002A-7-prt
+  package = SOT95P280X100-3N(cmp-pad-map(ps))
+
+; TODO: Make generic with part solver
+; Low gate threshold (0.5-1.0V) N-FET
+pcb-component di-DMG1012UW-7-cmp :
+  val ps = PinSpec(
+    [`g => 1 `s => 2 `d => 3]
+    false
+  )
+  make-pins(ps)
+  reference-prefix = "Q"
+  part = di-DMG1012UW-7-prt
+  package = SOT65P235X100-3N(cmp-pad-map(ps))
+
+; TODO; Update when we have mapping from component to multiple pads
+; N-FET
+pcb-component di-ZXMN6A09GTA-cmp :
+  port d : pin[2]
+  pin s
+  pin g
+
+  val ps = PinSpec(
+    [g => 1 s => 3 d[0] => 2 d[1] => 4]
+    false)
+  ; TODO: go back to fet sym when we have pin to multiple pad assignment working
+  reference-prefix = "Q"
+  part = di-ZXMN6A09GTA-prt
+  package = SOT230P700X180-4N(cmp-pad-map(ps))
+
+; N-FET 60V
+pcb-component vishay-SQ4850EY-T1-GE3-cmp :
+  port d : pin[4]
+  port s : pin[3]
+  pin g
+  val ps = PinSpec(
+    [g => 4]
+    []
+    [s[0] => 1 s[1] => 2 s[2] => 3]
+    [d[0] => 5 d[1] => 6 d[2] => 7 d[3] => 8])
+  ; TODO: go back to fet sym when we have pin to multiple pad assignment working
+  reference-prefix = "Q"
+  part = vishay-SQ4850EY-T1-GE3-prt
+  package = SOIC127P600X175-8N(cmp-pad-map(ps))
+
+; N-FET 40V 50A
+pcb-component infineon-IPD50N04S4L08ATMA1-cmp :
+  val ps = PinSpec(
+    [`g => 1 `d => 2 `s => 3]
+    false)
+  make-pins(ps)
+  reference-prefix = "Q"
+  part = infineon-IPD50N04S4L08ATMA1-prt
+  package = TO228P970X238-3-pkg(cmp-pad-map(ps))
+
+pcb-component nexperia-PMV250EPEAR-cmp :
+  pin d
+  pin s
+  pin g
+  val ps = PinSpec(
+    [g => 1 s => 2 d => 3]
+    false )
+  reference-prefix = "Q"
+  part = nexperia-PMV250EPEAR-prt
+  package = SOT23-3N(cmp-pad-map(ps))
+
+; ====== Chokes ======
+
+pcb-component bourns-DR331-513AE-cmp :
+  port l0 : pin[2]
+  port l1 : pin[2]
+  val ps = PinSpec(
+    [l0[0] => 1 l1[0] => 2]
+    [l0[1] => 4 l1[1] => 3])
+  reference-prefix = "FL"
+  part = bourns-DR331-513AE-prt
+  package = bourns-DR331-513AE-pkg(cmp-pad-map(ps))
+
+; ====== Op-Amps ===============================================================
+; Small size dual op amp
+pcb-component maxim-MAX9637AXA+-cmp :
+  pin vs-
+  pin vs+
+  port vi- : pin[2]
+  port vi+ : pin[2]
+  port vo : pin[2]
+  val ps = PinSpec(
+    [vo[0]=> 1 vi+[0] => 3 vi-[0] => 2 vs- => 4 vi+[1] => 5 
+    vo[1] => 7 vi-[1] => 6 vs+ => 8]
+    []
+    )
+  part = maxim-MAX9637AXA+-prt
+  package = SC70-8N-pkg(cmp-pad-map(ps))
+
+; Small size dual op amp
+pcb-component maxim-MAX9638AVB+-cmp :
+  pin vs-
+  pin vs+
+  port vi- : pin[2]
+  port vi+ : pin[2]
+  port vo : pin[2]
+  port shdn : pin[2]
+  val ps = PinSpec(
+    [vs+ => 1 vi+[1] => 2 vi-[1] => 3 vi+[0] => 4 vs- => 5 
+    shdn[0] => 6 shdn[1] => 7 vo[0] => 8 vi-[0] => 9 vo[1] => 10]
+    []
+    )
+  part = maxim-MAX9638AVB+-prt
+  package = UTQFN40P140X180X50-10(cmp-pad-map(ps))
+
+; Texas Instruments single, dual, and quad op-amp
+public pcb-component ti-LMV3XX-cmp (n:Int) :
+  pin vs-
+  pin vs+
+  port vi- : pin[n]
+  port vi+ : pin[n]
+  port vo : pin[n]
+  
+  val [vs-_idx, vs+_idx, vi-_idxs, vi+_idxs, vo_idxs] = 
+    switch(n) : 
+      1: [2, 5, [3], [1], [4]]
+      2: [4, 8, [2, 6], [3, 5], [1, 7]]
+      4: [11, 4, [2, 6, 9, 13], [3, 5, 10, 12], [1, 7, 8, 14]]
+      else : fatal("Incorrect number of OpAmps for TI LMV3XX:%_." % [n])
+
+  val ps = PinSpec(
+    to-tuple $ cat-all $ for i in 0 to n seq : [vi-[i] => vi-_idxs[i], vi+[i] => vi+_idxs[i]]
+    to-tuple $ for i in 0 to n seq : vo[i] => vo_idxs[i]
+    [vs- => vs-_idx]
+    [vs+ => vs+_idx]
+  )
+  
+
+  switch(n) :
+    1: package = SOT95P280X145-5N(cmp-pad-map(ps))
+    2: package = SOIC127P600X175-8N(cmp-pad-map(ps))
+    4: package = SOIC127P600X175-14N(cmp-pad-map(ps))
+    else : fatal("Unsupported package N for TI LMV3XX:%_." % [n])
+  
+  part = {ti-LMV3XX-prt(n)}
+
+; TODO: use electrical models to make generic, model 2 and 4 op-amp chips (with op amp template?)
+public pcb-component ti-OPA374AIDBVR-cmp :
+  val pin-refs = make-pins([`vo, `vs-, `vi+, `vi-, `vs+])
+
+
+  package = SOT95P280X145-5N(cmp-pad-map(pin-refs))
+  
+  part = ti-OPA374AIDBVR-prt
+
+; Op Amp Single Auto Zero Amplifier R-R O/P ±18V/36V 5-Pin SOT-23 T/R
+pcb-component ti-OPA187IDBVR-cmp :
+  val pin-refs = make-pins([`vo, `vs-, `vi+, `vi-, `vs+])
+  part = ti-OPA187IDBVR-prt
+  package = SOT23-5N(cmp-pad-map(pin-refs))
+
+; TI low-distortion OpAmp
+pcb-component ti-OPA365AQDBVRQ1-cmp :
+  val pin-refs = make-pins([`vo, `vs-, `vi+, `vi-, `vs+])
+  
+  
+  package = SOT95P280X145-5N(cmp-pad-map(pin-refs))
+  
+  part = ti-OPA365AQDBVRQ1-prt
+
+; ====== Logic Gates ===========================================================
+
+; TI single open-drain buffer
+pcb-component ti-SN74LVC1G07-cmp :
+  val ps = PinSpec(
+    [`a => 2]
+    [`y => 4]
+    [`vs- => 3]
+    [`vs+ => 5]
+  )
+  make-pins(ps)
+  
+
+  package = SOT95P280X145-5N(cmp-pad-map(ps))
+  
+  part = ti-SN74LVC1G07-prt
+
+; TI hex open-collector buffer
+pcb-component ti-SN74LS07DR-cmp :
+  val ps = PinSpec(
+    [`A1 => 1 `A2 => 3 `A3 => 5 `A4 => 9 `A5 => 11 `A6 => 13]
+    [`Y1 => 2 `Y2 => 4 `Y3 => 6 `Y4 => 8 `Y5 => 10 `Y6 => 12]
+    [`gnd => 7]
+    [`vcc => 14])
+  make-pins(ps)
+
+
+  package = SOIC127P600X175-14N(cmp-pad-map(ps))
+  
+  part = ti-SN74LS07DR-prt
+
+; ====== Connectors, Test Points, Holes ========================================
+
+
+public defn n-ltb-pin-spec (n-l:Int, n-t:Int, n-b:Int, order:Symbol|False) -> PinSpec :
+  PinSpec(
+    expand-range("p", n-l)
+    []
+    expand-range("p", n-l, n-l + n-t - 1)
+    expand-range("p", n-l + n-t, n-l + n-t + n-b - 1)
+    order
+  )
+
+public defn n-ltb-pin-spec (n-l:Int, n-t:Int, n-b:Int) -> PinSpec :
+  n-ltb-pin-spec(n-l, n-t, n-b, false)
+  
+
+public pcb-component pin-header-cmp (n-pin:Int, n-row:Int, pin-pitch:Double, row-pitch:Double) :
+  port p : pin[n-pin]
+  package = {pin-header-pkg(n-pin, n-row, pin-pitch, row-pitch)}
+
+  reference-prefix = "J"
+  part = {pin-header-prt(n-pin, n-row, pin-pitch, row-pitch)}
+
+public defn pin-header-cmp (n-pin:Int) :
+  pin-header-cmp(n-pin, 1, 2.54)
+
+public defn pin-header-cmp (n-pin:Int, n-row:Int) :
+  pin-header-cmp(n-pin, n-row, 2.54)
+
+public defn pin-header-cmp (n-pin: Int, pin-pitch:Double) :
+  pin-header-cmp(n-pin, 1, pin-pitch)
+
+public defn pin-header-cmp (n-pin: Int, n-row: Int, pin-pitch:Double) :
+  pin-header-cmp(n-pin, n-row, pin-pitch, pin-pitch)
+
+public pcb-component solder-jumper-cmp (n:Int) :
+  port p : pin[n]
+
+  reference-prefix = "JP"
+  part = {solder-jumper-prt(n)}
+  package = {solder-jumper-pkg(n)}
+
+public pcb-component amphenol-delta-d-cmp (n:Int) :
+  port p : pin[n + 2]
+  package = {amphenol-delta-d-pkg(n)}
+  part = {amphenol-delta-d-prt(n)}
+  reference-prefix = "J"
+
+public pcb-component amphenol-LD-cmp (n:Int, male?:True|False) :
+  port p : pin[n + 2]
+  package = {amphenol-LD-pkg(n, male?)}
+  ; TODO: symbol parametric in gender
+  part = {amphenol-LD-prt(n, male?)}
+  reference-prefix = "J"
+
+public pcb-component amphenol-LD-cmp (n:Int) :
+  amphenol-LD-cmp(n, false)
+
+; 2.5mm 5A barrel jack
+pcb-component cui-pj-202bh-cmp :
+  val ps = PinSpec(
+      [`pin `barrel `det]
+      false)
+  val pin-refs = make-pins(ps)
+  package = cui-pj-202bh-pkg(cmp-pad-map(pin-refs))
+  reference-prefix = "J"
+  part = cui-pj-202bh-prt
+
+public pcb-component JST-PH-cmp (n:Int) :
+  port p : pin[n]
+  package = {JST-PH-pkg(n)}
+  part = {JST-PH-prt(n)}
+  reference-prefix = "J"
+
+; TE M12 connector
+pcb-component te-4-2172079-2-cmp :
+  port p : pin[6]
+  package = te-4-2172079-2-pkg
+  part = te-4-2172079-2-prt
+  reference-prefix = "J"
+
+; Test-point loop
+; TODO: Merge with test point pads
+pcb-component keystone-5011-cmp :
+  pin p
+  part = keystone-5011-prt
+  package = keystone-5011-pkg
+
+; Molex SD Card connector
+pcb-component molex-5025700893-cmp :
+  val ps = PinSpec(
+    [`dat2 `dat3 `cmd `vdd `clk `gnd `dat0 `dat1 `det-lvr `det-sw]
+    []
+    [`case_gnd0 `case_gnd1]
+    [`case_gnd2 `case_gnd3]
+  )
+  val pin-refs = make-pins(ps)
+  
+  package = molex-5025700893-pkg(cmp-pad-map(pin-refs))
+  part = molex-5025700893-prt
+  reference-prefix = "J"
+
+; TODO: Make USB Connectors generic and merge with generator below
+val flat-usb-pin-spec = PinSpec(
+  [`vcc `dat- `dat+ `id `gnd] 
+  []
+  [`case_gnd0 `case_gnd1]
+  [`case_gnd2 `case_gnd3]
+)
+
+; Molex USB Micro B jack
+pcb-component molex-0476420001-cmp :
+  val pin-refs = make-pins(flat-usb-pin-spec)
+
+  package = molex-0476420001-pkg(cmp-pad-map(pin-refs))
+  part = molex-0476420001-prt
+  reference-prefix = "J"
+
+; Amphenol USB Micro B jack
+pcb-component amphenol-10118192-0001LF-cmp :
+  val pin-refs = make-pins(flat-usb-pin-spec)
+  
+  package = amphenol-10118192-0001LF-pkg(cmp-pad-map(pin-refs))
+  part = amphenol-10118192-0001LF-prt
+  reference-prefix = "J"
+
+public defn usb-pin-spec (n-port:Int, id?:True|False, n-cgnd:Int) :
+  val sig-pins = if id? :
+    ["dat-%_" => 2 "dat+%_" => 3 "id%_" => 4]
+  else :
+    ["dat-%_" => 2 "dat+%_" => 3]
+  
+  val n-port-pins = length(sig-pins) + 2
+
+  val port-sides = [ sig-pins ["gnd%_" => n-port-pins] ["vcc%_" => 1] ]
+
+  val suffixes = if n-port > 1 :
+    to-list(1 through n-port)
+  else :
+    List("")
+
+  val sides = to-tuple $ for side in port-sides seq :
+    to-tuple $ cat-all $ for [suffix, idx] in zip(suffixes, 0 to length(suffixes)) seq :
+      for ref-pad in side seq :
+        to-symbol(key(ref-pad) % [suffix]) => (value(ref-pad) + (idx * n-port-pins))
+
+  val cgnds = to-tuple $ for i in 1 through n-cgnd seq :
+    to-symbol("cgnd%_" % [i])
+
+  PinSpec(
+    sides[0]
+    []
+    to-tuple $ cat(sides[1], cgnds)
+    sides[2]
+  )
+
+; Wurth USB Mini B vertical jack
+pcb-component wurth-651005136421-cmp :
+  val ps = usb-pin-spec(1, true, 2)
+  make-pins(ps)
+
+; Wurth USB 2xA vertical jack
+pcb-component wurth-614008235023-cmp :
+  val ps = usb-pin-spec(2, false, 4)
+  make-pins(ps)
+
+; ZQSP Cage
+pcb-component te-1551892-1-cmp :
+  port p : pin[12]
+  package = te-1551892-1-pkg
+  part = te-1551892-1-prt
+  reference-prefix = "J"
+
+; ZQSP Connector
+pcb-component te-1551920-2-cmp :
+  port p : pin[38]
+  package = te-1551920-2-pkg
+  part = te-1551920-2-prt
+  reference-prefix = "J"
+
+; Harwin pin header
+pcb-component harwin-M20-7812045-cmp :
+  port p : pin[40]
+  package = harwin-M20-7812045-pkg
+  part = harwin-M20-7812045-prt
+  reference-prefix = "J"
+
+public pcb-component phoenix-combicon-mc-cmp (n:Int) :
+  port p : pin[n]
+  package = {phoenix-combicon-mc-pkg(n)}
+  part = {phoenix-combicon-mc-prt(n)}
+  reference-prefix = "J"
+
+pcb-component phoenix-1778683-cmp :
+  port p : pin[8]
+  package = phoenix-1778683-pkg
+  part = phoenix-1778683-prt
+  reference-prefix = "J"
+
+pcb-component phoenix-1778803-cmp :
+  port p : pin[6]
+  package = phoenix-1778803-pkg
+  part = phoenix-1778803-prt
+  reference-prefix = "J"
+
+public pcb-component molex-pico-clasp-cmp (n:Int) :
+  port p : pin[n + 2]
+  package = {molex-pico-clasp-pkg(n)}
+  part = {molex-pico-clasp-prt(n)}
+  reference-prefix = "J"
+
+public pcb-component samtec-qth-cmp (n-row:Int) :
+  val n-pin = 2 * n-row + 4 * (n-row / 30)
+  port p : pin[n-pin]
+  package = {samtec-qth-pkg(n-row)}
+  ; TODO: start numbering on right?
+  part = {samtec-qth-prt(n-row)}
+  reference-prefix = "J"
+
+pcb-component ironwood-C17829-socket-cmp :
+  port p : pin[676]
+  package = ironwood-C17829-socket-pkg
+  part = ironwood-C17829-socket-prt
+  reference-prefix = "J"
+
+; TODO: Merge with qth family?
+public pcb-component samtec-qsh-cmp (n-row:Int) :
+  val n-pin = 2 * n-row + 4 * (n-row / 30)
+  port p : pin[n-pin]
+  package = {samtec-qsh-pkg(n-row)}
+  part = {samtec-qsh-prt(n-row)}
+  reference-prefix = "J"
+
+; CUI 2.5mm by 5.5mm barrel jack
+; p[0] and p[2] are center
+; p[1] is sleeve
+; p[2] is switch contact
+pcb-component cui-PJ-002BH-SMT-TR-cmp :
+  val ps = PinSpec(
+    [],
+    [`pin-0 => 1, `pin-1 => 4, `barrel => 2, `detect => 3]
+  )
+  make-pins(ps)
+  package = cui-PJ-002BH-SMT-TR-pkg(cmp-pad-map(ps))
+  part = cui-PJ-002BH-SMT-TR-prt
+  reference-prefix = "J"
+
+; Dual SMD headers
+public pcb-component samtec-tsm-cmp (n-pin:Int) :
+  port p : pin[n-pin]
+  package = {samtec-tsm-pkg(n-pin)}
+  part = {samtec-tsm-prt(n-pin)}
+  reference-prefix = "J"
+
+; Right angle SMA
+pcb-component molex-732511350-cmp :
+  val ps = PinSpec(
+    [`sig => 1, `gnd-0 => 2, `gnd-1 => 3, `gnd-2 => 4, `gnd-3 => 5]
+  )
+  make-pins(ps)
+  part =  molex-732511350-prt
+  package = molex-732511350-pkg(cmp-pad-map(ps))
+  reference-prefix = "J"
+
+; End-launch SMA
+pcb-component johnson-142-0701-801-cmp :
+  val ps = PinSpec(
+    [`sig => 1, `gnd-0 => 2, `gnd-1 => 3, `gnd-2 => 4, `gnd-3 => 5]
+  )
+  make-pins(ps)
+  package = johnson-142-0701-801-pkg(cmp-pad-map(ps))
+  part = johnson-142-0701-801-prt
+  reference-prefix = "J"
+
+public pcb-component ipex-cabline-vs-cmp (n:Int) :
+  port p : pin[n + 4]
+  package = {ipex-cabline-vs-pkg(n)}
+  ; TODO: number from bottom up?
+  part = {ipex-cabline-vs-prt(n)}
+  reference-prefix = "J"
+
+public pcb-component test-point-pads-cmp (pad-r: Double, mask-r: Double, point-locs: List<[Double,Double]>, bounding-courtyard:True|False, pin-currents: List<Double>|False) :
+  val n = length(point-locs)
+  port p : pin[n]
+  package = {test-point-pads-pkg(pad-r, mask-r, point-locs, bounding-courtyard)}
+
+  
+  reference-prefix = "TP"
+  
+  ; Include this to suppress part warnings
+  part = {test-point-pads-prt(pad-r, mask-r, point-locs, bounding-courtyard)}
+
+  match(pin-currents):
+    (l:List<Double>) :
+      for i in 0 to length(l) do :
+        max-current-draw(p[i]) = l[i]
+    (f) : false
+
+public defn test-point-pads-cmp (pad-r: Double, mask-r: Double, point-locs: List<[Double,Double]>, bounding-courtyard:True|False) :
+  test-point-pads-cmp(pad-r, mask-r, point-locs, bounding-courtyard, false)
+
+public defn test-point-pads-cmp (pad-r: Double, mask-r: Double, point-locs: List<[Double,Double]>) :
+  test-point-pads-cmp(pad-r, mask-r, point-locs, false)
+
+public defn test-point-pads-cmp (pad-r: Double, mask-r:Double) :
+  test-point-pads-cmp(pad-r, mask-r, List([0.0,0.0]))
+
+public defn test-point-pads-cmp (pad-r: Double) :
+  test-point-pads-cmp(pad-r, pad-r + 0.2)
+
+public defn test-point-pads-cmp (pad-r: Double, pin-currents:List<Double>) :
+  test-point-pads-cmp(pad-r, pad-r + 0.2, List([0.0,0.0]), false, pin-currents)
+
+public defn test-point-pads-cmp (pad-r: Double, point-locs: List<[Double,Double]>) :
+  test-point-pads-cmp(pad-r, pad-r + 0.2, point-locs)
+
+; TODO: used named pins, or merge with test point design?
+; TagConnect pad design
+pcb-component TC2030-MCP-NL-cmp :
+  port p : pin[6]
+  part = TC2030-MCP-NL-prt
+  package = TC2030-MCP-NL-pkg
+
+pcb-component TC2050-MCP-NL-cmp :
+  port p : pin[10]
+  part = TC2050-MCP-NL-prt
+  package = TC2050-MCP-NL-pkg
+
+; TODO: Hole symbol
+public pcb-component mounting-hole-cmp (drill-r:Double, pad-r: Double, mask-r:Double) :
+  ;port p : pin[1]
+  package = {non-plated-hole-pkg(drill-r, mask-r)}
+  reference-prefix = "H"
+
+public defn mounting-hole-cmp (drill-r:Double, pad-r:Double) :
+  mounting-hole-cmp(drill-r, pad-r, pad-r + 0.35)
+
+public defn mounting-hole-cmp (drill-r:Double) :
+  mounting-hole-cmp(drill-r, drill-r + 0.35)
+
+; TODO: remove standoff-hole by getting rid of name parsing in test board mechanical generator
+public pcb-component standoff-hole (r:Double) :
+  port p : pin[1]
+  package = {plated-hole-pkg(r, r + 0.35, r + 0.7)}
+  reference-prefix = "H"
+  part = {plated-hole-prt(r, r + 0.35, r + 0.7)}
+
+;CR2450 connector
+pcb-component mpd-BK-5033-cmp :
+  val ps = PinSpec(
+    []
+    []
+    [`gnd => 3]
+    [`vdd0 => 1 `vdd1 => 2])
+  make-pins(ps)
+  reference-prefix = "J"
+  package = J-MPD-BK-5033(cmp-pad-map(ps))
+  part = BK-5033-prt
+
+pcb-component XT-60-cmp :
+  val ps = PinSpec(
+    [`neg => 1 `pos => 2]
+    false)
+  make-pins(ps)
+  reference-prefix = "J"
+  package = XT-60-female-pkg(cmp-pad-map(ps))
+  part = XT-60-prt
+
+; ====== Switches, Relays ======================================================
+
+; TODO: Switch/button symbol
+; Omron pushbutton SMT switch
+pcb-component omron-B3U-1000P-cmp :
+  port p : pin[2]
+  package = SW_B3U-1000P
+  part = B3U-1000P-prt
+  reference-prefix = "S"
+
+;Vibration switch
+pcb-component SW-58010P-cmp :
+  val ps = PinSpec(
+    [`case => 2 `contact => 1]
+    false)
+  make-pins(ps)
+  reference-prefix = "S"
+  package = SW-58010P(cmp-pad-map(ps))
+  part = SW-58010P-prt
+
+;Vibration switch
+pcb-component ck-JS102011SAQN-cmp :
+  val ps = PinSpec(
+    [`p1 => 1 `common => 2, `p2 => 3]
+    false)
+  make-pins(ps)
+  reference-prefix = "S"
+  package = SW-JS102011SAQN-pkg(cmp-pad-map(ps))
+  part = ck-JS102011SAQN-prt
+
+
+; ====== Voltage Regulators ====================================================
+
+pcb-component torex-XC6206P302MR-G-cmp :
+  pin vin
+  pin vout
+  pin gnd
+  val ps = PinSpec(
+    [vin => 3]
+    [vout => 2]
+    [gnd => 1]
+    )
+  package = SOT23-3N(cmp-pad-map(ps))
+
+; Texas Instruments 3V3 LDO
+pcb-component ti-LP2985-33DBVR-cmp :
+  val ps = PinSpec(
+    [`vin => 1 `on-off => 3]
+    [`vout => 5 `bypass => 4]
+    [`gnd => 2]
+  )
+
+  make-pins(ps)
+
+  package = SOT95P280X145-5N(cmp-pad-map(ps))
+  part = ti-LP2985-33DBVR-prt
+
+public pcb-component stm-LDK130MXXRY-cmp (voltage:Double) :
+  val ps = PinSpec(
+    [`vin => 1 `en => 3]
+    [`vout => 5 `byp => 4]
+    [`gnd => 2]
+  )
+
+  make-pins(ps)
+  
+  val sym-name = if contains?([1.5, 1.8, 2.8, 3.3], voltage) :
+    to-symbol("stm-LDK130M%_RY" % [to-int(voltage * 10.0)])
+  else :
+    fatal("Invalid voltage for LDK130MXXRY:%_" % [voltage])
+
+  package = SOT95P280X145-5N(cmp-pad-map(ps))
+  part = {stm-LDK130MXXRY-prt(voltage)}
+
+; Texas Instruments 3V3 Boost converter
+pcb-component ti-TPS610981-cmp :
+  val ps = PinSpec(
+    [`vin => 6 `sw => 5 `mode => 3]
+    [`vmain => 4 `vsub => 2]
+    [`gnd => 1]
+  )
+
+  make-pins(ps)
+
+  package = SON50P150X150X80-6(cmp-pad-map(ps))
+  part = ti-TPS610981-prt
+
+; GE Isolated 5V regulator
+pcb-component ge-SHHD003A0A41-SRZ-cmp :
+  val ps = PinSpec(
+    [`vin+ => 1 `on-off => 3]
+    [`vout+ => 4 `trim => 5]
+    [`vin- => 2 `vout- => 6]
+  )
+
+  make-pins(ps)
+
+  package = ge-SHHD003A0A41-SRZ-pkg(cmp-pad-map(ps))
+  part = ge-SHHD003A0A41-SRZ-prt
+
+; TODO: Add packages to components below
+
+; Delta Electronics 12V isolated regulator
+pcb-component delta-PL01S2412A-cmp :
+  val ps = PinSpec(
+    [`vin+ => 2 `vin- => 1]
+    [`vout+ => 4 `vout- => 6]
+  )
+
+  make-pins(ps)
+
+
+; Common pin mapping for regulators (e.g. 7805)
+val vreg-ps = PinSpec(
+    [`vin+ => 1]
+    [`vout+ => 3]
+    [`gnd => 2]
+)
+
+pcb-component on-KA7809ERTM-cmp :
+  make-pins(vreg-ps)
+
+pcb-component maxim-MAX6225BCSA+-cmp :
+  val ps = PinSpec(
+    [`vin+ => 2 `nr => 3]
+    [`vout+ => 6 `trim => 5]
+    [`gnd => 4]
+  )
+
+  make-pins(ps)
+
+
+; Recom drop-in switching regulators
+pcb-component recom-R-78E5-0-0-5-cmp :
+  make-pins(vreg-ps)
+  part = recom-R-78E5-0-0-5-prt
+  package = recom-R-78E-0-5-pkg(cmp-pad-map(vreg-ps))
+
+pcb-component recom-R-78B5-0-1-0-cmp :
+  make-pins(vreg-ps)
+  part = recom-R-78B5-0-1-0-prt
+  package = recom-R-78B-1-0-pkg(cmp-pad-map(vreg-ps))
+
+; Integrated, 5-A 40-V Wide Input Range Boost/SEPIC/Flyback DC-DC Regulator 16-WQFN -40 to 150
+pcb-component ti-TPS55340RTER-cmp :
+  port sw : pin[3]
+  port p-gnd : pin[3]
+  port nc : pin[2]
+  pin vin 
+  pin en 
+  pin ss 
+  pin sync 
+  pin agnd 
+  pin comp 
+  pin fb 
+  pin freq 
+  pin pad 
+
+  val ps = PinSpec(
+    [vin => 2 en => 3  freq => 9 ss => 4]
+    [sw[0] => 1 sw[1] => 16 sw[2] => 15 fb => 8 comp => 7 sync => 5]
+    [nc[0] => 10 nc[1] => 14 agnd => 6 p-gnd[0] => 11 p-gnd[1] => 12 p-gnd[2] => 13 pad => 17]
+  )
+  package = QFN50P300X300X100-16(cmp-pad-map(ps))
+  part = ti-TPS55340RTER-prt
+
+;TI 3-17V vin, 3A buck regulator
+pcb-component ti-TLV62130A-cmp :
+  port sw : pin[3]
+  port p-gnd : pin[2]
+  port p-vin : pin[2]
+  pin pg 
+  pin fb 
+  pin vos 
+  pin a-vin 
+  pin en 
+  pin ss 
+  pin pad 
+  pin fsw 
+  pin def 
+  pin a-gnd 
+
+  val ps = PinSpec(
+    [sw[0] => 1 sw[1] => 2 sw[2] => 3 pg => 4 fb => 5  vos => 14]
+    [p-vin[0] => 11 p-vin[1] => 12 a-vin => 10 en => 13 ss => 9]
+    [pad => 17 fsw => 7 def => 8 a-gnd => 6 p-gnd[0] => 15 p-gnd[1] => 16]
+  )
+  package = QFN50P300X300X100-16(cmp-pad-map(ps))
+  part = ti-TLV62130A-prt
+
+pcb-component murata-UEI30-120-Q12P-C-cmp :
+  val ps = PinSpec(
+    [`vin+ => 1 `enable => 3]
+    [`vout+ => 4 `trim => 6]
+    [`vin- => 2  `vout- => 5])
+  make-pins(ps)
+  part = murata-UEI30-120-Q12P-C-prt 
+  package = murata-UEI30-pkg(cmp-pad-map(ps))
+
+pcb-component murata-UEI15-050-Q12-cmp :
+  val ps = PinSpec(
+    [`vin+ => 1 `enable => 6]
+    [`vout+ => 3 `trim => 4]
+    [`vin- => 2  `vout- => 5])
+  make-pins(ps)
+  part = murata-UEI15-050-Q12-prt 
+  package = murata-UEI15-pkg(cmp-pad-map(ps))
+
+pcb-component murata-UQQ-24-4-Q12PB-C-cmp :
+  val ps = PinSpec(
+    [`enable => 2]
+    [`sense+ => 7 `trim => 6 `sense- => 5]
+    [`vin- => 3 `vout- => 4]
+    [`vin+ => 1 `vout+ => 8])
+  make-pins(ps)
+  part = murata-UQQ-24-4-Q12PB-C-prt
+  package = murata-UQQ-24-4-Q12PB-C-pkg(cmp-pad-map(ps))
+
+pcb-component xp-power-QSB20024S24-cmp : 
+  val ps = PinSpec(
+    [`enable => 2 `case => 3]
+    [`sense+ => 8 `trim => 7 `sense- => 6]
+    [`vin- => 4 `vout- => 5]
+    [`vin+ => 1 `vout+ => 9])
+  make-pins(ps)
+  part = xp-power-QSB20024S24-prt
+  package = xp-power-QSB20024S24-pkg(cmp-pad-map(ps))
+
+pcb-component omron-G3VM-61FR1-TR05-cmp :
+  val ps = PinSpec(
+    [`nc0 => 1 `in+ => 2 `in- => 3 `nc1 => 4]
+    [`outa+ => 8 `outa- => 7 `outb- => 6 `outb+ => 5])
+  make-pins(ps)
+  part = omron-G3VM-61FR1-TR05-prt
+  package = omron-g3vm-pkg(cmp-pad-map(ps))
+
+; Adjustable linear regulator
+pcb-component ti-LP38501TSX-ADJ-cmp :
+  val ps = PinSpec(
+    [`in => 2, `en => 1]
+    [`out => 4, `adj => 5]
+    [`gnd => 3, `dap => 6]
+  )
+  
+  make-pins(ps)
+  package = DDPAK-TO263-pkg(cmp-pad-map(ps))
+  part = ti-LP38501TSX-ADJ-prt
+
+; Adjustable linear regulator
+pcb-component microchip-MIC5225YM5-TR-cmp :
+  val ps = PinSpec(
+    [`in => 1, `en => 3]
+    [`out => 5, `adj => 4]
+    [`gnd => 2]
+  )
+
+  make-pins(ps)
+  package = SOT95P280X145-5N(cmp-pad-map(ps))
+  part = microchip-MIC5225YM5-TR-prt
+
+; Adjustable linear regulator
+pcb-component linear-LT3082EST-cmp :
+  val ps = PinSpec(
+    [`in => 3]
+    [`out-0 => 2, `out-1 => 4, `set => 1]
+  )
+  
+  make-pins(ps)
+  package = SOT230P700X180-4N(cmp-pad-map(ps))
+  part = linear-LT3082EST-prt
+
+; Adjustable linear regulator
+pcb-component microchip-MCP1824T-ADJE-DC-cmp :
+  val ps = PinSpec(
+    [`vin => 2, `shdn => 1]
+    [`vout => 4, `adj => 5]
+    [`gnd => 3, `tab => 6]
+  )
+
+  make-pins(ps)
+  package = SOT230P700X180-6N(cmp-pad-map(ps))
+  part = microchip-MCP1824T-ADJE-DC-prt
+
+; MPS adjustible 3A regulator
+pcb-component mps-MPM3630-cmp :
+  pin vin
+  pin en
+  pin vcc
+  pin pg
+  pin bst
+  port sw : pin[3]
+  port out : pin[3]
+  pin fb
+  port pgnd : pin[3]
+  pin agnd
+
+  val ps = PinSpec(
+    [vin => 16 en => 17 vcc => 2 pg => 18]
+    to-tuple $ cat-all([
+      [bst => 11]
+      for i in 0 to 3 seq : sw[i] => i + 4
+      for i in 0 to 3 seq : out[i] => i + 7
+      [fb => 1]
+    ])
+    to-tuple $ cat-all([
+      for i in 0 to 3 seq : pgnd[i] => i + 12
+      [agnd => 3]
+    ])
+  )
+
+  package = mps-MPM3630-pkg(cmp-pad-map(ps))
+  part = mps-MPM3630-prt
+
+; ====== Microcontrollers ======================================================
+; Raspberry PI 3+  HAT connection
+pcb-component raspi-3B+-cmp :
+  port BCM : pin[28]
+  port gnd : pin[8]
+  port p3v3 : pin[2]
+  port p5v0 : pin[2]
+  val ps = PinSpec(
+    []
+    [BCM[0] => 27  BCM[1] => 28 BCM[2] => 3 BCM[3] => 5 BCM[4] => 7 BCM[5] => 29 BCM[6] => 31 BCM[7] => 26 
+     BCM[8] => 24 BCM[9] => 21 BCM[10] => 19 BCM[11] => 23 BCM[12] => 32 BCM[13] => 33 BCM[14] => 8 BCM[15] => 10 
+     BCM[16] => 36 BCM[17] => 11 BCM[18] => 12 BCM[19] => 35 BCM[20] => 38 BCM[21] => 40 BCM[22] => 15 BCM[23] => 16 
+     BCM[24] => 18 BCM[25] => 22 BCM[26] => 37 BCM[27] => 13 p3v3[0] => 1 p3v3[1] => 17]
+    [gnd[0] => 6 gnd[2] => 9 gnd[1] => 14 gnd[3] => 20 gnd[4] => 25 gnd[5] => 30 gnd[6] => 34 gnd[7] => 39]
+    [p5v0[0] => 2 p5v0[1] => 4])
+  supports i2c :
+    i2c.sda => BCM[0]
+    i2c.scl => BCM[1]
+  supports i2c :
+    i2c.sda => BCM[2]
+    i2c.scl => BCM[5]
+;SPI0 overlaps with SD card interface
+;  supports spi :
+;    spi.mosi => BCM[19]
+;    spi.miso => BCM[21]
+;    spi.sck => BCM[23]
+;    spi.ss => BCM[18]
+  supports spi :
+    spi.mosi => BCM[20]
+    spi.miso => BCM[19]
+    spi.sck => BCM[21]
+    spi.ss => BCM[17]
+  supports uart :
+    uart.tx => BCM[14]
+    uart.rx => BCM[15]
+  for i in 0 to 22 do:
+    supports dio :
+      dio => BCM[i]
+  supports power-3v3 :
+    power-3v3.pos => p3v3[0]
+    power-3v3.neg => gnd[0]
+  supports power-5v0 :
+    power-5v0.pos => p5v0[0]
+    power-5v0.neg => gnd[1]
+  package = raspi-3B+-pkg(cmp-pad-map(ps))
+  part = raspi-3B+-prt
+ 
+pcb-component arduino-pro-mini-cmp :
+  port b : pin[6]
+  port c : pin[7]
+  port d : pin[8]
+  port gnd : pin[4]
+  port vcc : pin[2]
+  pin vin
+  pin rst
+
+  val ps = PinSpec(
+    [d[1] => 1 d[0] => 2 rst => 3 gnd[0] => 4 d[2] => 5 d[3] => 6
+    d[4] => 7 d[5] => 8 d[6] => 9 d[7] => 10 b[0] => 11 b[1] => 12]
+    [b[2] => 13 b[3] => 14 b[4] => 15 b[5] => 16 c[0] => 17 c[1] => 18
+    c[2] => 19 c[3] => 20 vcc[0] => 21 c[6] => 22 gnd[1] => 23 vin => 24]
+    [c[4] => 32 c[5] => 33]
+    [vcc[1] => 28 gnd[2] => 29 gnd[3] => 30]
+    )
+  for i in 0 to 6 do :
+    supports dio :
+      dio => b[i]
+  for i in 0 to 7 do :
+    supports dio :
+      dio => c[i]
+  for i in 0 to 8 do :
+    supports dio :
+      dio => d[i]
+
+  for i in 0 to 5 do :
+    supports adc :
+      adc => c[i]  
+
+  supports reset :
+    reset => rst
+
+  supports ext-int :
+    ext-int => d[2]
+  supports ext-int :
+    ext-int => d[3]
+
+  supports uart :
+    uart.tx => d[1]
+    uart.rx => d[0]
+  supports i2c :
+    i2c.sda => c[4]
+    i2c.scl => c[5]
+  supports spi :
+    spi.mosi => b[3]
+    spi.miso => b[4]
+    spi.sck => b[5]
+    spi.ss => b[2]
+
+  supports power-5v0 :
+    power-5v0.pos => vin
+    power-5v0.neg => gnd[0]
+
+  package = arduino-pro-mini-pkg(cmp-pad-map(ps))
+  part = arduino-pro-mini-prt
+
+pcb-component nordic-nRF52832-cmp :
+  ; Missing information: voltage of GPIO
+  port dec : pin[4]
+  port p0 : pin[32]
+  port vdd : pin[3]
+  pin SWDCLK
+  pin SWDIO
+  pin ANT
+  port gnd : pin[3]
+  port xc : pin[2]
+  pin dcc
+
+  for i in 0 to 32 do:
+    supports bar-pin :
+      bar-pin => p0[i]
+  for i in 2 to 5 do :
+    supports adc :
+      adc => p0[i]
+  for i in 28 to 32 do :
+    supports adc :
+      adc => p0[i]
+
+  val ps = PinSpec(
+    to-tuple $ cat-all([
+    [dec[0] => 1]
+    for i in 0 to 11 seq  : p0[i] => i + 2 ])
+    [SWDCLK => 25 SWDIO => 26 p0[22] => 27 p0[23] => 28 
+    p0[24] => 29 ANT => 30 gnd[0] => 31 dec[1] => 32 
+    dec[2] => 33 xc[0] => 34 xc[1] => 35 vdd[1] => 36]
+    to-tuple $ cat-all([
+      [vdd[0] => 13]
+      for i in 11 to 22 seq  : p0[i] => i + 3 ])
+    to-tuple $ cat-all([
+      for i in 25 to 32 seq  : p0[i] => i + 12 
+      [gnd[1] => 45 dec[3] => 46 dcc => 47 vdd[2] => 48 gnd[2] => 49]])
+  )
+  package = QFN40P600X600X85-48(cmp-pad-map(ps))
+
+; CSR1010 Bluetooth MCU
+pcb-component csr-CSR1010A05-IQQM-R-cmp :
+  port pio : pin[12]
+  port aio : pin[3]
+  pin rf
+  pin xtal-32k-out
+  pin xtal-32k-in
+  pin xtal-16M-out
+  pin xtal-16M-in
+  pin sda
+  pin scl
+  pin spi-pio
+  pin wake
+  pin vdd-bat
+  pin vdd-bat-smps
+  pin smps-lx
+  pin vdd-core0
+  pin vdd-core1
+  pin vdd-pads
+  pin vdd-reg-in
+  pin vdd-xtal
+  pin vss
+  ;supports power-3v3 :
+  ;  power-3v3.pos => vdd-pads
+  ;  power-3v3.neg => vss
+  ;supports power-3v0 :
+  ;  power-3v0.pos => vdd-bat-smps
+  ;  power-3v0.neg => vss
+  supports i2c :
+    i2c.sda => sda
+    i2c.scl => scl
+  supports uart :
+    uart.tx => pio[0]
+    uart.rx => pio[1]
+  supports spi :
+    spi.mosi => pio[8]
+    spi.miso => pio[7]
+    spi.sck => pio[6]
+    spi.ss => pio[5]
+  for i in 0 to 3 do :
+    supports adc :
+      adc => aio[i]
+  for i in 0 to 12 do :
+    supports dio :
+      dio => pio[i]
+  for i in 9 to 12 do :
+    supports pwm :
+      pwm => pio[i]
+
+  val ps = PinSpec(
+    [rf => 7]
+    to-tuple $ cat-all([
+      for i in 0 to 3 seq  : aio[i] => 13 - i
+      for i in 0 to 2 seq  : pio[i] => 14 + i
+      for i in 2 to 3 seq  : pio[i] => 27
+      for i in 3 to 8 seq  : pio[i] => 13 + i
+      for i in 8 to 12 seq : pio[i] => 14 + i
+      [sda => 29 scl => 28 spi-pio => 26]])
+    [vdd-xtal => 8 vss => 33 xtal-16M-out => 9 xtal-16M-in => 10 xtal-32k-out => 2 xtal-32k-in => 3]
+    [vdd-bat => 1 vdd-bat-smps => 32 vdd-pads => 21 smps-lx => 31 vdd-reg-in => 6 vdd-core0 => 5 vdd-core1 => 30 wake => 4]
+  )
+  package = QFN50P500X500X55-32(cmp-pad-map(ps))
+  part = csr-CSR1010A05-IQQM-R-prt
+
+
+; STM32 microcontroller
+pcb-component stmicro-STM32L011D4-cmp :
+  pin a0
+  pin a1
+  pin a4
+  pin a7
+  pin a9
+  pin a10
+  pin a13
+  pin a14
+  pin c14
+  pin c15
+  pin boot
+  pin nrst
+  pin vdd
+  pin vss
+
+  supports dio :
+    dio => a0
+  supports dio :
+    dio => a1
+  supports dio :
+    dio => a4
+  supports dio :
+    dio => a7
+  supports dio :
+    dio => a9
+  supports dio :
+    dio => a10
+  supports dio :
+    dio => a13
+  supports dio :
+    dio => a14
+  supports dio :
+    dio => c14
+  supports dio :
+    dio => c15
+
+  supports adc :
+    adc => a0
+  supports adc :
+    adc => a1
+  supports adc :
+    adc => a4
+  supports adc :
+    adc => a7
+
+  supports pwm :
+    pwm => a0
+  supports pwm :
+    pwm => a1
+  supports pwm :
+    pwm => a10
+
+  supports uart :
+    uart.tx => a9
+    uart.rx => a0
+
+  supports i2c :
+    i2c.sda => a10
+    i2c.scl => a9
+
+  supports spi :
+    spi.sck => a13
+    spi.mosi => a7
+    spi.miso => a14
+    spi.ss => a4
+
+  supports swd :
+    swd.swdio => a13
+    swd.swclk => a14
+    swd.reset => nrst
+    ;TODO WRONG. Need optional implementation of peripheral
+    swd.swo => c14
+
+  val ps = PinSpec(
+    [boot => 1 nrst => 4 a13 => 13 a14 => 14]
+    [a0 => 5 a1 => 6 a4 => 7 a7 => 8 a9 => 11 a10 => 12 c14 => 2 c15 => 3]
+    [vss => 9]
+    [vdd => 10]
+    )
+  package = TSSOP-14(cmp-pad-map(ps))
+  part = stmicro-STM32L011D4-prt
+
+; STM32 microcontroller
+pcb-component stmicro-STM32F303K8T6-cmp :
+  ;TODO: add capabilities (CAN, Cap touch, analog voltage ref)
+  ; Weirdness in missing b[2] pin
+  port a : pin[16]
+  pin b0
+  pin b1
+  pin b3
+  pin b4
+  pin b5
+  pin b6
+  pin b7
+  port f : pin[2]
+  
+  pin boot0
+  pin nrst
+  pin vin0
+  pin vin1
+  pin vref
+  pin gnd0
+  pin gnd1
+  
+  ; TODO: Fix assignment aliasing problem
+  ;supports power-3v3 :
+  ;  power-3v3.neg => gnd0
+  ;  power-3v3.pos => vin1
+
+  ;supports power-3v3 :
+  ;  power-3v3.neg => gnd1
+  ;  power-3v3.pos => vin0
+    
+  for i in 0 to 8 do :
+    supports adc :
+      adc => a[i]
+
+  supports adc :
+    adc => b0
+  supports adc :
+    adc => b1
+
+  for i in 0 to 16 do :
+    supports dio :
+      dio => a[i]
+
+  supports dio :
+    dio => b0
+  supports dio :
+    dio => b1
+  supports dio :
+    dio => b3
+  supports dio :
+    dio => b4
+  supports dio :
+    dio => b5
+  supports dio :
+    dio => b6
+  supports dio :
+    dio => b7
+
+  for i in 0 to 2 do :
+    supports dio :
+      dio => f[i]
+
+  supports pwm :
+    option :
+      pwm => b0
+    option :
+      pwm => a[9]
+  supports pwm :
+    option :
+      pwm => b1
+    option :
+      pwm => f[0]
+    option :
+      pwm => a[10]
+  supports pwm :
+    option :
+      pwm => b4
+    option :
+      pwm => a[12]
+    option :
+      pwm => a[6]
+  supports pwm :
+    option :
+      pwm => b5
+    option :
+      pwm => b7
+    option :
+      pwm => a[7]
+  supports pwm :
+    pwm => a[11]
+  supports pwm :
+    pwm => a[8]
+  supports pwm :
+    option :
+      pwm => b6
+    option :
+      pwm => a[6]
+    option :
+      pwm => a[12]
+
+  supports i2c :
+    option :  
+     i2c.scl => a[14]
+     i2c.sda => a[15]
+    option :  
+     i2c.scl => b6
+     i2c.sda => b7
+
+  supports spi :
+    option :
+      spi.mosi => a[7]
+      spi.miso => a[6]
+      spi.sck => a[5]
+      spi.ss => a[4]
+    option :
+      spi.mosi => b5
+      spi.miso => b4
+      spi.sck => b3
+      spi.ss => a[15]
+
+  supports uart :
+    option :
+      uart.tx => a[9]
+      uart.rx => a[10]
+    option :
+      uart.tx => b6
+      uart.rx => b7
+  supports uart :
+    option :
+      uart.tx => a[2]
+      uart.rx => a[3]
+    option :
+      uart.tx => a[14]
+      uart.rx => a[15]
+    option :
+      uart.tx => b3
+      uart.rx => b4
+
+  supports can :
+    can.tx => a[12]
+    can.rx => a[11]
+
+  supports swd :
+    swd.swdio => a[13]
+    swd.swclk => a[14]
+    swd.swo => b3
+    swd.reset => nrst
+
+  
+  val ps = PinSpec(
+    [ boot0 => 31 nrst => 4 f[0] => 2 f[1] => 3
+      b0 => 14 b1 => 15 b3 => 26 b4 => 27 b5 => 28 b6 => 29 b7 => 30 ]
+    [ a[0] => 6 a[1] => 7 a[2] => 8 a[3] => 9
+      a[4] => 10 a[5] => 11 a[6] => 12 a[7] => 13 
+      a[8] => 18 a[9] => 19 a[10] => 20 a[11] => 21 
+      a[12] => 22 a[13] => 23 a[14] => 24 a[15] => 25 ]
+    [ gnd0  => 16 gnd1  => 32 ]
+    [ vin0  => 1 vin1  => 17 vref => 5]
+  )
+
+  package = QFP80P900X900X160-32(cmp-pad-map(ps))
+  part = stmicro-STM32F303K8T6-prt
+
+; MBED Nucleo-F303K
+pcb-component mbed-nucleo-cmp :
+  port a : pin[8]
+  port d : pin[14]
+  pin nrst0
+  pin gnd0
+  pin reg-3v3
+  pin aref
+  pin src-5v0
+  pin nrst1
+  pin gnd1
+  pin vin
+ 
+  supports power-3v3 :
+    option :
+      power-3v3.pos => reg-3v3
+      power-3v3.neg => gnd0
+    option :
+      power-3v3.pos => reg-3v3
+      power-3v3.neg => gnd1
+
+  supports power-5v0 :
+    option :
+      power-5v0.pos => src-5v0
+      power-5v0.neg => gnd0
+    option :
+      power-5v0.pos => src-5v0
+      power-5v0.neg => gnd1
+ 
+  ; Don't include A7, conflicts with STDIO_UART_TX
+  for i in 0 through 6 do :
+    supports dio :
+      dio => a[i]
+
+  ; Don't include D13 since it is LED1
+  for i in 0 through 12 do :
+    supports dio :
+      dio => d[i]
+
+  for i in 0 through 6 do :
+    supports adc :
+      adc => a[i]
+  
+  for i in [3 6] do :
+    supports adc :
+      adc => d[i]
+  
+  for i in 3 through 5 do :
+    supports dac :
+      dac => a[i]
+  
+  for i in 0 through 7 do :
+    supports pwm :
+      pwm => d[i]
+
+  for i in 9 through 12 do :
+    supports pwm :
+      pwm => d[i]
+
+  for i in [1 2 3 5 6] do :
+    supports pwm :
+      pwm => a[i]
+
+  supports i2c :
+    i2c.sda => d[4]
+    i2c.scl => d[5]
+  
+  ; Don't include SPI option using D13, same LED1 conflict
+  supports spi :
+    spi.mosi => a[6]
+    spi.miso => a[5]
+    spi.sck => a[4]
+    spi.ss => a[3]
+
+  supports uart :
+    option :
+      uart.tx => d[1]
+      uart.rx => d[0]
+    option :
+      uart.tx => d[5]
+      uart.rx => d[4]
+  
+  ; Don't include UART2, all pin configurations conflict with LED1 or STDIO
+
+  val ps = PinSpec(
+    [ nrst0 => 3 nrst1 => 28 a[0] => 19 a[1] => 20 a[2] => 21
+      a[3] => 22 a[4] => 23 a[5] => 24 a[6] => 25 a[7] => 26 ]
+    [ d[0] => 2 d[1] => 1 d[2] => 5 d[3] => 6 d[4] => 7
+      d[5] => 8 d[6] => 9 d[7] => 10 d[8] => 11 d[9] => 12 
+      d[10] => 13 d[11] => 14 d[12] => 15 d[13] => 16 ]
+    [ gnd0 => 4 gnd1 => 29 ]
+    [ vin => 30 src-5v0 => 27 reg-3v3 => 17 aref => 18 ]
+  )
+
+  package = mbed-nucleo-pkg(cmp-pad-map(ps))
+  part = mbed-nucleo-prt
+
+defn ref-to-base-idx (sym-ref:Ref) :
+  val str-ref = to-string(sym-ref)
+  var int-idx = 0
+  
+  while int-idx < length(str-ref) and index-of-char("0123456789", str-ref[int-idx]) is False :
+    int-idx = int-idx + 1
+
+  val base = str-ref[0 to int-idx]
+  val idx = to-int(str-ref[int-idx to false])
+
+  base => idx
+  
+; translate uppercase numbered to index refs with base offsets
+public defn sym-to-cmp-ref (sym-ref:Ref, offsets:HashTable<String,Int>) :
+  val bi = ref-to-base-idx(sym-ref)
+
+  match(value(bi)) :
+    (idx:Int) :
+      val base = key(bi)
+      ; Only convert all uppercase refs
+      if upper-case(base) == base :
+        Ref(lower-case(base))[idx - offsets[base]]
+      else :
+        sym-ref
+    (o) :
+      sym-ref
+
+public defn flat-pin-spec (ps:PinSpec) :
+  to-list $ cat-all([
+    l-pins(ps) as Collection<KeyValue<Ref,Int>>
+    r-pins(ps) as Collection<KeyValue<Ref,Int>>
+    b-pins(ps) as Collection<KeyValue<Ref,Int>>
+    t-pins(ps) as Collection<KeyValue<Ref,Int>>
+  ])
+
+; Create mapping for component pins to package indices from PinSpec
+; when PinSpec may have upper-case 0-indexed names
+public defn ps-to-pkg-map (ps:PinSpec, offsets:HashTable<String,Int>) :
+  inside mapping :
+    for sp-pi in flat-pin-spec(ps) do :
+      {sym-to-cmp-ref(key(sp-pi), offsets)} => {Ref("p")[value(sp-pi) - 1]}
+
+public defn ps-to-pkg-map (ps:PinSpec, offsets:Tuple<KeyValue<String,Int>>) :
+  val offset-map = HashTable-init<String,Int>({0})
+  for kv in offsets do :
+    offset-map[key(kv)] = value(kv)
+  
+  ps-to-pkg-map(ps, offset-map)
+
+public defn ps-to-pkg-map (ps:PinSpec) :
+  ps-to-pkg-map(ps, [])
+
+; Create mapping for component pins to symbol pins from PinSpec
+; when PinSpec may have upper-case 0-indexed names
+public defn ps-to-sym-map (ps:PinSpec, offsets:HashTable<String,Int>) :
+  inside mapping :
+    for sp-pi in flat-pin-spec(ps) do :
+      {sym-to-cmp-ref(key(sp-pi), offsets)} => {key(sp-pi)}
+
+public defn ps-to-sym-map (ps:PinSpec, offsets:Tuple<KeyValue<String,Int>>) :
+  val offset-map = HashTable-init<String,Int>({0})
+  for kv in offsets do :
+    offset-map[key(kv)] = value(kv)
+  
+  ps-to-sym-map(ps, offset-map)
+
+public defn ps-to-sym-map (ps:PinSpec) :
+  ps-to-sym-map(ps, [])
+
+public pcb-component pjrc-teensy-3-2-cmp (pinout:Symbol) :
+  
+  val l-pins = Vector<KeyValue<Ref,Int>>()
+  val r-pins = Vector<KeyValue<Ref,Int>>()
+  val b-pins = Vector<KeyValue<Ref,Int>>()
+  val t-pins = Vector<KeyValue<Ref,Int>>()
+
+  val [n-io, n-analog, n-pwr, aref?, all-pins?] = switch(pinout) :
+    `side-pins  : [24, 0, 1, false, false]
+    `inner-pins : [34, 4, 2, true, false]
+    `all-pins   : [34, 5, 3, true, true]
+    else : fatal("Unsupported pinout \"%_\" for Teensy3.2" % [pinout])
+  
+  port gnd : pin[n-pwr]
+  port src-3v3 : pin[n-pwr]
+  port io : pin[n-io]
+  port a : pin[n-analog]
+  pin agnd
+  pin vin
+  
+  val gnd-pads = [1, 30, 48]
+  val src-3v3-pads = [26, 41, 47]
+  val io-pads = to-tuple $ cat-all $ [2 through 25, 31 through 40]
+  val a-pads = [44, 43, 29, 42, 50]
+
+  for i in 0 to n-pwr do :
+    add(b-pins, gnd[i] => gnd-pads[i])
+    add(t-pins, src-3v3[i] => src-3v3-pads[i])
+    
+  supports power-3v3 :
+    for i in 0 to n-pwr do :
+      option :
+        power-3v3.neg => gnd[i]
+        power-3v3.pos => src-3v3[i]
+  
+  supports power-5v0 :
+    for i in 0 to n-pwr do :
+      option :
+        power-5v0.neg => gnd[i]
+        power-5v0.pos => vin
+   
+  add(b-pins, agnd => 27)
+  
+  if aref? :
+    pin aref
+    add(t-pins, aref => 45)
+  
+  add(t-pins, vin => 28)
+
+  if all-pins? :
+    pin program
+    pin reset
+    add-all(l-pins, [program => 49, reset => 52])
+    
+    pin vbat
+    pin vusb
+    add-all(t-pins, [vbat => 46, vusb => 51])
+
+  for i in 0 to n-io do :
+    val side = if i < (n-io + n-analog) / 2 : l-pins else : r-pins
+    add(side, Ref("IO%_" % [i]) => io-pads[i])
+    
+    ; IO13 is Teensy LED, which we don't want to use as a digital input
+    if i != 13 :
+      supports dio :
+        dio => io[i]
+    
+    if (i >= 14 and i <= 23) or (i >= 26 and i <= 31) :
+      supports adc :
+        adc => io[i]
+    
+    if contains?([3, 4, 5, 6, 9, 10, 25, 32], i) :
+      supports pwm :
+        pwm => io[i]
+
+  val analog-index-offset = 10
+
+  for i in 0 to n-analog do :
+    add(r-pins, Ref("A%_" % [i + analog-index-offset]) => a-pads[i])
+    
+    supports adc :
+      adc => a[i]
+  
+  supports uart :
+    option :
+      uart.rx => io[0]
+      uart.tx => io[1]
+    option :
+      uart.rx => io[21]
+      uart.tx => io[5]
+  
+  if n-io >= 31 :
+    supports uart :
+      option :
+        uart.rx => io[9]
+        uart.tx => io[10]
+      option :
+        uart.rx => io[26]
+        uart.tx => io[31]
+  else :
+    supports uart :
+      uart.rx => io[9]
+      uart.tx => io[10]
+
+  supports uart :
+    uart.rx => io[7] 
+    uart.tx => io[8]
+  
+  supports can :
+    can.rx => io[4]
+    can.tx => io[3]
+  
+  supports i2c :
+    option :
+      i2c.sda => io[17]
+      i2c.scl => io[16]
+    option :
+      i2c.sda => io[18]
+      i2c.scl => io[19]
+  
+  if n-io >= 30 :
+    supports i2c :
+      i2c.sda => io[30]
+      i2c.scl => io[29]
+
+  supports spi :
+    option : 
+      spi.mosi => io[11]
+      spi.miso => io[12]
+      spi.sck => io[13]
+      spi.ss => io[10]
+    option :
+      spi.mosi => io[7]
+      spi.miso => io[8]
+      spi.sck => io[14]
+      spi.ss => io[9]
+  
+  val ps = PinSpec(to-tuple(l-pins), to-tuple(r-pins), to-tuple(b-pins), to-tuple(t-pins))
+  
+  val sym-name = to-symbol("teensy-3-2-%_" % [pinout])
+  val offsets = ["A" => analog-index-offset]
+
+  package = {pjrc-teensy-3-2-pkg(pinout)}(ps-to-pkg-map(ps, offsets))
+  part = {pjrc-teensy-3-2-prt(pinout)}
+
+pcb-component particle-electron-cmp :
+  port a : pin[8]
+  port b : pin[6]
+  port c : pin[6]
+  port d : pin[8]
+  pin tx
+  pin rx
+  pin vin
+  pin gnd0
+  pin reg-3v3
+  pin reset
+  pin vbat
+  pin gnd1
+
+  for i in 0 to 8 do :
+    supports adc :
+      adc => a[i]
+
+  for i in 2 through 5 do :
+    supports adc :
+      adc => b[i]
+
+  for i in 0 to 8 do :
+    supports dio:
+      dio => a[i]
+    supports dio:
+      dio => d[i]
+
+  for i in 0 to 6 do :
+    supports dio:
+      dio => b[i]
+    supports dio:
+      dio => c[i]
+  
+  supports power-3v3 :
+    option :
+      power-3v3.pos => reg-3v3
+      power-3v3.neg => gnd0
+    option :
+      power-3v3.pos => reg-3v3
+      power-3v3.neg => gnd1
+
+  supports power-5v0 :
+    option :
+      power-5v0.pos => vin
+      power-5v0.neg => gnd0
+    option :
+      power-5v0.pos => vin
+      power-5v0.neg => gnd1
+
+  supports uart :
+    uart.tx => tx
+    uart.rx => rx
+  supports uart :
+    uart.tx => c[3]
+    uart.rx => c[2]
+  supports uart :
+    uart.tx => c[1]
+    uart.rx => c[0]
+  
+  supports i2c :
+    option :
+      i2c.sda => d[0]
+      i2c.scl => d[1]
+    option :
+      i2c.sda => c[4]
+      i2c.scl => c[5]
+  
+  supports spi :
+    spi.mosi => a[5]
+    spi.miso => a[4]
+    spi.sck => a[3]
+    spi.ss => a[2]
+  supports spi :
+    option :
+      spi.mosi => d[2]
+      spi.miso => d[3]
+      spi.sck => d[4]
+      spi.ss => d[5]
+    option :
+      spi.mosi => c[1]
+      spi.miso => c[2]
+      spi.sck => c[3]
+      spi.ss => d[5]
+  
+  val ps = PinSpec(
+    to-tuple $ cat-all([
+      for i in 0 to 8 seq : Ref("A%_" % [i]) => 12 - i
+      for i in 0 to 6 seq : Ref("B%_" % [i]) => 18 - i
+      [tx => 3 rx => 4]])
+    to-tuple $ cat-all([
+      for i in 0 to 6 seq : Ref("C%_" % [i]) => 19 + i
+      for i in 0 to 8 seq : Ref("D%_" % [i]) => 25 + i
+      [reset => 35]])
+    [ gnd0 => 2 gnd1 => 33 ]
+    [ vin  => 1 vbat => 34 reg-3v3 => 36 ]
+  )
+  
+  ; Need to do remap of component to symbol pin names since Electron
+  ; has 0-indexed pins
+  package = particle-electron-pkg(ps-to-pkg-map(ps))
+  part = particle-electron-prt
+
+; BeagleBone Black cape header
+pcb-component beaglebone-black-cmp :
+  val n-side = 46
+  port p8 : pin[n-side]
+  port p9 : pin[n-side]
+
+
+; ====== Miscellaneous Components ==============================================
+; Battery management chip
+pcb-component microchip-MCP73831-cmp :
+  val ps = PinSpec(
+    [`vdd => 4 `prog => 5]
+    [`vbat => 3 `stat => 1]
+    [`gnd => 2]
+    )
+  make-pins(ps)
+  part = microchip-MCP73831-prt
+  package = SOT23-5N(cmp-pad-map(ps))
+
+pcb-component microchip-MCP9809-cmp :
+  pin vdd
+  pin gnd
+  pin ep
+  pin sda
+  pin scl
+  port a : pin[3]
+  pin alert
+
+  val ps = PinSpec(
+    []
+    [sda => 1 scl => 2 a[0] => 7 a[1] => 6 a[2] => 5 alert => 3]
+    [gnd => 4 ep => 9]
+    [vdd => 8]
+  )
+  
+  package = SON50P300X200X100-9N(cmp-pad-map(ps))
+  part = microchip-MCP9809-prt
+
+pcb-component mcp-MCP23017T-E_SO-cmp :
+  port gpa : pin[8] 
+  port gpb : pin[8]
+  port a : pin[3]
+  pin vdd
+  pin vss
+  pin nc0
+  pin sck
+  pin sda
+  pin nc1
+  pin inta
+  pin intb
+  pin reset
+  
+  val ps = PinSpec(
+    to-tuple $ cat-all([
+      for i in 0 to 8 seq : Ref("GPA%_" % [i]) => 1 + i
+      [reset => 18 sck => 12 sda => 13 nc0 => 11 nc1 => 14]])
+    to-tuple $ cat-all([
+      for i in 0 to 8 seq : Ref("GPB%_" % [i]) => 21 + i
+      for i in 0 to 3 seq : Ref("A%_" % [i]) => 15 + i
+      [inta => 20 intb => 19]])
+    [vss => 10]
+    [vdd => 9]
+  )
+  package = SOIC127P1030X265-28N(ps-to-pkg-map(ps))
+  part = mcp-MCP23017T-E_SO-prt
+
+pcb-component ixys-CPC1709J-cmp :
+  val ps = PinSpec(
+    [`en+ => 4 `en- => 3]
+    [`ch- => 2]
+    []
+    [`ch+ => 1]
+  )
+  make-pins(ps)
+  package = ixys-CPC1709J-pkg(cmp-pad-map(ps))
+  part = ixys-CPC1709J-prt
+
+pcb-component st-VNQ5E160AKTR-E-cmp :
+  port vcc : pin[3]
+  pin gnd
+  pin cs-dis
+  port en : pin[4]
+  port out : pin[4][3]
+  port cs : pin[4]
+
+  val out-map = to-tuple $ cat-all $ for i in 0 to 4 seq :
+    for j in 0 to 3 seq :
+      out[i][j] => (24 - (3 * i + j))
+
+  val ps = PinSpec(
+    [en[0] => 3 en[1] => 5 en[2] => 7 en[3] => 9 cs-dis => 11]
+    to-tuple $ cat(out-map, [cs[0] => 4 cs[1] => 6 cs[2] => 8 cs[3] => 10])
+    [gnd => 2]
+    [vcc[0] => 1 vcc[1] => 12 vcc[2] => 25]
+  )
+
+  part = st-VNQ5E160AKTR-E-prt
+  package = SOP80P1030X245-25N(cmp-pad-map(ps))
+
+; Watterott breakout for TMC2130
+pcb-component watterott-tmc2130-cmp :
+  val ps = PinSpec(
+    [`dir => 16 `step => 15 `en => 9 `sdo => 13 `cs => 12 `sck => 11 `sdi => 10 `vref => 17]
+    [`m1a => 4 `m1b => 3 `m2a => 5 `m2b => 6 `diag0 => 19 `diag1 => 18]
+    [`gnd0 => 1 `gnd1 => 7]
+    [`vm => 8 `vio => 2])
+  make-pins(ps)
+  part = watterott-tmc2130-prt
+  package = watterott-TMC2130-pkg(cmp-pad-map(ps))
+
+; Microchip CAN transceiver
+pcb-component microchip-MCP2561T-E/SN-cmp :
+  val ps = PinSpec(
+    [`txd => 1 `rxd => 4 `stby => 8]
+    [`canh => 7 `canl => 6]
+    [`vss => 2]
+    [`split => 5 `vdd => 3])
+  make-pins(ps)
+  part = microchip-MCP2561T-E/SN-prt
+  package = SOIC127P600X175-8N(cmp-pad-map(ps))
+
+; TI current sense
+pcb-component ti-INA3221AIRGVR-cmp :
+  val ps = PinSpec(
+    [`In1+ => 12 `In1- => 11 `In2+ => 15 `In2- => 14 `In3+ => 2 `In3- => 1]
+    [`sda => 7 `scl => 6 `a0 => 5 `pv => 10 `crit => 9 `warn => 8 `tc => 13]
+    [`gnd => 3]
+    [`vp => 4 `vpu => 16])
+  make-pins(ps)
+  part = ti-INA3221AIRGVR-prt
+  package = QFN65P400X400X100-16(cmp-pad-map(ps))
+
+; Allegro Hall-Effect current transducer
+pcb-component allegro-ACS781LLRTR-050U-T-cmp :
+  val ps = PinSpec(
+    [`ip+ => 5 `nc0 => 4 `nc1 => 7]
+    [`ip- => 6 `vout => 3]
+    [`gnd => 2]
+    [`vcc => 1]
+  )
+  make-pins(ps)
+  part = allegro-ACS781LLRTR-050U-T-prt
+  package = allegro-ACS781LLRTR-050U-T-pkg(cmp-pad-map(ps))
+
+; TI Diode controller
+pcb-component ti-LM74610QDGKRQ1-cmp :
+  val ps = PinSpec(
+    [`anode => 4]
+    [`cathode => 8]
+    [`vcaph => 7 `vcapl => 1]
+    [`drive => 6 `pd => 2])
+  make-pins(ps)
+  part = ti-LM74610QDGKRQ1-prt
+  package = SOP65P300X300-8N(cmp-pad-map(ps))
+
+pcb-component ant-2GHz4-inverted-f-cmp :
+  pin gnd
+  pin launch
+  
+  val ps = PinSpec(
+    [launch => 1]
+    [gnd => 2]
+  )
+
+  package = ant-2GHz4-inverted-f-geom(cmp-pad-map(ps))
+
+; NXP I2C LED controller - 12bit PWM @24-1526Hz X16
+pcb-component nxp-PCA9685-cmp :
+  port out : pin[16]
+  port addr : pin[6]
+  pin scl
+  pin sda
+  pin extclk
+  pin out-en
+  pin vdd
+  pin vss
+  val ps = PinSpec(
+    to-tuple $ cat-all([
+      [sda => 27 scl => 26 extclk => 25  out-en => 23]
+      for i in 0 to 5 seq   : addr[i] => 1 + i
+      [addr[5] => 24]
+      ])
+    to-tuple $ cat-all([
+      for i in 0 to 8 seq   : out[i] => 6 + i
+      for i in 8 to 16 seq  : out[i] => 7 + i
+      ])
+    [vss => 14]
+    [vdd => 28]
+    )
+  for i in 0 to 16 do :
+    supports pwm :
+      pwm => out[i]
+  package = SOP65P640X110-28N(cmp-pad-map(ps))
+  part = nxp-PCA9685-prt
+
+; Infineon Hi-side switch
+pcb-component inf-BTS6133D-cmp :
+  port vout : pin[2]
+  pin vin
+  pin en
+  pin sense
+  val ps = PinSpec(
+    [vin => 3]
+    [vout[0] => 1 vout[1] => 5]
+    [en => 2 sense => 4])
+  package = TO228P970X238-5-pkg(cmp-pad-map(ps))
+  part = inf-BTS6133D-prt
+
+; Analog Devices Accelerometer
+pcb-component ad-ADXL345-cmp :
+  val ps = PinSpec(
+    [`cs => 7 `adr_sdo => 12 `sda_sdio => 13 `scl_sclk => 14
+     `int1 => 8 `int2 => 9 `rsv0 => 3 `rsv1 => 11]
+    []
+    [`gnd0 => 2 `gnd1 => 4 `gnd2 => 5]
+    [`vddio => 1 `vs => 6]
+  )
+
+  make-pins(ps)
+
+  package = PQFN80P300X500X79-14(cmp-pad-map(ps))
+  part = ad-ADXL345BCCZ-RL-prt
+
+; low-power accelerometer  
+pcb-component st-LIS3DH-cmp :
+  pin vdd-io 
+  pin vdd
+  pin scl 
+  pin sda 
+  pin sdo 
+  pin cs
+  port adc : pin[3]
+  port gnd : pin[2]
+  port int : pin[2]
+  val ps = PinSpec(
+  [vdd-io => 1 adc[0] => 16 adc[1] => 15 adc[2] => 13]
+  [scl => 4 sda => 6 sdo => 7 cs => 8 int[0] => 11 int[1] => 9]
+  [gnd[0] => 5 gnd[1] => 12]
+  [vdd => 14]
+  )
+  part = st-LIS3DH-prt
+  package = LGA50P300X300X100-16(cmp-pad-map(ps))
+
+; Octal DAC
+pcb-component linear-LTC2656-cmp :
+  val ps = PinSpec(
+    [`sck => 10, `cs-ld => 9, `sdi => 11, `sdo => 12, `ldac => 8, `porsel => 14, `clr => 13]
+    to-tuple $ for (c in "abcdefgh", p in [2 3 5 6 15 16 17 18]) seq :
+      to-symbol("vout-%_" % [c]) => p
+    [`gnd => 20, `pad => 21, `reflo => 1, `refcomp => 4]
+    [`vcc => 19, `ref-in-out => 7]
+  )
+
+  make-pins(ps)
+  package = SOP65P640X120-21N(cmp-pad-map(ps))
+  part = linear-LTC2656-prt
+
+; ADC - 14bit, 8 channel
+pcb-component analog-AD7949-cmp :
+  val ps = PinSpec(
+    [`sck => 13, `cnv => 11, `din => 12, `sdo => 14]
+    to-tuple $ for (i in 0 to 8, p in [16 17 18 19 6 7 8 9]) seq :
+      to-symbol("in-%_" % [i]) => p
+    [`gnd-0 => 4, `gnd-1 => 5, `pad => 21, `com => 10]
+    [`vdd-0 => 1, `vdd-1 => 20, `vio => 15, `ref => 2, `refin => 3]
+  )
+
+  make-pins(ps)
+  package = QFN50P400X400X100-20N(cmp-pad-map(ps))
+  part = analog-AD7949-prt
+
+; TODO: Merge with mcp-MCP23017T-E_SO-cmp
+; 16bit I/O expander
+pcb-component mcp-MCP23S17T-E-SS-cmp :
+  port gpa : pin[8]
+  port gpb : pin[8]
+  port a : pin[3]
+  pin vdd
+  pin vss
+  pin cs
+  pin sck
+  pin si
+  pin so
+  pin inta
+  pin intb
+  pin reset
+
+  val ps = PinSpec(
+    to-tuple $ cat-all([
+      for i in 0 to 8 seq : Ref("GPA%_" % [i]) => 1 + i
+      [reset => 18 sck => 12 si => 13 cs => 11 so => 14]])
+    to-tuple $ cat-all([
+      for i in 0 to 8 seq : Ref("GPB%_" % [i]) => 21 + i
+      for i in 0 to 3 seq : Ref("A%_" % [i]) => 15 + i
+      [inta => 20 intb => 19]])
+    [vss => 10]
+    [vdd => 9]
+  )
+  package = SOP65P780X200-28N(ps-to-pkg-map(ps))
+  part = mcp-MCP23S17T-E-SS-prt
+
+; Load switch
+pcb-component on-NCP45524IMNTWG-H-cmp :
+  val ps = PinSpec(
+    [`vin-0 => 1, `vin-1 => 9, `en => 2]
+    [`vout-0 => 7, `vout-1 => 8 `vout-2 => 10, `bleed => 5 `pg => 6]
+    [`gnd => 4]
+    [`vcc => 3]
+  )
+
+  make-pins(ps)
+  package = on-NCP45524IMNTWG-H-pkg(cmp-pad-map(ps))
+  part = on-NCP45524IMNTWG-H-prt
+
+; Digital potentiometer
+public pcb-component analog-AD5160BRJZX-RL7-cmp (r-val:Double) :
+  val ps = PinSpec(
+    [`clk => 4, `cs => 6, `sdi => 5]
+    [`a => 8, `w => 1, `b => 7]
+    [`gnd => 3]
+    [`vdd => 2]
+  )
+
+  make-pins(ps)
+  package = SOT65P280X145-8N(cmp-pad-map(ps))
+  part = {analog-AD5160BRJZX-RL7-prt(r-val)}
+
+
+; Analog Devices level shifters
+public pcb-component ad-ADG330X-cmp (n:Int) :
+  pin vcca
+  port a : pin[n]
+  pin gnd
+  pin vccy
+  port y : pin[n]
+  pin en
+  
+  val [g-idx, en-idx, y0-idx] = switch(n) :
+    4 : [7, 8, 13]
+    8 : [11, 10, 19]
+    else : fatal("Incorrect number of channels %_ for ADG330X." % [n])
+  
+  val l-pins = to-tuple $ cat(
+    for i in 0 to n seq : y[i] => (y0-idx - i)
+    [vccy => (y0-idx + 1)]
+  )
+  
+  val r-pins = to-tuple $ cat(
+    for i in 0 to n seq : a[i] => (2 + i)
+    [en => en-idx vcca => 1]
+  )
+  
+  val b-pins = [gnd => g-idx]
+  
+  val ps = PinSpec(l-pins, r-pins, b-pins)
+  
+  switch(n) : 
+    4: package = SOP65P640X120-14N(cmp-pad-map(ps))
+    8: package = SOP65P640X120-20N(cmp-pad-map(ps))
+    else : false
+  
+  part = {ad-ADG330X-prt(n)}
+
+; Knowles microphone
+pcb-component knowles-SPH1642HT5H-1-cmp :
+  val ps = PinSpec(
+    [`sig => 4]
+    []
+    [`gnd0 => 2 `gnd1 => 3]
+    [`vdd => 1]
+  )
+
+  make-pins(ps)
+  
+  package = knowles-SPH1642HT5H-1-pkg(cmp-pad-map(ps))
+  part = knowles-SPH1642HT5H-1-prt
+
+;Recom 700mA constant current LED driver
+pcb-component recom-RCD-24-070-cmp :
+  val ps = PinSpec(
+    [`vin+ => 1 `dim => 2 `pwm =>3]
+    [`vout+ => 5 `vout- => 6]
+    [`gnd => 4]
+  )
+  make-pins(ps)
+
+; LED driver
+pcb-component ISSI-IS31FL3236-cmp :
+  port out : pin[36]
+  pin gnd0
+  pin gnd1
+  pin sdb
+  pin ad
+  pin vcc
+  pin r_ext
+  pin sda
+  pin scl
+  pin thermal
+
+  for i in 0 to 36 do:
+    supports pwm :
+      pwm => out[i]
+
+  val ps = PinSpec(
+    [sdb => 36 ad => 37 r_ext => 40 sda => 41 scl => 42]
+    to-tuple $ cat-all([
+      for i in 0 to 2 seq   : out[i] => 43 + i
+      for i in 2 to 18 seq  : out[i] => -1 + i
+      for i in 18 to 36 seq : out[i] => i
+      ])
+    [gnd0 => 17 gnd1 => 39 thermal => 45]
+    [vcc => 38]
+    )
+  package = QFN40P500X500X80-44(cmp-pad-map(ps))
+  part = ISSI-IS31FL3236-prt
+
+; Texas Instruments 8 channel Darlington driver
+pcb-component ti-ULN2803ADWR-cmp :
+  ; TODO: how to 1-index ports?
+  port b : pin[8]
+  pin gnd
+  port c : pin[8]
+  pin com
+
+  val ps = PinSpec(
+    to-tuple(for i in 0 to 8 seq: b[i] => i + 1)
+    to-tuple(for i in 0 to 8 seq: c[i] => 18 - i)
+    [gnd => 9]
+    [com => 10]
+  )
+
+  package = SOIC127P1030X265-18N(cmp-pad-map(ps)) 
+  part = ti-ULN2803ADWR-prt
+
+; FE1.1 USB hub
+pcb-component terminus-FE11s-cmp :
+  val ps = PinSpec(
+    [ `xrstj => 17 `vbusm => 18 `busj => 19 `ovcj => 26 
+      `xout => 2 `xin => 3 `rext => 14 
+      `dmu => 15 `dpu => 16 ]
+    [ `drv => 22 `led1 => 23 `led2 => 24 `pwrj => 25 `testj => 27
+      `dm1 => 10 `dp1 => 11 `dm2 => 8 `dp2 => 9 `dm3 => 6 `dp3 => 7 `dm4 => 4 `dp4 => 5 ]
+    [ `vss => 1 ]
+    [ `vdd5 => 20 `vdd33-o => 21 `vd33 => 13 `vd18-o => 12 `vd18 => 28 ]
+  )
+
+  make-pins(ps)
+
+
+; 512kb i2c eeprom
+pcb-component on-LE24512AQF-cmp :
+  val ps = PinSpec(
+    [`sda => 5 `scl => 6 `wp => 7]
+    [`s0 => 1 `s1 => 2 `s2 => 3]
+    [`gnd => 4]
+    [`vdd => 8])
+  make-pins(ps)
+  package = SON50P300X200X75-8(cmp-pad-map(ps))
+  part = on-LE24512AQF-prt
+
+
+
+; quad current sense amplifier
+pcb-component ti-INA4180-cmp :
+  val ps = PinSpec(
+    [`OUT1 => 1 `IN-1 => 2 `IN+1 => 3 `VS => 4 `IN+2 => 5 `IN-2 => 6 `OUT2 => 7]
+    [`OUT3 => 8 `IN-3 => 9 `IN+3 => 10 `GND => 11 `IN+4 => 12 `IN-4 => 13 `OUT4 => 14])
+
+  make-pins(ps)
+
+  part = ti-INA4180-prt
+  package = TSSOP-14(cmp-pad-map(ps))
+
+
+; N-FET
+; TODO: figure out why this is here, delete?
+pcb-component nxp-2n7002p-cmp :
+  val ps = PinSpec(
+    [`g => 1 `s => 2 `d => 3]
+    [])
+  make-pins(ps)
+  reference-prefix = "Q"
+  part = nxp-PMBT3904-prt
+  package = SOT95P280X100-3N(cmp-pad-map(ps))
+
+; single current sense amplifier
+pcb-component ti-LMP8640-cmp :
+  val ps = PinSpec(
+    [`VOUT => 1 `V- => 2 `+IN => 3]
+    [`-IN => 4 `NC => 5 `V+ => 6])
+
+  make-pins(ps)
+
+  part = ti-LMP8640-prt
+  package = SOT23-6N(cmp-pad-map(ps)) ; package not complete
+
+; temperature sensor
+pcb-component mcp-MCP9808-cmp :
+  val ps = PinSpec(
+    [`SDA => 1 `SCL => 2 `Alert => 3 `GND => 4]
+    [ `A2 => 5 `A1 => 6 `A0 => 7 `VCC => 8])
+
+  make-pins(ps)
+
+  part = mcp-MCP9808-prt
+  package = MSOP-8(cmp-pad-map(ps))
+
+; Pressure sensor
+pcb-component nxp-MPL3115A2-cmp :
+  val ps = PinSpec(
+    [`vddio => 4]
+    [`int1 => 5 `int2 => 6 `sda => 7 `scl => 8]
+    [`gnd => 3]
+    [`vdd => 1 `cap => 2])
+
+  make-pins(ps)
+
+  part = nxp-MPL3115A2-prt
+  package = PSON125P300X500X120-8(cmp-pad-map(ps))
+
+; temperature sensor
+pcb-component mcp-MCP9700A-cmp :
+  val ps = PinSpec(
+    []
+    [`vout => 2]
+    [`gnd => 3]
+    [`vdd => 1])
+
+  make-pins(ps)
+
+  part = microchip-MCP9700A-prt
+  package = SOT95P237X95-3(cmp-pad-map(ps))
+
+; TI current sense amplifier
+; assume the -D model with a SOIC-8
+pcb-component ti-INA240-cmp :
+
+  val ps = PinSpec(
+    [`in- => 1 `gnd => 2 `ref2 => 3 `nc => 4]
+    [`out => 5 `vs => 6 `ref1 => 7 `in+ => 8]
+    []
+    [])
+
+  make-pins(ps)
+
+  package = SOIC127P600X175-8N(cmp-pad-map(ps))
+  part = ti-INA240-prt
+
+pcb-component dfl-DFLS1100-cmp :
+  pin a
+  pin c
+  package = DFLS1100-fp(c => p[0], a => p[1])
+  part = dfl-DFLS1100-prt
+  reference-prefix = "D"
+
+pcb-component ABM7-8MHZ-D2Y-T-cmp :
+  port p : pin[2]
+  val ps = PinSpec(
+    [p[0] => 1]
+    [p[1] => 2]
+    [] [])
+
+  package = ABM7-8MHZ-D2Y-T-pkg(cmp-pad-map(ps))
+  part = ABM7-8MHZ-D2Y-T-prt
+  reference-prefix = "XTAL"
+
+pcb-component ti-LM5166-cmp :
+  val ps = PinSpec(
+    [`SW => 1 `VIN => 2 `ILIM => 3 `SS => 4 `RT => 5]
+    [`PGOOD => 6 `EN => 7 `FB => 8 `HYS => 9 `GND => 10]
+  )
+
+  make-pins(ps)
+
+  package = VSON-10(cmp-pad-map(ps))
+  part = ti-LM5166-prt
+
+
+pcb-component ti-TLV70233-cmp :
+  val ps = PinSpec(
+    [`IN => 1 `GND => 2 `EN => 3]
+    [`NC => 4 `OUT => 5]
+  )
+
+  make-pins(ps)
+
+  package = SOT23-5N(cmp-pad-map(ps))
+  part = ti-TLV702-prt
+
+
+pcb-component ti-LM5008-cmp :
+  val ps = PinSpec(
+    [`SW => 1 `BST => 2 `Rcl => 3 `GND => 4]
+    [`FB => 5 `Ron => 6 `Vcc => 7 `Vin => 8]
+  )
+
+  make-pins(ps)
+
+  package = VSSOP-8(cmp-pad-map(ps))
+  part = ti-LM5008-prt
+
+
+pcb-component ti-TPS62177-cmp :
+  val ps = PinSpec(
+    [`PGND => 1 `VIN => 2 `EN => 3 `NC => 4 `FB => 5]
+    [`AGND => 6 `PG => 7 `SLEEP => 8 `SW => 9 `VOS => 10]
+  )
+
+  make-pins(ps)
+
+  package = WSON-10-TPS62177(cmp-pad-map(ps))
+  part = ti-TPS62177-prt
+
+; dimmer RGB LED
+pcb-component rohm-SMLP34RGB-cmp :
+  val ps = PinSpec(
+    [`anode => 1]
+    []
+    [`r => 2 `g => 4 `b => 3]
+    [])
+  reference-prefix = "D"
+  make-pins(ps)
+  package = rohm-SMLP34RGB-fp(cmp-pad-map(ps))
+  part = rohm-SMLP34RGB-prt
+
+pcb-component bourns-res-0ohm100-cmp :
+  port p : pin[2]
+  part = bourns-res-0ohm100-prt 
+  reference-prefix = "R"
+  package = RESC6332X35
+
+; ISL32458E RS-485 transceiver 
+pcb-component isl-ISL32458E-cmp :
+  val ps = PinSpec(
+    [`receiver-out => 1 `receiver-out-en_n => 2 `driver-en => 3 `driver-in => 4]
+    [`gnd => 5 `d+ => 6 `d- => 7 `vcc => 8]
+    []
+    []
+  )
+
+  for name in ["receiver-out" "receiver-out-en_n" "driver-en" "driver-in"] do :
+    properties(Ref(name)) :
+      voltage => 3.3
+      family => `LVCMOS 
+      vio-pin => Ref("vcc")
+
+  make-pins(ps)
+
+  package = SOIC127PO650X300-8N(cmp-pad-map(ps))
+  part = isl-ISL32458E-prt
+
+; SP3485 RS-485 transceiver 
+pcb-component sp-SP3485-cmp :
+  val ps = PinSpec(
+    [`receiver-out => 1 `receiver-out-en_n => 2 `driver-en => 3 `driver-in => 4]
+    [`gnd => 5 `d+ => 6 `d- => 7 `vcc => 8]
+    []
+    []
+  )
+
+  make-pins(ps)
+
+  package = SOIC127P600X175-8N(cmp-pad-map(ps))
+  part = sp-SP3485-prt
+; analog switch
+pcb-component ti-SN74LVC1G66DCKR-cmp :
+  val ps = PinSpec(
+    [`A => 1 `B => 2 `GND => 3]
+    [`C => 4 `VCC => 5]
+    )
+  make-pins(ps)
+  reference-prefix = "S"
+  package = SOT23-5N(cmp-pad-map(ps))
+  part = ti-SN74LVC1G66DCKR-prt
+
+; Motor Driver, Stepper, QFN-36
+pcb-component trinamic-tmc2130-cmp :
+  val ps = PinSpec(
+    [`clk => 1 `csn-cfg3 => 2 `sck-cf2 => 3 `sdi-cfg1 => 4 `sdo-cfg0 => 5 `spi-mode => 10 `vccio => 8  `step => 6 `dir => 7 `drv-enn-cfg6  => 22 `dcen-cfg4 => 18 `dcin-cfg5 => 19 `ain-iref => 23]
+    [`dco => 17 `diag0 => 20 `diag1 => 21 `oa1 => 34 `oa2 => 32 `ob1 => 13 `ob2 => 15 `bra => 33 `brb => 14]
+    [`nc => 9 `pgnd0 =>12 `pgnd1 => 35 `agnd => 24 `tst-mode => 36 `pad => 37]
+    [`vs0 => 16 `vs1 => 31 `vcc => 26 `vsa => 30 `vcp => 29`cpo => 27 `cpi => 28 `vout-5 => 25]
+  )
+  make-pins(ps)
+  package = UTQFN50P500X600X85-36(cmp-pad-map(ps))
+  part = trinamic-tmc2130-prt
+
+; DRV8312 three phase motor driver
+pcb-component ti-DRV8312-cmp :
+  val ps = PinSpec(
+    [`GVDD_C_1 => 01
+        `VDD => 02
+        `PWM_C => 05
+        `RESET_C_n => 06
+        `RESET_B_n => 07
+        `M1 => 08
+        `M2 => 09
+        `M3 => 10
+        `VREG => 11
+        `AGND => 12
+        `GND_1 => 13
+        `OC_ADJ => 14
+        `PWM_B => 15
+        `RESET_A_n => 16
+        `PWM_A => 17
+        `FAULT_n => 18
+        `OTW_n => 21
+        `GVDD_B => 22]
+    [`GVDD_A => 23
+        `BST_A => 24
+        `PVDD_A_1 => 26
+        `PVDD_A_2 => 27
+        `OUT_A => 28
+        `GND_A => 29
+        `GND_B => 30
+        `OUT_B => 31
+        `PVDD_B => 32
+        `BST_B => 33
+        `GND_2 => 36
+        `GND_3 => 37
+        `GND_C => 38
+        `OUT_C => 39
+        `PVDD_C_1 => 40
+        `PVDD_C_2 => 41
+        `BST_C => 43
+        `GVDD_C_2 => 44]
+    [`PAD => 45]
+    []
+  )
+
+  make-pins(ps)
+
+  package = HTSSOP-44(cmp-pad-map(ps))
+  part = ti-DRV8312-prt
+
+pcb-component ti-DRV8825-cmp :
+  val ps = PinSpec(
+  [`isena => 6 `isenb => 9 `avref => 12 `bvref => 13 `nreset => 16 
+  `nsleep => 17 `nfault => 18 `decay => 19 `dir => 20 `nenbl => 21 
+  `nhome => 27 `step => 22 `mode0 => 24 `mode1 => 25 `mode2 => 26 `nc => 23]
+  [`aout1 => 5 `aout2 => 7 `bout2 => 8 `bout1 => 10]
+  [`gnd0 => 14 `gnd1 => 28]
+  [`cp1 => 1 `cp2 => 2 `vcp => 3 `vma => 4 `vmb => 11 `v3p3out => 15])
+
+  make-pins(ps)
+
+  part = ti-DRV8825-prt
+  package = TSSOP65P640-28-HS(cmp-pad-map(ps))
+
+; LSM6DS3US 8 pin version magnetometer for enoder applications 
+pcb-component st-LSM6DS3US-cmp :
+  val ps = PinSpec(
+    [`SDO-SA0 => 1 `SDx => 2 `SCx => 3 `int1 => 4]
+    [`vddio => 5 `gnd0 => 6 `gnd1 => 7]
+    [`vdd => 8 `int2 => 9 `cs_aux => 10]  ; nc = 11
+    [`cs => 12 `scl => 13 `sda => 14]
+  )
+
+  make-pins(ps)
+
+  ;package = PQFN80P300X500X79-14(cmp-pad-map(ps))
+  package = LGA-14L(cmp-pad-map(ps))
+  part = st-LSM6DS3US-prt
+
+; MLX90363 8 pin version magnetometer for enoder applications 
+pcb-component melexis-MLX90363-cmp :
+  val ps = PinSpec(
+    [`vcc => 1 `miso => 2 `test => 3 `sck => 4]
+    [`ss => 5 `mosi => 6 `vdec => 7 `gnd => 8]
+    []
+    []
+  )
+
+  make-pins(ps)
+
+  package = SOIC127P600X175-8N(cmp-pad-map(ps))
+  part = melexis-MLX90363-prt
+
+
+; STM32 microcontroller
+pcb-component stmicro-STM32F405RG-cmp :
+  pin BOOT0
+  pin NRST
+
+  ; PB2 is BOOT2
+
+  port a : pin[16]
+  port b : pin[16]
+  port c : pin[16]
+
+  pin PD2
+  pin PH0
+  pin PH1
+  pin VBAT
+  pin VCAP_1
+  pin VCAP_2
+  pin VDD_1
+  pin VDD_2
+  pin VDD_3
+  pin VDD_4
+  pin VDDA
+  pin VSS_1
+  pin VSS_2
+  pin VSSA
+  
+
+  supports power-3v3 :
+    power-3v3.neg => VSS_1
+    power-3v3.pos => VDD_1
+
+
+  supports power-3v3 :
+    power-3v3.neg => VSS_2
+    power-3v3.pos => VDD_2
+
+
+  for i in 0 to 8 do :
+    supports adc :
+      adc => a[i]
+
+  for i in 0 to 16 do :
+    supports dio :
+      dio => a[i]
+
+  for i in 0 to 16 do :
+    ; Do not associate PB2 since it is BOOT2
+    if i != 2 :
+      supports dio :
+        dio => b[i]
+
+  for i in 0 to 16 do :
+    supports dio :
+      dio => c[i]
+
+  ; set up ADCs
+  for i in 0 to 7 do :
+    supports adc :
+      adc => a[i]
+
+  for i in 0 to 1 do :
+    supports adc :
+      adc => b[i]
+
+  for i in 0 to 5 do :
+    supports adc :
+      adc => c[i]
+
+  supports dio :
+    option :
+      dio => PD2
+
+  ; set up PWM
+  for i in 0 to 16 do :
+    if i != 2 and i != 13 and i != 14:
+      supports pwm :
+        pwm => a[i]
+
+  for i in 0 to 16 do :
+    if i != 2 :
+      supports pwm :
+        pwm => b[i]
+
+  for i in [6 7 8 9] do :
+    supports pwm :
+      pwm => c[i]
+
+  ; TODO: check that each grouping is in fact for the same default rather than just first search order
+  supports i2c :
+    option : ; I2C 1
+     i2c.scl => b[6]
+     i2c.sda => b[7]
+    option : ; I2C 1
+     i2c.scl => b[8]
+     i2c.sda => b[9]
+
+  supports i2c :
+    option : ; I2C 2
+     i2c.scl => b[10]
+     i2c.sda => b[11]
+
+  supports i2c :
+    option : ; I2C 2
+     i2c.scl => c[8]
+     i2c.sda => c[9]
+  
+  supports spi :
+    option : ; SPI1
+      spi.mosi => a[7]
+      spi.miso => a[6]
+      spi.sck => a[5]
+      spi.ss => a[4]
+    option : ; SPI1
+      spi.mosi => b[5]
+      spi.miso => b[4]
+      spi.sck => b[3]
+      spi.ss => a[15]
+
+  supports spi :
+    option : ; SPI2
+      spi.mosi => c[3]
+      spi.miso => c[2]
+      spi.sck => b[10]
+      spi.ss => b[12]
+
+    ;option : ; SPI2
+    ;  spi.mosi => b[15]
+    ;  spi.miso => b[14]
+    ;  spi.sck => b[13]
+    ; only on larger package
+    ;  spi.ss => i[0]
+
+  supports spi :
+    option : ; SPI3
+      spi.mosi => b[5]
+      spi.miso => b[4]
+      spi.sck => b[3]
+      spi.ss => a[4]
+
+    option : ; SPI3
+      spi.mosi => c[12]
+      spi.miso => c[11]
+      spi.sck => c[10]
+      spi.ss => a[15]
+
+  supports uart :
+    option : ; USART 1
+      uart.tx => a[9]
+      uart.rx => a[10]
+    option : ; USART 1
+      uart.tx => b[6]
+      uart.rx => b[7]
+
+  supports uart :
+    option : ; USART 2
+      uart.tx => a[2]
+      uart.rx => a[3]
+    ; not available on small package
+    ;option : ; USART 2
+    ;  uart.tx => d[5]
+    ;  uart.rx => d[6]
+
+  supports uart :
+    option : ; USART 3
+      uart.tx => b[10]
+      uart.rx => b[11]
+    ; not available on small package
+    ;option : ; USART 3
+    ;  uart.tx => d[8]
+    ;  uart.rx => d[9]
+    option : ; USART 3
+      uart.tx => c[10]
+      uart.rx => c[11]
+    
+  supports uart :
+    option : ; UART 4
+      uart.tx => a[0]
+      uart.rx => a[1]
+    option : ; UART 4
+      uart.tx => c[10]
+      uart.rx => c[11]
+
+  supports uart :
+    option : ; UART 5
+      uart.tx => c[12]
+      uart.rx => PD2
+
+  supports uart :
+    option : ; USART 6
+      uart.tx => c[6]
+      uart.rx => c[7]
+    ;only on larger parts
+    ;option : ; USART 6
+    ;  uart.tx => g[9]
+    ;  uart.rx => g[14]
+
+  supports can :
+    option :
+      can.tx => b[13]
+      can.rx => b[12]
+    option :
+      can.tx => b[6]
+      can.rx => b[5]
+  supports can :
+    option :
+      can.tx => a[12]
+      can.rx => a[11]
+    option :
+      can.tx => b[9]
+      can.rx => b[8]
+
+  supports swd :
+    swd.swdio => a[13]
+    swd.swclk => a[14]
+    swd.swo => b[3]
+    swd.reset => NRST
+
+  
+  val ps = PinSpec(
+    [VBAT => 01
+      c[13] => 02
+      c[14] => 03
+      c[15] => 04
+      PH0 => 05
+      PH1 => 06
+      NRST => 07
+      c[0] => 08
+      c[1] => 09
+      c[2] => 10
+      c[3] => 11
+      VSSA => 12
+      VDDA => 13
+      a[0] => 14
+      a[1] => 15
+      a[2] => 16]
+    [a[3] => 17
+      VSS_1 => 18
+      VDD_1 => 19
+      a[4] => 20
+      a[5] => 21
+      a[6] => 22
+      a[7] => 23
+      c[4] => 24
+      c[5] => 25
+      b[0] => 26
+      b[1] => 27
+      b[2] => 28
+      b[10] => 29
+      b[11] => 30
+      VCAP_1 => 31
+      VDD_2 => 32]
+    [b[12] => 33
+      b[13] => 34
+      b[14] => 35
+      b[15] => 36
+      c[6] => 37
+      c[7] => 38
+      c[8] => 39
+      c[9] => 40
+      a[8] => 41
+      a[9] => 42
+      a[10] => 43
+      a[11] => 44
+      a[12] => 45
+      a[13] => 46
+      VCAP_2 => 47
+      VDD_3 => 48]
+    [a[14] => 49
+      a[15] => 50
+      c[10] => 51
+      c[11] => 52
+      c[12] => 53
+      PD2 => 54
+      b[3] => 55
+      b[4] => 56
+      b[5] => 57
+      b[6] => 58
+      b[7] => 59
+      BOOT0 => 60
+      b[8] => 61
+      b[9] => 62
+      VSS_2 => 63
+      VDD_4 => 64]
+  )
+
+  package = LQFP64(cmp-pad-map(ps))
+  part = stmicro-STM32F405RG-prt
+
+pcb-component coilcraft-XAL6060-682MEB-cmp :
+  port p : pin[2]
+  emodel = Inductor(6.8, 20.0, 9.2)
+  package = INDM656636X610
+  part = coilcraft-XAL6060-682MEB-prt
+  reference-prefix = "L"
+
+pcb-component coilcraft-LPS4018-103MRB-cmp :
+  port p : pin[2]
+  emodel = Inductor(100.0, 20.0, 0.2)
+  package = coilcraft-LPS4018-fp
+  part = coilcraft-LPS4018-103MRB-prt
+  reference-prefix = "L"
+
+pcb-component coilcraft-CLF6045-151M-cmp :
+  port p : pin[2]
+  emodel = Inductor(150.0, 20.0, 0.2)
+  package = coilcraft-CLF6045-fp
+  part = coilcraft-CLF6045-151M-prt
+  reference-prefix = "L"
+
+pcb-component tdk-CLF7045T-471M-D-cmp :
+  port p : pin[2]
+  emodel = Inductor(470.0, 20.0, 0.43)
+  package = tdk-CLF7045T-471M-D-fp
+  part = tdk-CLF7045T-471M-D-prt
+  reference-prefix = "L"
+
+; hall sensor for magnetic encoder
+; magnet placement is 2.2mm from each package side and 2.881 from the top and 2.119 from the bottom of the package
+pcb-component avago-AEAT-6600-T16-cmp :
+  val ps = PinSpec(
+    [`A-U => 1 `B-V => 2 `I-W => 3 `MAG_HI-OTP_ERR => 4 `MAG_LO-OTP_PROG_STAT => 5 `GND => 6 `ALIGN => 7 `PWM => 8]
+    [`VDD => 9 `VDD_F => 10 `PWRDOWN => 11 `VPP => 12 `PROG => 13 `NCS => 14 `CLK => 15 `DO-CI => 16]
+  )
+
+  make-pins(ps)
+
+  package = TSSOP-16(cmp-pad-map(ps))
+  part = avago-AEAT-6600-T16-prt
+
+
+; Molex n pin connector
+public pcb-component molex-microfit-3-cmp (n:Int) :
+  port p : pin[n + 2]
+  package = {molex-microfit-3-pkg(n)}
+  part = {molex-microfit-3-prt(n)}
+  reference-prefix = "J"

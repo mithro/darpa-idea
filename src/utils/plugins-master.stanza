@@ -1,0 +1,52 @@
+defpackage plugins/master :
+  import core
+  import collections
+  import serialize
+  import jitpcb/dlopen
+  import plugins
+  import rtm/errors
+  import jitpcb/config
+
+public deftype Plugin
+defmulti path (p:Plugin) -> String
+defmulti symbol (p:Plugin, name:String) -> DynamicSymbol
+
+public defn Plugin (filename:String) -> Plugin :
+  set?(PLUGIN-TABLE, filename, fn () :
+    val lib = dl-open(filename)
+    call-main(dl-sym(lib, "main"))
+    val init = PluginInit(jitpcb-version(), driver-main-address())
+    serialized-call-one-sided(dl-sym(lib, "plugin_initialization"), init)
+    new Plugin :
+      defmethod path (this) : filename
+      defmethod symbol (this, name:String) : dl-sym(lib, name))
+
+public defn call (p:Plugin, entry:Symbol, args:?) -> ? :
+  try :
+    serialized-call(symbol(p, "plugin_main"), entry, args)
+  catch (e:DeserializationError) :
+    fatal("Serialization failure when calling plugin %~." % [path(p)])
+
+;============================================================
+;===================== Plugin Caching =======================
+;============================================================
+
+val PLUGIN-TABLE = HashTable<String,Plugin>()
+
+;============================================================
+;=============== Driver Callback Feature ====================
+;============================================================
+
+val DRIVER-ENTRY-POINTS = HashTable<Symbol,(? -> ?)>()
+public defn add-driver-entry-point (name:Symbol, f: ? -> ?) :
+  DRIVER-ENTRY-POINTS[name] = f
+
+lostanza defn driver-main-address () -> ref<Long> :
+  return new Long{addr(driver_main) as long}
+
+extern defn driver_main (data:ptr<ByteInputStream>) -> ptr<ByteInputStream> :
+  return serialized-receive(fn(driver-entry-point), data)
+
+defn driver-entry-point (name:Symbol) :
+  DRIVER-ENTRY-POINTS[name]
+

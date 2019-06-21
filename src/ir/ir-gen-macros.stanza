@@ -1,0 +1,1221 @@
+defpackage rtm/ir-gen-macros :
+  import core
+  import collections
+  import reader
+  import macro-utils
+  import rtm/utils
+  import stz/core-macros
+
+;============================================================
+;===================== Overall ==============================
+;============================================================
+
+defsyntax ir-gen :
+  import (exp4, id!, id$, :!, id, exp!, exp) from core
+  import (arglist, evar!, pin-type!, =!, eref$) from ir-gen-utils
+
+  ;Inside
+  defrule exp4 = (inside ?name:#id! #:! (?body ...)) :
+    val body* = 
+      switch(unwrap-token(name)) :
+        `pcb-bundle :
+          parse-syntax[core + current-overlays, ir-pcb-bundle / #exp!](List(body))
+        `pcb-component :
+          parse-syntax[core + current-overlays, ir-pcb-component / #exp!](List(body))
+        `pcb-package :
+          parse-syntax[core + current-overlays, ir-pcb-package, ir-geom, ir-pcb-shape / #exp!](List(body))
+        `pcb-pad :
+          parse-syntax[core + current-overlays, ir-pcb-pad, ir-pcb-shape / #exp!](List(body))
+        `pcb-module :
+          parse-syntax[core + current-overlays, ir-pcb-module, ir-pcb-shape / #exp!](List(body))
+        `pcb-part :
+          parse-syntax[core + current-overlays, ir-pcb-part / #exp!](List(body))
+        `pcb-shape :
+          parse-syntax[core + current-overlays, ir-pcb-shape / #exp!](List(body))
+        `mapping :
+          parse-syntax[core + current-overlays, ir-mapping / #exp!](List(body))
+        `supports :
+          parse-syntax[core + current-overlays, ir-support-options / #exp!](List(body))
+        `properties :
+          parse-syntax[core + current-overlays, ir-key-values / #exp!](List(body))
+        else :
+          throw(IRGE(closest-info(), "Unrecognized command package: '%_'." % [name]))
+
+    ;Retrieve the buffer name corresponding to the scope name
+    ;False indicates that no buffer is required. 
+    defn buffer-type (scope-name) :
+      switch(unwrap-token(scope-name)) :
+        `supports : `options        
+        `pcb-shape : false
+        else : scope-name
+   
+    match(buffer-type(name)) :
+      (buffer-type:False) :
+        body*
+      (buffer-type) :        
+        val template = `(
+          let :
+            val SCOPE-SYM = top-buffer!(`buffer-type)
+            body)
+        ir-fill(template, [
+          `buffer-type => buffer-type
+          `body => body*])
+
+  ;Memoized generators
+  defrule exp4 = (pcb-bundle ?name:#id ?args:#arglist #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-bundle / #exp!](List(body))
+    gen-memoized(`pcb-bundle, name, args, body*, true, true)
+  defrule exp4 = (pcb-component ?name:#id ?args:#arglist #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-component / #exp!](List(body))
+    gen-memoized(`pcb-component, name, args, body*, true, true)
+  defrule exp4 = (pcb-package ?name:#id ?args:#arglist #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-package, ir-geom, ir-pcb-shape / #exp!](List(body))
+    gen-memoized(`pcb-package, name, args, body*, true, true)
+  defrule exp4 = (pcb-module ?name:#id ?args:#arglist #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-module, ir-pcb-shape / #exp!](List(body))
+    gen-memoized(`pcb-module, name, args, body*, true, true)
+  defrule exp4 = (pcb-part ?name:#id ?args:#arglist #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-part / #exp!](List(body))
+    gen-memoized(`pcb-part, name, args, body*, true, true)
+  defrule exp4 = (pcb-capability ?name:#id ?args:#arglist ?type:#pin-type?) :
+    gen-memoized(`pcb-capability, name, args, type, false, true)
+
+  ;Call generator
+  defrule exp4 = (pcb-bundle ?name:#evar! #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-bundle / #exp!](List(body))
+    gen-direct(`pcb-bundle, body*, name, true, true)
+  defrule exp4 = (pcb-component ?name:#evar! #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-component / #exp!](List(body))
+    gen-direct(`pcb-component, body*, name, true, true)
+  defrule exp4 = (pcb-package ?name:#evar! #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-package, ir-geom, ir-pcb-shape / #exp!](List(body))
+    gen-direct(`pcb-package, body*, name, true, true)
+  defrule exp4 = (pcb-module ?name:#evar! #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-module, ir-pcb-shape / #exp!](List(body))
+    gen-direct(`pcb-module, body*, name, true, true)
+  defrule exp4 = (pcb-part ?name:#evar! #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-part / #exp!](List(body))
+    gen-direct(`pcb-part, body*, name, true, true)
+  defrule exp4 = (pcb-capability ?name:#evar! ?type:#pin-type?) :
+    gen-direct(`pcb-capability, type, name, false, true)
+  defrule exp4 = (make-schematic(?module:#evar!)) :
+    ir-fill(`(make-schematic(module)), [
+      `module => name(module)])
+
+
+  ;Power generators
+  defrule exp4 = (pcb-power-generator (?requires:#id!, ?supplies:#id$) #:! (?body ...)) :
+    val template = `(set-power-generator(fn* (SCOPE-SYM, requires:List<RequireRailStmt>, supplies:List<SupplyRailStmt>) : body))
+    val body* = parse-syntax[core + current-overlays, ir-pcb-module, ir-pcb-shape / #exp!](List(body))
+    ir-fill(template, [
+      `requires => requires
+      `supplies => supplies
+      `body => body*])
+      
+
+  ;Connection Expanders
+  defrule exp4 = (pcb-connection ?name:#id! (?args:#connection-arg! ...) #:! (?body ...) ?cond:#connection-condition) :
+    ir-fill $ compile(DefConnectionArgs(name, args, body, cond))
+  
+  defproduction connection-condition
+  defrule connection-condition = (when #:! ?cond:#exp!) : cond
+  defrule connection-condition = () : true
+
+  defproduction connection-arg! : ConnectionArg
+  defrule connection-arg! = (?x:#id! #:! Ref) :
+    ConnectionArg(x, false)
+  defrule connection-arg! = (?x:#id! #:! Tuple<Ref>) :
+    ConnectionArg(x, true)
+  fail-if connection-arg! = (?x:#id! #:!) :
+    IRGE(closest-info(), "Connection argument %_ does not have an appropriate type. Arguments must have type Ref or Tuple<Ref>." % [x])
+
+  ;Utilities
+  defproduction pin-type?
+  defrule pin-type? = (: ?t:#pin-type!) : t
+  defrule pin-type? = () : false
+
+  ;References
+  defrule exp4 = (?e:#exp4 . ?f:#evar!) :
+    ir-fill $ qquote(dot(~ e, ~ (ref(f))))
+
+  ;List Literals
+  defrule exp4 = (~ #L(?xs:#exp! ...)) :
+    if length(xs) <= 3 : ir-fill $ qquote(List(~@ xs))
+    else : ir-fill $ qquote(to-list $ [~@ xs])
+
+  ;Ref Literals
+  defrule exp4 = (~ #R(?r:#eref$)) :
+    ir-fill(ref(r))
+
+;============================================================
+;================ DefConnection compilation =================
+;============================================================
+
+defstruct DefConnectionArgs :
+  name
+  args: List<ConnectionArg>
+  body: List
+  condition
+
+defstruct ConnectionArg :
+  name
+  tuple?: True|False
+
+defn compile (args:List<ConnectionArg>) :
+  nested $ for (a in args, i in 0 to false) map :
+    [`tuple? => choice(tuple?(a))
+     `name => name(a)
+     `index => i]
+
+defn compile (c:DefConnectionArgs) :
+  val template = `(
+    make-def-connection $ new DefConnection :
+      defmethod rtm/ir-connections/name (this) :
+        `connection-name
+      defmethod rtm/ir-connections/signature (this) :
+        DefConnectionSignature $ [args{tuple?{true}{false}}]
+      defmethod rtm/ir-connections/applicable? (this, c-args:Tuple<Ref|Tuple<Ref>>) :
+        args{val name = c-args[index] as tuple?{Tuple<Ref>}{Ref}}
+        condition
+      defmethod rtm/ir-connections/execute (this, SCOPE-SYM:Buffer, c-args:Tuple<Ref|Tuple<Ref>>) :
+        args{val name = c-args[index] as tuple?{Tuple<Ref>}{Ref}}
+        body)
+  val body* = parse-syntax[core + current-overlays, ir-pcb-module, ir-pcb-shape / #exp!](List(body(c)))
+  substitute(template, [
+    `connection-name => name(c)
+    `args => compile(args(c))
+    `c-args => gensym(`args)
+    `condition => condition(c)
+    `body => body*])
+
+;============================================================
+;=================== Mapping Syntax =========================
+;============================================================
+defsyntax ir-exp-mapping :
+  import (exp4, exp!) from core
+
+  defrule exp4 = (?x:#exp4 => ?y:#exp!) :
+    val item = substitute(`(KeyValue(x,y)), [`x => x, `y => y])
+    ir-fill $ add-value(`entry, item)
+  defrule exp4 != (#exp4 => #exp!)
+
+defsyntax ir-mapping :
+  import (exp4, exp!) from core
+  import (eref, eref!) from ir-gen-utils
+
+  defrule exp4 = (?x:#eref => ?y:#eref!) :
+    val item = substitute(`(KeyValue(x, y)), [`x => ref(x), `y => ref(y)])
+    ir-fill $ add-value(`entry, item)
+  defrule exp4 != (#exp4 => #exp!)
+
+;============================================================
+;================== Pin Properties Syntax ===================
+;============================================================
+
+defsyntax ir-pin-properties :
+  import (exp$, :!) from core
+  
+  defproduction pin-properties
+  defrule pin-properties = (properties(?pin:#exp$) : (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-key-values / #exp!](List(body))    
+    substitute(`(make-pin-properties(ref, fn* (SCOPE-SYM) : body)), [
+      `ref => pin
+      `body => body*])
+
+defsyntax ir-key-values :
+  import (id, exp!, exp4) from core
+  import (evar) from ir-gen-utils
+  defrule exp4 = (?k:#evar => ?v:#exp!) :
+    val item = substitute(`(KeyValue(k,v)), [`k => name(k), `v => v])
+    ir-fill $ add-value(`entry, item)
+  defrule exp4 != (#exp4 => #exp!)
+
+;============================================================
+;=================== Supports Syntax ========================
+;============================================================
+
+defsyntax ir-support-options :
+  import (exp4, exp!) from core
+  import (evar$) from ir-gen-utils
+  import (require) from ir-requires
+  import (pin-properties) from ir-pin-properties
+  import option-id? from ir-supports
+
+  defrule exp4 = (option ?id:#option-id? : (?body ...)) :
+    val body* = parse-syntax[core + current-overlays / #exp!](List(body))
+    val item = substitute(`(make-option(id, fn* (SCOPE-SYM) : body)), [`id => id, `body => body*])
+    ir-fill $ add-value(`option, item)
+  defrule exp4 = (?x:#exp4 => ?y:#exp!) :
+    val item = substitute(`(KeyValue(x, y)), [`x => x, `y => y])
+    ir-fill $ add-value(`entry, item)
+  defrule exp4 != (#exp4 => #exp!)
+  defrule exp4 = (?r:#require) :
+    ir-fill $ add-value(`require, r)
+  defrule exp4 = (?s:#pin-properties) :
+    ir-fill $ add-value(`property, s)
+
+defsyntax ir-supports :
+  import (edef!, evar!, eref) from ir-gen-utils
+
+  defproduction supports
+  defrule supports = (supports ?c:#edef! ?id:#option-id? : (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-support-options / #exp!](List(forms)) where :
+      val forms = cons(ir-fill(definition(c,false)), body)
+    substitute(`(SupportsStmt(capability, make-options(id, fn* (SCOPE-SYM) : body))), [
+      `id => id
+      `capability => name-undef(c)
+      `body => body*])    
+  defrule supports = (supports ?c:#evar! ?id:#option-id?) :
+    substitute(`(SupportsStmt(capability, List(SupportOption(id, List(), List(), NoMapping())))), [
+      `capability => name(c)])    
+
+  defproduction option-id?
+  defrule option-id? = ((?id:#eref)) : ref(id)
+  defrule option-id? = () : false
+
+;============================================================
+;=================== Require Syntax =========================
+;============================================================
+
+defsyntax ir-requires :
+  import (exp4, exp$, exp!, :!) from core
+  import (evar, edef, evar!, from!) from ir-gen-utils
+
+  public defproduction require
+  defrule require = (require ?id:#edef : ?type:#capability-type! #from! ?inst:#exp! with #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-exp-mapping / #exp!](List(forms)) where :
+      val forms = cons(ir-fill(definition(id, false)), body)
+    val mapping = substitute(`(make-mapping(fn* (SCOPE-SYM) : body)), [`body => body*])
+    substitute(`(RequireStmt(name, capability, inst, mapping)), [
+      `name => name-undef(id),
+      `capability => type,
+      `inst => inst,
+      `mapping => mapping])
+
+  defrule require = (require ?id:#evar : ?type:#capability-type! #from! ?inst:#exp!) :
+    substitute(`(RequireStmt(name, capability, inst, NoMapping())), [
+      `name => name(id),
+      `capability => type,
+      `inst => inst])
+
+  defrule require = (require ?type:#capability-type! #from! ?inst:#exp!) :
+    substitute(`(RequireStmt(false, capability, inst, NoMapping())), [
+      `capability => type,
+      `inst => inst])
+
+  public defproduction require!
+  defrule require! = (?r:#require) : r
+  fail-if require! = () : IRGE(closest-info(), "A require statement is expected here.")
+
+  defproduction capability-type!
+  defrule capability-type! = (?c:#capability-type-helper) :
+    substitute(`(inside-out(c)), [`c => c])
+  defproduction capability-type-helper
+  defrule capability-type-helper = (?t:#capability-type-helper[?size:#exp$]) :
+    substitute(`(CapabilityArray(t, size)), [`t => t, `size => size])
+  defrule capability-type-helper = (?id:#evar!) :
+    substitute(`(Capability(name)), [`name => name(id)])
+
+;============================================================
+;================= DefBundle Syntax =========================
+;============================================================
+
+defsyntax ir-pcb-bundle :
+  import (exp4, :!) from core
+  import (edef!, pin-type!) from ir-gen-utils
+
+  defrule exp4 = (pin ?id:#edef!) :
+    val item = substitute(`(Pin(name, SinglePin())), [`name => name(id)])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, false)
+      `add-item => add-value(`pin, item)])
+
+  defrule exp4 = (port ?id:#edef! #:! ?type:#pin-type!) :
+    val item = substitute(`(Pin(name, type)), [`name => name(id), `type => type])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, false)
+      `add-item => add-value(`pin, item)])
+
+;============================================================
+;==================== DefComponent Syntax ===================
+;============================================================
+
+defsyntax ir-pcb-component :
+  import (exp4, :!, exp, exp$, exp!, id) from core
+  import (supports) from ir-supports
+  import (pin-properties) from ir-pin-properties
+  import (edef!, pin-type!, evar!, double-exp!, =!, mapping?, ref-list!, or!, eref!, =>!) from ir-gen-utils
+
+  defrule exp4 = (pin ?id:#edef!) :
+    val item = substitute(`(Pin(name, SinglePin())), [`name => name(id)])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, false)
+      `add-item => add-value(`pin, item)])
+
+  defrule exp4 = (port ?id:#edef! #:! ?type:#pin-type!) :
+    val item = substitute(`(Pin(name, type)), [`name => name(id), `type => type])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, false)
+      `add-item => add-value(`pin, item)])
+
+  defrule exp4 = (ground(?rs:#ref-list!)) :
+    val stmt = substitute(`(GroundStmt(rs)), [`rs => rs])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (power(?rs:#ref-list!) #:! (?props:#power-props!)) :
+    val stmt = substitute(`(PowerStmt(v, c, rs)), [
+      `v => property(props, `voltage)
+      `c => property(props, `current)
+      `rs => rs])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (diffpairs(?ps:#exppairs!) ?props:#diffpair-props!) :
+    val stmt = substitute(`(DiffPairStmt(lt, imp, skew, ml, sp, ps)), [
+      `lt => property?(props, `line-type)
+      `imp => property?(props, `impedance)
+      `skew => property?(props, `skew)
+      `ml => property?(props, `max-loss)
+      `sp => property?(props, `spacing)
+      `ps => ps])
+    ir-fill $ add-value(`stmt, stmt)
+  defproduction exppairs!
+  defrule exppairs! = (?e:#exp ~ ...) : substitute(`(to-list(e)), [`e => e])
+  defrule exppairs! = (?es:#exppair! ...) : list-exp(es)
+  defproduction exppair!
+  defrule exppair! = ((?x:#exp! ?y:#exp$)) : substitute(`([x, y]), [`x => x, `y => y])
+  fail-if exppair! = () : IRGE(closest-info(), "Expected a pair of expressions here.")
+
+
+  defrule exp4 = (package = ?p:#evar! ?m:#mapping?) :
+    val stmt = substitute(`(DefaultPackageStmt(p, m)), [
+      `p => name(p)
+      `m => m])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (emodel = ?e:#exp!) :
+    val stmt = substitute(`(DefaultEModelStmt(e)), [`e => e])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (part = ?p:#eref!) :
+    val stmt = substitute(`(DefaultPartStmt(name)), [`name => name(p)])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (reference-prefix = ?p:#exp!) :
+    val stmt = substitute(`(ReferencePrefixStmt(p)), [`p => p])
+    ir-fill $ add-value(`stmt, stmt)    
+
+  defrule exp4 = (max-current-draw(?rs:#ref-list!) #=! ?c:#exp!) :
+    val stmt = substitute(`(MaxCurrentDrawStmt(rs, c)), [`rs => rs, `c => c])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (estate(?r:#exp$) #=! ?states:#exp!) :
+    val stmt = substitute(`(EStateStmt(r, to-tuple(states))), [`r => r, `states => states])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule exp4 = (?s:#supports) :
+    ir-fill $ add-value(`stmt, s)
+
+  defrule exp4 = (?s:#pin-properties) :
+    ir-fill $ add-value(`stmt, s)
+
+  defproduction power-props! : PropertyList
+  defrule power-props! = (?props:#power-prop! ...) :
+    IRGList{closest-info(), _ props} $ [
+      Property(`voltage, false, true)
+      Property(`current, false, true)]
+  defproduction power-prop! : KeyValue<Symbol,?>
+  defrule power-prop! = (voltage #=! ?v:#double-exp!) : `voltage => v
+  defrule power-prop! = (current #=! ?c:#double-exp!) : `current => c
+  fail-if power-prop! = (?k:#id =) : IRGE(closest-info(), "Unrecognized power property: '%_'." % [k])
+  fail-if power-prop! = () : IRGE(closest-info(), "Invalid syntax for power property.")
+
+  val diffpair-spec = [
+    Property(`line-type, true, true)
+    Property(`impedance, true, true)
+    Property(`skew, true, true)
+    Property(`max-loss, true, true)
+    Property(`spacing, true, true)]
+  defproduction diffpair-props! : PropertyList
+  defrule diffpair-props! = (: (?props:#diffpair-prop! ...)) :
+    IRGList(closest-info(), diffpair-spec, props)
+  defrule diffpair-props! = () :
+    IRGList(closest-info(), diffpair-spec, List())
+  defproduction diffpair-prop! : KeyValue<Symbol,?>
+  defrule diffpair-prop! = (line-type #=! ?t:#exp!) : `line-type => cast-exp(t, `LineType)
+  defrule diffpair-prop! = (impedance #=! ?v:#double-exp!) : `impedance => v
+  defrule diffpair-prop! = (skew #=! ?v:#double-exp!) : `skew => v
+  defrule diffpair-prop! = (max-loss #=! ?v:#double-exp!) : `max-loss => v
+  defrule diffpair-prop! = (spacing #=! ?v:#double-exp!) : `spacing => v
+  fail-if diffpair-prop! = (?k:#id =) : IRGE(closest-info(), "Unrecognized diffpair property: '%_'." % [k])
+  fail-if diffpair-prop! = () : IRGE(closest-info(), "Invalid syntax for diffpair property.")
+
+
+;============================================================
+;================= DefPad Syntax ============================
+;============================================================
+
+defsyntax ir-pcb-pad :
+  import (exp4, exp!) from core
+  import pcblayer from ir-gen-utils
+
+  defrule exp4 = (type = ?t:#exp!) : ir-fill $ add-value(`type, cast-exp(t, `PadType))
+  defrule exp4 = (shape = ?s:#exp!) : ir-fill $ add-value(`shape, cast-exp(s, `Shape))
+
+;============================================================
+;================= DefPackage Syntax ========================
+;============================================================
+
+defsyntax ir-pcb-package :
+  import (exp4, id, :!, exp!) from core
+  import (arglist, edef!, eref!, at!, pcblayer, string-seq-exp!, string-exp!) from ir-gen-utils
+
+  defrule exp4 = (pcb-pad ?name:#id ?args:#arglist #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-pad, ir-pcb-shape / #exp!](List(body))
+    gen-memoized(`pcb-pad, name, args, body*, true, false)
+
+  defrule exp4 = (pcb-pad ?name:#edef! #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-pcb-pad, ir-pcb-shape / #exp!](List(body))
+    ir-fill(`(definition, add-item), [
+      `definition => definition(name, true)
+      `add-item => gen-direct(`pcb-pad, body*, name, true, false)])
+
+  defrule exp4 = (pad ?r:#eref! #:! ?type:#exp! #at! ?p:#exp! ?s:#side?) :
+    val pad = substitute(`(Pad(ref, ref-name(type), p, side)), [
+      `ref => ref(r),
+      `type => type,
+      `p => p
+      `side => s])
+    ir-fill $ add-value(`pad, pad)  
+
+
+  defrule exp4 = (external-names = (?names:#string-seq-exp! ~ ...)) :
+    ir-fill $ add-value(`external-names, names)
+  defrule exp4 = (external-names = (?names:#string-exp! ...)) :
+    ir-fill $ add-value(`external-names, list-exp(names))
+
+  defproduction side?
+  defrule side? = (on ?s:#exp!) : s
+  defrule side? = () : substitute(`Top, [])
+
+
+;============================================================
+;================== DefPart Syntax ==========================
+;============================================================
+
+defsyntax ir-pcb-part :
+  import (exp4, exp!) from core
+  import (evar!, string-exp!) from ir-gen-utils
+
+  defrule exp4 = (manufacturer = ?v:#string-exp!) : ir-fill $ add-value(`manufacturer, v)
+  defrule exp4 = (mpn = ?v:#string-exp!) : ir-fill $ add-value(`mpn, v)
+  defrule exp4 = (package = ?v:#evar!) : ir-fill $ add-value(`package, name(v))
+  defrule exp4 = (component = ?v:#evar!) : ir-fill $ add-value(`component, name(v))
+  defrule exp4 = (emodel = ?v:#exp!) : ir-fill $ add-value(`emodel, cast-exp(v, `EModel))
+
+
+
+
+;============================================================
+;=================== DefModule Syntax =======================
+;============================================================
+
+defsyntax ir-pcb-module :
+  import (exp4, :!, exp, exp!, exp$, id) from core
+  import (edef!, pin-type!) from ir-gen-utils
+  import mstmt from ir-mstmts
+
+  defrule exp4 = (pin ?id:#edef!) :
+    val item = substitute(`(Pin(name, SinglePin())), [`name => name(id)])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, false)
+      `add-item => add-value(`pin, item)])
+
+  defrule exp4 = (port ?id:#edef! #:! ?type:#pin-type!) :
+    val item = substitute(`(Pin(name, type)), [`name => name(id), `type => type])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, false)
+      `add-item => add-value(`pin, item)])
+
+  defrule exp4 = (?s:#mstmt) :
+    s
+
+
+;============================================================
+;================ Module-Level Statements ===================
+;============================================================
+
+defsyntax ir-mstmts :
+  import (exp4, :!, exp, exp!, exp$, id) from core
+  import (require) from ir-requires
+  import (supports) from ir-supports
+  import (pin-properties) from ir-pin-properties
+  import (edef!, pin-type!, evar!, =!, 
+          int-exp, double-exp!, eref, eref!, evar, eref$, mapping?, ref-list!, pcblayer,
+          layer-specifier!, relative-to!, relative?) from ir-gen-utils
+
+  public defproduction mstmt
+
+  defrule mstmt = (inst ?id:#edef! #:! ?type:#component-type!) :
+    val item = substitute(`(InstStmt(name, type)), [
+      `name => name(id)
+      `type => type])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, true)
+      `add-item => add-value(`stmt, item)])
+
+  defrule mstmt = (node ?id:#edef! #:! ?type:#pin-type!) :
+    val item = substitute(`(NodeStmt(name, type)), [
+      `name => name(id)
+      `type => type])
+    ir-fill(`(definition, add-item), [
+      `definition => definition(id, true)
+      `add-item => add-value(`stmt, item)])
+
+  defrule mstmt = (?r:#require) :
+    ir-fill $ add-value(`stmt, r)
+
+  defrule mstmt = (?s:#supports) :
+    ir-fill $ add-value(`stmt, s)
+
+  defrule mstmt = (?s:#pin-properties) :
+    ir-fill $ add-value(`stmt, s)
+
+  defrule mstmt = (net - (?rs:#ref-list!)) :
+    val item = substitute(`(NetStmt(false, rs)), [
+      `rs => rs])
+    ir-fill(add-value(`stmt, item))
+
+  defrule mstmt = (net ?id:#evar (?rs:#ref-list!)) :
+    val stmt = substitute(`(NetStmt(name, rs)), [
+      `name => name(id),
+      `rs => rs])
+    ir-fill $ add-value(`stmt, stmt)
+
+
+  defrule mstmt = (package(?s:#selector) (! (! = | at | on)) ?nm:#name+mapping? ?p:#pose? ?sd:#side? ?a:#relative?) :
+    val [r, inst?] = s
+    val stmt = substitute(`(PackageStmt(ref, inst?, nm, p, sd, anchor)), [
+      `ref => r
+      `inst? => inst?
+      `nm => nm
+      `p => p,
+      `sd => sd,
+      `anchor => a])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule mstmt = (emodel(?inst:#exp$) = ?e:#exp!) :
+    val stmt = substitute(`(EModelStmt(i,e)), [`i => inst, `e => e])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule mstmt = (part(?inst:#exp$) = ?r:#eref!) :
+    val stmt = substitute(`(PartStmt(i,name)), [`i => inst, `name => name(r)])
+    ir-fill $ add-value(`stmt, stmt)
+
+
+  defrule mstmt = (reference-designator(?inst:#exp$) = ?v:#exp!) :
+    val stmt = substitute(`(ReferenceStmt(r,v)), [`r => inst, `v => v])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule mstmt = (schematic-group(?inst:#exp, ?unit:#int-exp) = ?group:#eref!) :
+    val stmt = substitute(`(SchematicGroupStmt(r,unit, g)), [`r => inst, `unit => unit, `g => name(group)])
+    ir-fill $ add-value(`stmt, stmt)  
+
+  defrule mstmt = (schematic-group(?inst:#exp$) = ?group:#eref!) :
+    val stmt = substitute(`(SchematicGroupStmt(r,g)), [`r => inst, `g => name(group)])
+    ir-fill $ add-value(`stmt, stmt)  
+
+
+
+  defrule mstmt = (max-current-draw(?rs:#ref-list!) = ?c:#exp!) :
+    val stmt = substitute(`(MaxCurrentDrawStmt(rs, c)), [`rs => rs, `c => c])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defrule mstmt = (estate(?r:#exp$) #=! ?states:#exp!) :
+    val stmt = substitute(`(EStateStmt(r, to-tuple(states))), [`r => r, `states => states])
+    ir-fill $ add-value(`stmt, stmt)
+
+
+
+  defrule mstmt = (connect (?e0:#exp, ?es:#exp! ...)) :
+    val stmt = substitute(`(ConnectionStmt([args])), [`args => splice(cons(e0,es))])
+    ir-fill $ add-value(`stmt, stmt)
+
+  defproduction requires
+  defrule requires = (with #:! (?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-requires / #exp!](List(body))
+    ir-fill(`(make-requires(fn* (SCOPE-SYM) : body)), [
+      `body => body*])
+  defrule requires = () :
+    substitute(`(List()), [])
+
+  defproduction component-type!
+  defrule component-type! = (?c:#component-type-helper) :
+    substitute(`(inside-out(c)), [`c => c])
+  defproduction component-type-helper
+  defrule component-type-helper = (?t:#component-type-helper[?size:#exp$]) :
+    substitute(`(ComponentArray(t, size)), [`t => t, `size => size])
+  defrule component-type-helper = (?id:#evar!) :
+    substitute(`(SingleComponent(name)), [`name => name(id)])
+
+  defproduction pose?
+  defrule pose? = (at ?p:#exp!) : p
+  defrule pose? = () : false
+
+  defproduction side?
+  defrule side? = (on ?s:#exp!) : s
+  defrule side? = () : false
+
+  defproduction name+mapping?
+  defrule name+mapping? = (= ?r:#eref! ?m:#mapping?) :
+    substitute(`[n m], [`n => name(r), `m => m])
+  defrule name+mapping? = () : false
+
+  defproduction selector : [? True|False]
+  defrule selector = (insts-of ?r:#eref$) : [ref(r), false]
+  defrule selector = (?r:#exp) : [r, true]  
+
+
+;============================================================
+;=================== Geom Statements ========================
+;============================================================
+
+defsyntax ir-geom :
+  import (exp4, exp!, exp$, id!, id) from core
+  import (evar!, =!, through!, at!, double-exp!,
+          int-exp!, bool-exp!, bottom?, relative?) from ir-gen-utils
+
+
+;============================================================
+;=================== Shape Statements =======================
+;============================================================
+
+defsyntax ir-pcb-shape :
+  import (exp4, exp!, exp$, id!) from core
+  import (evar!, =!) from ir-gen-utils
+
+  defrule exp4 = (polygon(?args:#exp! ...)) :
+    ir-fill(`(polygon([args])), [`args => splice(args)])
+
+  defrule exp4 = (union(?args:#exp! ...)) :
+    ir-fill(`(union([args])), [`args => splice(args)])
+
+  defrule exp4 = (line(?width:#exp!, ?args:#exp! ...)) :
+    ir-fill(`(line(width, [args])), [`width => width, `args => splice(args)])
+
+  defrule exp4 = (text(?string:#exp!, ?font:#evar!, ?size:#exp!, ?anchor:#exp!, ?loc:#exp$)) :
+    ir-fill(`(text(string, font, size, anchor, loc)),
+      [`string => string, `font => name(font), `size => size, `anchor => anchor, `loc => loc])
+
+;============================================================
+;====================== Utilities ===========================
+;============================================================
+
+defsyntax ir-gen-utils :
+  import (exp, exp!, exp$, id, type!) from core
+
+  ;===== Errors =====
+  public defproduction of! : Symbol
+  defrule of! = (of) : `of
+  fail-if of! = () : IRGE(closest-info(), "The of keyword is expected here.")
+
+  public defproduction on! : Symbol
+  defrule on! = (on) : `on
+  fail-if on! = () : IRGE(closest-info(), "The on keyword is expected here.")
+
+  public defproduction at! : Symbol
+  defrule at! = (at) : `at
+  fail-if at! = () : IRGE(closest-info(), "The at keyword is expected here.")
+
+  public defproduction or! : Symbol
+  defrule or! = (or) : `or
+  fail-if or! = () : IRGE(closest-info(), "The or keyword is expected here.")
+
+  public defproduction from! : Symbol
+  defrule from! = (from) : `from
+  fail-if from! = () : IRGE(closest-info(), "The from keyword is expected here.")
+
+  public defproduction through! : Symbol
+  defrule through! = (through) : `through
+  fail-if through! = () : IRGE(closest-info(), "The through keyword is expected here.")
+
+  public defproduction relative-to! : Symbol
+  defrule relative-to! = (relative-to) : `relative-to
+  fail-if relative-to! = () : IRGE(closest-info(), "The relative-to keyword is expected here.")
+
+  public defproduction =>! : Symbol
+  defrule =>! = (=>) : `=>
+  fail-if =>! = () : IRGE(closest-info(), "The => operator is expected here.")
+
+  public defproduction =! : Symbol
+  defrule =! = (=) : `=
+  fail-if =! = () : IRGE(closest-info(), "The = operator is expected here.")
+
+  public defproduction evar! : ERef
+  defrule evar! = (?b:#evar) : b
+  fail-if evar! = () : IRGE(closest-info(), "Name expected here.")
+
+  public defproduction edef! : EDef
+  defrule edef! = (?b:#edef) : b
+  fail-if edef! = () : IRGE(closest-info(), "Name expected here.")
+
+  public defproduction evar$ : ERef
+  fail-if evar$ = (#evar! ?rest) : IRGE(closest-info(rest), "Unexpected input here.")
+  defrule evar$ = (?x:#evar!) : x
+
+  public defproduction eref$ : ERef
+  fail-if eref$ = (#eref! ?rest) : IRGE(closest-info(rest), "Unexpected input here.")
+  defrule eref$ = (?x:#eref!) : x
+
+  defproduction binder! : Binder
+  defrule binder! = (?b:#binder) : b
+  fail-if binder! = () : IRGE(closest-info(), "Binder expected here.")
+
+  defproduction eref! : ERef
+  defrule eref! = (?b:#eref) : b
+  fail-if eref! = () : IRGE(closest-info(), "Name expected here.")
+
+  defproduction arg-entry! : ArgEntry
+  defrule arg-entry! = (?b:#arg-entry) : b
+  fail-if arg-entry! = () : IRGE(closest-info(), "Argument entry expected here.")
+
+  public defproduction arglist! : ArgList
+  defrule arglist! = (?b:#arglist) : b
+  fail-if arglist! = () : IRGE(closest-info(), "Argument list expected here.")
+
+  ;===== Typed Expressions
+  public defproduction double-exp
+  defrule double-exp = (?e:#exp) : substitute(`(e upcast-as Double), [`e => e])
+  public defproduction int-exp
+  defrule int-exp = (?e:#exp) : substitute(`(e upcast-as Int), [`e => e])
+  public defproduction string-exp
+  defrule string-exp = (?e:#exp) : substitute(`(e upcast-as String), [`e => e])
+  public defproduction bool-exp
+  defrule bool-exp = (?e:#exp) : substitute(`(e upcast-as True|False), [`e => e])
+
+  public defproduction double-exp!
+  defrule double-exp! = (?e:#exp!) : substitute(`(e upcast-as Double), [`e => e])
+  public defproduction int-exp!
+  defrule int-exp! = (?e:#exp!) : substitute(`(e upcast-as Int), [`e => e])
+  public defproduction string-exp!
+  defrule string-exp! = (?e:#exp!) : substitute(`(e upcast-as String), [`e => e])
+  public defproduction bool-exp!
+  defrule bool-exp! = (?e:#exp!) : substitute(`(e upcast-as True|False), [`e => e])
+  public defproduction string-seq-exp!
+  defrule string-seq-exp! = (?e:#exp!) : substitute(`(e upcast-as Seqable<String>), [`e => e])
+
+  public defproduction double-exp$
+  defrule double-exp$ = (?e:#exp$) : substitute(`(e upcast-as Double), [`e => e])
+  public defproduction int-exp$
+  defrule int-exp$ = (?e:#exp$) : substitute(`(e upcast-as Int), [`e => e])
+  public defproduction string-exp$
+  defrule string-exp$ = (?e:#exp$) : substitute(`(e upcast-as String), [`e => e])
+  public defproduction bool-exp$
+  defrule bool-exp$ = (?e:#exp$) : substitute(`(e upcast-as True|False), [`e => e])
+
+  ;===== Argument Lists =====
+  public defproduction arglist : ArgList
+  defrule arglist = ((?es:#arg-entry! ...)) : ArgList(es)
+
+  defproduction binder : Binder
+  defrule binder = (?x:#id) : VarBinder(x)
+  defrule binder = ([?xs:#binder! ...]) : TupleBinder(xs)
+
+  defproduction arg-entry : ArgEntry
+  defrule arg-entry = (?b:#binder : ?t:#type!) : ArgEntry(b, t)
+  defrule arg-entry = (?b:#binder) : ArgEntry(b, `($none))
+
+  ;===== Escaped References =====
+  public defproduction eref : ERef
+  defrule eref = (?r:#evar) : r
+  defrule eref = (?r:#eref . ?f:#evar) : ERefField(r, f)
+  defrule eref = (?r:#eref[?i:#exp$]) : ERefIndex(r, i)
+
+  public defproduction evar : ERef
+  defrule evar = (?x:#id) : ERefId(x)
+  defrule evar = ({?e:#exp}) : ERefExp(e)
+
+  public defproduction edef : EDef
+  defrule edef = (?x:#id) : EDefId(x)
+  defrule edef = ({?e:#exp}) : EDefExp(e)
+
+  ;===== Pin Types =====
+  public defproduction pin-type!
+  defrule pin-type! = (?p:#pin-type-helper) :
+    substitute(`(inside-out(p)), [`p => p])
+  defproduction pin-type-helper
+  defrule pin-type-helper = (pin) :
+    substitute(`(SinglePin()), [])
+  defrule pin-type-helper = (?t:#pin-type-helper[?size:#exp$]) :
+    substitute(`(PinArray(t, size)), [`t => t, `size => size])
+  defrule pin-type-helper = (?id:#evar!) :
+    substitute(`(PinBundle(name)), [`name => name(id)])
+
+  ;===== PCB Layers =====
+  public defproduction pcblayer
+  defrule pcblayer = (layer ?l:#layer-specifier! = ?s:#exp!) :
+    substitute(`(PcbLayer(l, s)), [`l => l, `s => s])
+
+  public defproduction bottom? : True|False
+  defrule bottom? = (bottom) : true
+  defrule bottom? = () : false
+
+  defproduction layer-specifier!
+  defrule layer-specifier! = (cutout) :
+    substitute(`(Cutout()), [])
+  defrule layer-specifier! = (?b:#bottom? courtyard) :
+    substitute(`(Courtyard(b)), [`b => b])
+  defrule layer-specifier! = (?b:#bottom? solder-mask) :
+    substitute(`(SolderMask(b)), [`b => b])
+  defrule layer-specifier! = (?b:#bottom? paste) :
+    substitute(`(Paste(b)), [`b => b])
+  defrule layer-specifier! = (?b:#bottom? glue) :
+    substitute(`(Glue(b)), [`b => b])
+  defrule layer-specifier! = (?b:#bottom? finish) :
+    substitute(`(Finish(b)), [`b => b])
+  defrule layer-specifier! = (?b:#bottom? silkscreen(?id:#evar$)) :
+    substitute(`(Silkscreen(name, b)), [`name => name(id), `b => b])
+  fail-if layer-specifier! = (?b:#bottom? silkscreen) :
+    IRGE(closest-info(), "No name given to silkscreen layer.")
+  defrule layer-specifier! = (?b:#bottom? forbid(?index:#int-exp$)) :
+    substitute(`(ForbidCopper(index, b)), [`index => index, `b => b])
+  defrule layer-specifier! = (forbid-via) :
+    substitute(`(ForbidVia()), [])
+  defrule layer-specifier! = (board-edge) :
+    substitute(`(BoardEdge()), [])
+
+  ;===== Lists =====
+  public defproduction ref-list!
+  defrule ref-list! = (?es:#exp! ...) :
+    substitute(`(flatten-refs([es])), [`es => splice(es)])
+
+  ;===== Mappings =====
+  public defproduction mapping?
+  defrule mapping? = ((@do ?body ...)) :
+    val body* = parse-syntax[core + current-overlays, ir-mapping / #exp!](List(body))
+    ir-fill(`(make-mapping(fn* (SCOPE-SYM) : body)), [
+      `body => body*])
+  defrule mapping? = () :
+    substitute(`(NoMapping()), [])
+
+  ;===== Relative-to =====
+  public defproduction relative?
+  defrule relative? = ((relative-to ?r:#exp$)) : r
+  defrule relative? = () : false
+
+;===== Escaped References =====
+;==============================
+deftype ERef
+defstruct ERefId <: ERef : (id)
+defstruct ERefExp <: ERef : (exp)
+defstruct ERefField <: ERef : (base:ERef, field:ERef)
+defstruct ERefIndex <: ERef : (base:ERef, index)
+
+;Return the Stanza expression that retrieves the name of the reference
+defn name (e:ERef) :
+  match(e) :
+    (e:ERefExp) : substitute(`(ref-name(e)), [`e => exp(e)])
+    (e:ERefId) : qquote($quote ~ (id(e)))
+    (e) : fatal("No name for reference of this type.")
+
+;Return the Stanza expression that retrieves the Ref of the reference
+defn ref (e:ERef) :
+  match(e) :
+    (e:ERefExp) : exp(e)
+    (e:ERefId) : substitute(`(Ref(`name)), [`name => id(e)])
+    (e:ERefField) : substitute(`(dot(ref, field)), [`ref => ref(base(e)), `field => ref(field(e))])
+    (e:ERefIndex) : substitute(`(get(ref, index)), [`ref => ref(base(e)), `index => index(e)])
+
+;Return the Stanza expression that retrieves the list of all references
+defn refs (es:List<ERef>) :
+  substitute(`(to-list $ [rs]), [`rs => splice(map(ref, es))])
+
+;Return the Stanza expression that returns a list of keyvalue pairs
+defn keyvalues (xs:List<ERef>, ys:List<ERef>) :
+  substitute(`(to-list $ [entry{KeyValue(x, y)}]), [
+    `entry => repeated $ [
+      `x => map(ref, xs)
+      `y => map(ref, ys)]])
+
+;===== Escaped Definitions =====
+;===============================
+deftype EDef
+defstruct EDefId <: EDef : (id)
+defstruct EDefExp <: EDef : (exp)
+
+;Return the Stanza expression that defines the edef
+defn definition (e:EDef, fresh?:True|False) :
+  match(e) :
+    (e:EDefId) :
+      substitute(`(val name = make-ref(SCOPE-SYM, LOCAL-NAMESPACE, `name, fresh?)), [
+        `name => id(e)
+        `fresh? => fresh?])
+    (e:EDefExp) :
+      substitute(`(record-ref(SCOPE-SYM, LOCAL-NAMESPACE, name)), [
+        `name => name(e)])
+
+;Return the Stanza expression that retrieves the name of the reference
+defn name (e:EDef) :
+  match(e) :
+    (e:EDefExp) : substitute(`(ref-name(e)), [`e => exp(e)])
+    (e:EDefId) : substitute(`(ref-name(name)), [`name => id(e)])
+
+;Return the Stanza expression that retrieves the name of the reference,
+;without assuming that it has been defined.
+defn name-undef (e:EDef) :
+  match(e) :
+    (e:EDefExp) : name(e)
+    (e:EDefId) : qquote($quote ~ (id(e)))
+
+;===== Argument Lists =====
+;==========================
+deftype Binder
+defstruct VarBinder <: Binder : (name)
+defstruct TupleBinder <: Binder : (binders:List)
+defstruct ArgEntry: (binder:Binder, type)
+defstruct ArgList: (entries:List<ArgEntry>)
+
+defn binders (a:ArgList) :
+  val bs = Vector<?>()
+  for e in entries(a) do :
+    let loop (b:Binder = binder(e)) :
+      match(b) :
+        (b:TupleBinder) : do(loop, binders(b))
+        (b:VarBinder) : add(bs, name(b))
+  repeated([`x => bs])
+
+defn form (a:ArgList) :
+  defn c (b:Binder) :
+    match(b) :
+      (b:VarBinder) : name(b)
+      (b:TupleBinder) : qquote(@tuple ~@ (map(c, binders(b))))
+  defn c (e:ArgEntry) :
+    qquote(~ (c(binder(e))) : ~ (type(e)))
+  seq-append(c, entries(a))
+
+;===== Fill with Imports =====
+;=============================
+val IR-BINDINGS = [
+  ;constants
+  `SCOPE-SYM => deep(gensym(`scope-buffer))
+
+  ;package ir-gen
+  qualified(`rtm/ir-gen/pcb-bundle-new)
+  qualified(`rtm/ir-gen/pcb-bundle-gen)
+  qualified(`rtm/ir-gen/pcb-component-new)
+  qualified(`rtm/ir-gen/pcb-component-gen)
+  qualified(`rtm/ir-gen/pcb-package-new)
+  qualified(`rtm/ir-gen/pcb-package-gen)
+  qualified(`rtm/ir-gen/pcb-module-new)
+  qualified(`rtm/ir-gen/pcb-module-gen)
+  qualified(`rtm/ir-gen/pcb-attach)
+  qualified(`rtm/ir-gen/pcb-part-new)
+  qualified(`rtm/ir-gen/pcb-part-gen)
+  qualified(`rtm/ir-gen/pcb-capability-new)
+  qualified(`rtm/ir-gen/pcb-capability-gen)
+  qualified(`rtm/ir-gen/pcb-pad-new)
+  qualified(`rtm/ir-gen/pcb-pad-gen)
+  qualified(`rtm/ir-gen/make-schematic)
+  qualified(`rtm/ir-gen/make-mapping)
+  qualified(`rtm/ir-gen/make-mappings)
+  qualified(`rtm/ir-gen/make-pin-properties)
+  qualified(`rtm/ir-gen/make-requires)
+  qualified(`rtm/ir-gen/IR-GEN-CONTEXT)
+  qualified(`rtm/ir-gen/in-context)
+
+  ;Shapes
+  qualified(`rtm/ir-gen/polygon)
+  qualified(`rtm/ir-gen/line)
+  qualified(`rtm/ir-gen/union)
+  
+  ;Misc
+  qualified(`rtm/ir-gen/make-option)
+  qualified(`rtm/ir-gen/make-options)
+  qualified(`rtm/ir-gen/add-entry)
+  qualified(`rtm/ir-gen/top-buffer!)
+  qualified(`rtm/ir-gen/ref-name)
+  qualified(`rtm/ir-gen/flatten-refs)
+  qualified(`rtm/ir-gen/make-ref)
+  qualified(`rtm/ir-gen/record-ref)
+  qualified(`rtm/ir-gen/LOCAL-NAMESPACE)
+  qualified(`rtm/ir-gen/Buffer)
+
+  ;package rtm/ir
+  qualified(`rtm/ir/Ref)
+  qualified(`rtm/ir/MakeSchematic)
+  qualified(`rtm/ir/DefCapability)
+  qualified(`rtm/ir/Pin)
+  qualified(`rtm/ir/RPin)
+  qualified(`rtm/ir/EModel)
+  qualified(`rtm/ir/PinType)
+  qualified(`rtm/ir/SinglePin)
+  qualified(`rtm/ir/PinArray)
+  qualified(`rtm/ir/PinBundle)
+  qualified(`rtm/ir/GroundStmt)
+  qualified(`rtm/ir/PowerStmt)
+  qualified(`rtm/ir/DiffPairStmt)
+  qualified(`rtm/ir/DefaultPackageStmt)
+  qualified(`rtm/ir/DefaultEModelStmt)
+  qualified(`rtm/ir/DefaultPartStmt)
+  qualified(`rtm/ir/ReferencePrefixStmt)
+  qualified(`rtm/ir/MaxCurrentDrawStmt)
+  qualified(`rtm/ir/EStateStmt)
+  qualified(`rtm/ir/AttachStmt)
+  qualified(`rtm/ir/LineType)
+  qualified(`rtm/ir/SymPin)
+  qualified(`rtm/ir/PinProperties)
+  qualified(`rtm/ir/Pad)
+  qualified(`rtm/ir/PadType)
+  qualified(`rtm/ir/NetStmt)
+  qualified(`rtm/ir/InstStmt)
+  qualified(`rtm/ir/NodeStmt)
+  qualified(`rtm/ir/RequireStmt)
+  qualified(`rtm/ir/SupportsStmt)
+  qualified(`rtm/ir/SupportOption)
+  qualified(`rtm/ir/PinPropertiesStmt)
+  qualified(`rtm/ir/PackageStmt)
+  qualified(`rtm/ir/EModelStmt)
+  qualified(`rtm/ir/PartStmt)
+  qualified(`rtm/ir/ConnectionStmt)
+  qualified(`rtm/ir/ReferenceStmt)
+  qualified(`rtm/ir/Capability)
+  qualified(`rtm/ir/CapabilityArray)
+  qualified(`rtm/ir/ComponentArray)
+  qualified(`rtm/ir/SingleComponent)
+  qualified(`rtm/ir/Mapping)
+  qualified(`rtm/ir/NoMapping)
+  qualified(`rtm/ir/center)
+  qualified(`rtm/ir/Top)
+
+
+  ;package power generator
+  qualified(`rtm/power-solver/set-power-generator)
+
+  ;package ir-connections
+  qualified(`rtm/ir-connections/make-def-connection)
+  qualified(`rtm/ir-connections/DefConnection)
+  qualified(`rtm/ir-connections/DefConnectionSignature)
+
+  ;package rtm/ir-utils
+  qualified(`rtm/ir-utils/inside-out)
+
+  ;package core
+  qualified(`core/to-list)
+  qualified(`core/to-tuple)
+  qualified(`core/cons)
+  qualified(`core/Int)
+  qualified(`core/Double)
+  qualified(`core/String)
+  qualified(`core/True)
+  qualified(`core/False)
+  qualified(`core/gensym)
+  qualified(`core/Tuple)
+  qualified(`core/KeyValue)
+  qualified(`core/List)
+  qualified(`core/Seqable)
+
+  ;package collections
+  qualified(`collections/HashTable)]
+
+defn #exp (form) :
+  try :
+    parse-syntax[core / #exp](List(form))
+  catch (e:parser/NoMatchException) :
+    fatal("Incorrect generated exp: %~" % [form])
+
+defn ir-fill (form) :
+  val bindings* = to-tuple $ cat-all $ [
+    [`form => form]
+    IR-BINDINGS]
+  #exp $ fill-template(`form, bindings*)
+
+defn ir-fill (form, entries:Collection<KeyValue<Symbol,?>>) :
+  val bindings* = to-tuple(cat(entries, IR-BINDINGS))
+  #exp $ fill-template(form, bindings*)
+
+;===== Misc =====
+;================
+
+;Qualified entries
+defn qualified (s:Symbol) :
+  val [p, n] = qualifier(s)
+  n => deep(s)
+
+;Return a form that creates a list
+defn list-exp (xs:List) :
+  substitute(`(to-list([xs])), [`xs => splice(xs)])
+
+;Return a form that ensures a v is of type t
+defn cast-exp (v, t) :
+  substitute(`(v upcast-as t), [
+    `v => v,
+    `t => substitute(t, [])])
+
+;===== Memoized Generators =====
+;===============================
+defn gen-memoized (type:Symbol, name, args:ArgList, body, body?:True|False, top-level?:True|False) :
+  val gen = symbol-join([type "-gen"])
+  val template = 
+    if top-level? :
+      `(val table = HashTable<Tuple,Ref>()
+        val context = IR-GEN-CONTEXT
+        defn name arglist :
+          within in-context(context) :
+            gen(body?{fn* (SCOPE-SYM) : body}{body}, `name, table, [args{x}]))
+    else :
+      `(val table = HashTable<Tuple,Ref>()
+        defn name arglist :
+          gen(body?{fn* (SCOPE-SYM) : body}{body}, SCOPE-SYM, `name, table, [args{x}]))
+  ir-fill(template, [
+    `name => name
+    `arglist => form(args)
+    `body => body
+    `body? => choice(body?)
+    `args => binders(args)
+    `gen => substitute(gen, [])
+    `table => gensym(`table)
+    `context => gensym(`context)])
+
+defn gen-direct (type:Symbol, body, id:ERef|EDef, body?:True|False, top-level?:True|False) :
+  val gen = symbol-join([type "-new"])
+  val template = `(gen(body?{fn* (SCOPE-SYM) : body}{body}, top-level?{}{SCOPE-SYM}, name))
+  ir-fill(template, [
+    `gen => substitute(gen, [])
+    `body => body
+    `body? => choice(body?)
+    `top-level? => choice(top-level?)
+    `name => name(id)])
+
+;===== Buffer Entries =====
+;==========================
+defn add-value (field:Symbol, v) :
+  substitute(`(add-entry(SCOPE-SYM, `field, v)), [
+    `field => field,
+    `v => v])
+
+;============================================================
+;====================== Exceptions ==========================
+;============================================================
+
+public defstruct IRGException <: Exception :
+  info: False|FileInfo
+  msg: String
+
+defn IRGE (info:False|FileInfo, msg) :
+  IRGException(info, to-string(msg))
+
+defmethod print (o:OutputStream, e:IRGException) :
+  match(info(e)) :
+    (info:FileInfo) : print(o, "%_: %_" % [info, msg(e)])
+    (info:False) : print(o, msg(e))
+
+defn IRGList (info:False|FileInfo, ps:Collection<Property>, vs:List<KeyValue<Symbol,?>>, complete?:True|False) :
+  try : PropertyList(ps, vs, complete?)
+  catch (e:MissingProperty) :
+    throw(IRGE(info, "Missing %_ specifier." % [name(e)]))
+  catch (e:DuplicateProperty) :
+    throw(IRGE(info, "Duplicate %_ specifier." % [name(e)]))
+  catch (e:UnknownProperty) :
+    throw(IRGE(info, "Unsupported specifier: '%_'." % [name(e)]))
+
+defn IRGList (info:False|FileInfo, ps:Collection<Property>, vs:List<KeyValue<Symbol,?>>) :
+  IRGList(info, ps, vs, true)

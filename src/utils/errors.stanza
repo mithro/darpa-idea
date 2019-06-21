@@ -1,0 +1,103 @@
+#use-added-syntax(serializer)
+
+defpackage rtm/errors :
+  import core
+  import collections
+  import serialize
+  import parser
+
+;============================================================
+;================= Error Reporting System ===================
+;============================================================
+
+val ERROR-BUFFER = Vector<Exception>()
+
+public deftype ErrorReport <: Collection<Exception> & Lengthable & Exception
+public defmulti empty? (e:ErrorReport) -> True|False
+
+public defn ErrorReport (es:Seqable<Exception>) :
+  val errors = to-tuple(es)
+  new ErrorReport :
+    defmethod length (this) : length(errors)
+    defmethod empty? (this) : empty?(errors)
+    defmethod to-seq (this) : to-seq(errors)
+    defmethod print (o:OutputStream, this) :
+      val o2 = IndentedStream(o)
+      print(o, "ErrorReport (%_ errors):" % [length(errors)])
+      for (e in errors, i in 1 to false) do :
+        print(o2, "\n%_. %_" % [i, e])
+
+public defn remove-errors (pred:Exception -> True|False) :
+  remove-when(pred, ERROR-BUFFER)
+
+public defn report-error (e:Exception) :
+  match(e:ErrorReport) : add-all(ERROR-BUFFER, e)
+  else : add(ERROR-BUFFER, e)
+
+public defn end-if-errors (whitelist:Exception -> True|False) :
+  if any?({not whitelist(_)}, ERROR-BUFFER) :
+    ;Separate buffer into errors versus warnings
+    val [warnings, errors] = split!(whitelist, ERROR-BUFFER)
+    clear(ERROR-BUFFER)
+    ;Create warnings for whitelisted errors
+    if length(warnings) > 0 :
+      val warning = Warning(ErrorReport(warnings))
+      throw(ErrorReport(cat(errors, [warning])))
+    else :
+      throw(ErrorReport(errors))
+
+public defn end-if-errors () :
+  if not empty?(ERROR-BUFFER) :
+    val er = ErrorReport(ERROR-BUFFER)
+    clear(ERROR-BUFFER)
+    throw(er)
+
+public defn error-report () :
+  val er = ErrorReport(ERROR-BUFFER)
+  clear(ERROR-BUFFER)
+  er
+
+public defn error-buffer () :
+  ERROR-BUFFER
+
+register-serializer :
+  serialize (o:OutputStream, e:rtm/errors/ErrorReport) :
+    serialize(o, length(e))
+    do(serialize{o, _}, e)
+  deserialize (i:InputStream) :
+    val n:Int = deserialize(i)
+    ErrorReport(repeatedly(deserialize{i}, n))
+
+;============================================================
+;======================= Warnings ===========================
+;============================================================
+
+public defstruct Warning <: Exception :
+  error: Exception
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/errors/Warning :
+    error: Exception
+defmethod print (o:OutputStream, e:Warning) :
+  print(o, "[Warning] %_" % [error(e)])
+
+;============================================================
+;=============== Printing the Error Report ==================
+;============================================================
+
+public defn print-error-report (e:Exception) -> True|False :
+  val errors = Vector<Exception>()
+  val warnings = Vector<Exception>()
+  let loop (e:Exception = e, warning?:True|False = false) :
+    match(e) :
+      (e:ErrorReport) : do(loop{_, warning?}, e)
+      (e:NoMatchException) : do(loop{_, warning?}, causes(e))
+      (e:Warning) : loop(error(e), true)
+      (e) : add(warnings when warning? else errors, e)
+  val o2 = IndentedStream(current-output-stream())
+  if not empty?(errors) :
+    println("[===== %_ Errors =====]" % [length(errors)])
+    do(println{o2, _}, errors)
+  if not empty?(warnings) :
+    println("[===== %_ Warnings =====]" % [length(warnings)])
+    do(println{o2, _}, warnings)
+  not empty?(errors)

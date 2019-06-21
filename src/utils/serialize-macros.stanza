@@ -1,0 +1,193 @@
+defpackage serialize-macros :
+  import core
+  import collections
+  import macro-utils
+  import stz/core-macros
+  import reader
+
+;============================================================
+;================= Parse Structures =========================
+;============================================================
+
+defstruct SerializerRegistration :
+  serializer: Serializer
+  deserializer: Deserializer
+defstruct Serializer: (type-name, args, body)  
+defstruct Deserializer: (args, body)
+
+defstruct StructSerializerRegistration :
+  output
+  input
+  structs: List<StructSerializer>
+defstruct StructSerializer : (name, fields: List<SerializerField>)
+defstruct SerializerField : (name, type)
+
+;<COMMENT>===================================================
+=============================================================
+=============================================================
+
+register-serializer :
+  serialize (o:OutputStream, r:plugins/PluginResult) :
+    serialize(o, result(r))
+    serialize(o, errors(r))
+  deserialize (i:InputStream) :
+    val result = deserialize(i)
+    val errors = deserialize(i)
+    PluginResult(result, errors)
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  CyclicBundleError :
+    names: List<Symbol>
+
+====================================================<COMMENT>
+
+;============================================================
+;=================== Syntax Definition ======================
+;============================================================
+
+defsyntax serializer :
+  import (exp!, exp4, type!, :!) from core
+
+  defproduction symbol!
+  defrule symbol! = (?x) when unwrap-token(x) is Symbol : x
+  fail-if symbol! = () : SE(closest-info(), "Expected a symbol here.")
+  
+  defproduction arg! : List
+  defrule arg! = (?name:#symbol! #:! ?type:#type!) : List(name `: type)
+
+  defproduction LS!
+  fail-if LS! = ((! (_ ...))) : SE(closest-info(), "Expected a list here.")
+  defrule LS! = () : false
+
+  defproduction LE!
+  fail-if LE! = (_) : SE(closest-info(), "Unexpected form here. Expected the end of list.")
+  defrule LE! = () : false
+
+  defproduction serializer! : Serializer
+  defrule serializer! = (serialize #LS! (?o:#arg! ?x:#arg! #LE!) #:! ?body:#exp!) :
+    val type-name = last(x)
+    ensure-type-name!(closest-info(), type-name)
+    Serializer(type-name, append(o, x), body)
+  fail-if serializer! = () : SE(closest-info(), "Expected a serializer definition here.")
+    
+  defproduction deserializer! : Deserializer
+  defrule deserializer! = (deserialize #LS! (?i:#arg! #LE!) #:! ?body:#exp!) :
+    Deserializer(i, body)
+  fail-if deserializer! = () : SE(closest-info(), "Expected a deserializer definition here.")
+
+  defrule exp4 = (register-serializer #:! #LS! (?s:#serializer! ?d:#deserializer! #LE!)) :
+    val r = SerializerRegistration(s, d)
+    parse-syntax[core / #exp](compile(r))
+
+  defproduction serializer-field! : SerializerField
+  defrule serializer-field! = (?name:#symbol! #:! ?type:#type!) :
+    SerializerField(name, type)
+
+  defproduction struct-serializer! : StructSerializer
+  defrule struct-serializer! = (?name:#symbol! : #LS! (?fs:#serializer-field! ...)) :
+    StructSerializer(name, fs)
+  defrule struct-serializer! = (?name:#symbol!) :
+    StructSerializer(name, List())
+
+  defrule exp4 = (register-struct-serializers #LS! (?output:#arg! ?input:#arg! #LE!) #:! #LS! (?ss:#struct-serializer! ...)) :
+    val s = StructSerializerRegistration(output, input, ss)    
+    parse-syntax[core + serializer / #exp](compile(s))
+
+;============================================================
+;================== Compiler ================================
+;============================================================
+
+defn compile (s:Serializer) :
+  val template = `(defmethod #serialize args : body)
+  substitute(template, [
+    `args => args(s)
+    `body => body(s)])
+
+defn compile (d:Deserializer) :
+  val template = `(
+    val DESERIALIZER = register $ let :
+      val name-hash = hash(`type-name)
+      new Deserializer :
+        defmethod name (this) : `type-name
+        defmethod tag (this) : name-hash
+        defmethod #deserialize (this, args) : body
+    defmethod deserializer (obj:type-name) : DESERIALIZER)
+  substitute(template, [
+    `args => splice(args(d))
+    `body => body(d)])
+
+defn compile (s:SerializerRegistration) :
+  fill-template(`((serializer, deserializer)), [
+    `serializer => compile(serializer(s))
+    `deserializer => compile(deserializer(s))
+    `type-name => deep(type-name(serializer(s)))
+    `DESERIALIZER => deep(gensym(`DESERIALIZER))
+    qualified(`serialize/register)
+    qualified(`core/hash)
+    qualified(`serialize/name)
+    qualified(`serialize/tag)
+    qualified(`serialize/Deserializer)
+    qualified(`serialize/deserializer)
+    qualified(`serialize/#serialize)
+    qualified(`serialize/#deserialize)])
+
+defn compile (s:StructSerializerRegistration) :
+  fill-template(`(structs), [
+    `structs => map(compile, structs(s))
+    `o => deep(head(output(s)))
+    `OutputStream => deep(last(output(s)))
+    `obj => deep(gensym(`obj))
+    `i => deep(head(input(s)))
+    `InputStream => deep(last(input(s)))])
+
+defn compile (s:StructSerializer) :
+  val template = `(
+    register-serializer :
+      serialize (o:OutputStream, obj:MyType) :
+        fields{serialize/serialize(o, name(obj))}
+        false
+      deserialize (i:InputStream) :
+        fields{val name:type = serialize/deserialize(i)}
+        MyType(fields{name}))
+  substitute(template, [
+    `MyType => name(s)
+    `fields => nested $ for f in fields(s) map :
+      [`name => name(f)
+       `type => type(f)]])
+
+defn qualified (x:Symbol) :
+  val [_, b] = qualifier(x)
+  b => deep(x)
+
+defn ensure-type-name! (info:FileInfo|False, x0) :
+  val x = unwrap-token(x0)
+  if x is-not Symbol :
+    throw(SE(info, "Expected a type name here, but received %_." % [x0]))
+  if not qualified?(x):
+    throw(SE(info, "The serializer type name is not qualified."))
+
+;============================================================
+;=================== Error Definitions ======================
+;============================================================
+
+public defstruct SerializerError <: Exception :
+  info:FileInfo|False
+  msg
+with:
+  constructor => SE
+defmethod print (o:OutputStream, e:SerializerError) :
+  val info-str = match(info(e)) :
+    (i:FileInfo) : "%_ : " % [i]
+    (i:False) : ""
+  print(o, "%_%_" % [info-str, msg(e)])
+
+;============================================================
+;=================== STANDALONE =============================
+;============================================================
+#if-defined(STANDALONE) :
+  defn main () :
+    val filename = command-line-arguments()[1]
+    val forms = read-file(filename)
+    do(println, parse-syntax[core / #exp ...](forms))
+
+  main()

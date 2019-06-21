@@ -1,0 +1,61 @@
+defpackage plugins/slave :
+  import core
+  import collections
+  import serialize
+  import rtm/errors
+  import plugins
+  import jitpcb/config
+
+;============================================================
+;================= User Interface ===========================
+;============================================================
+
+var PLUGIN-NAME:Symbol
+val PLUGIN-ENTRY-POINTS = HashTable<Symbol,(? -> ?)>()
+val ALL-PLUGIN-ENTRY-POINTS = HashTable<[Symbol, Symbol],(? -> ?)>()
+var DRIVER-MAIN:Long
+
+public defn add-plugin-entry-point (plugin:Symbol, name:Symbol, f: ? -> ?) :
+  PLUGIN-NAME = plugin
+  PLUGIN-ENTRY-POINTS[name] = f
+  ALL-PLUGIN-ENTRY-POINTS[[plugin, name]] = f
+
+public defn plugin-entry-point (plugin:Symbol, name:Symbol) -> Maybe<(? -> ?)> :
+  match(get?(ALL-PLUGIN-ENTRY-POINTS, [plugin, name])) :
+    (f:? -> ?) : One(f)
+    (_:False) : None()
+
+;============================================================
+;=================== Driver Callbacks =======================
+;============================================================
+
+public defn call-driver (entry:Symbol, arg) -> ? :
+  try :
+    serialized-call(DRIVER-MAIN, entry, arg)
+  catch (e:DeserializationError) :
+    fatal("Serialization failure when calling driver.")
+
+;============================================================
+;=================== Initialize Plugin ======================
+;============================================================
+
+extern defn plugin_initialization (data:ptr<ByteInputStream>) -> int :
+  plugin-initialization(deserialize-from-stream(data))
+  return 0
+
+defn plugin-initialization (init:PluginInit) :
+  if version(init) != jitpcb-version() :
+    fatal("Plugin version mismatch. JitPCB is at version %_, but %_ plugin is at version %_." % [
+      string-join(version(init), "."), PLUGIN-NAME, string-join(jitpcb-version(), ".")])
+  DRIVER-MAIN = driver-main(init)
+
+;============================================================
+;==================== Entry Point ===========================
+;============================================================
+
+;Plugin entry point
+extern defn plugin_main (data:ptr<ByteInputStream>) -> ptr<ByteInputStream> :
+  return serialized-receive(fn(plugin-entry-point), data)
+
+defn plugin-entry-point (name:Symbol) :
+  PLUGIN-ENTRY-POINTS[name]

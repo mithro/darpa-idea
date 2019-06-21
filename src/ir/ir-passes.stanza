@@ -1,0 +1,12 @@
+defpackage rtm/ir-passes :
+  import core
+  import collections
+  import rtm/ir-prune
+  import rtm/ir
+  import plugins/slave
+  import rtm/structures
+
+add-plugin-entry-point(`passes, `prune,
+  fn ([prog, option]:[Collection<TStmt>, PruningOption]) :
+    prune(prog, option))
+

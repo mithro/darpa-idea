@@ -1,0 +1,370 @@
+#use-added-syntax(ir-gen)
+defpackage power-system-gen :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-gen
+  import powergen
+  import modulegen
+
+;============================================================
+;================== Regulator Library =======================
+;============================================================
+
+public defstruct RailRefs :
+  pos: Ref
+  neg: Ref
+  voltage: Double
+
+defstruct RegulatorBlock :
+  reg: Regulator
+  generator: (RailRefs, RailRefs) -> ?
+
+defstruct LoadBlock :
+  load: Load with: (updater => sub-load)
+  generator: RailRefs -> ?
+
+val REGULATORS = Vector<RegulatorBlock>()
+
+public defn add-LDO (generator:(RailRefs, RailRefs) -> ?,
+                     description:String|False,
+                     noise:Double,
+                     voltage-dropout:Double,
+                     tjmax:Double,
+                     thetaja:Double,
+                     min-voltage-in:Double,
+                     max-voltage-in:Double,
+                     min-voltage-out:Double,
+                     max-voltage-out:Double,
+                     min-current-out:Double,
+                     max-current-out:Double) :
+  val id = length(REGULATORS)
+  val reg = LDO(id,
+                noise,
+                voltage-dropout,
+                tjmax,
+                thetaja,
+                min-voltage-in,
+                max-voltage-in,
+                min-voltage-out,
+                max-voltage-out,
+                min-current-out,
+                max-current-out,
+                description)
+  add(REGULATORS, RegulatorBlock(reg, generator))
+
+public defn add-LDO (generator:(RailRefs, RailRefs) -> ?,
+                     noise:Double,
+                     voltage-dropout:Double,
+                     tjmax:Double,
+                     thetaja:Double,
+                     min-voltage-in:Double,
+                     max-voltage-in:Double,
+                     min-voltage-out:Double,
+                     max-voltage-out:Double,
+                     min-current-out:Double,
+                     max-current-out:Double) :
+  add-LDO(generator, false, noise, voltage-dropout, tjmax, thetaja,
+          min-voltage-in,max-voltage-in,min-voltage-out, max-voltage-out,
+          min-current-out, max-current-out)
+                     
+public defn add-switching-regulator (generator:(RailRefs, RailRefs) -> ?,
+                                     description:String|False,
+                                     max-dcycle: Double,
+                                     noise: Double|SwitchedNoise,
+                                     efficiency: Double,
+                                     tjmax: Double,
+                                     thetaja: Double,
+                                     min-voltage-in: Double,
+                                     max-voltage-in: Double,
+                                     min-voltage-out: Double,
+                                     max-voltage-out: Double,
+                                     min-current-out: Double,
+                                     max-current-out: Double) :
+  val id = length(REGULATORS)
+  val reg = SwitchReg(id,
+                      max-dcycle,
+                      noise,
+                      efficiency,
+                      tjmax,
+                      thetaja,
+                      min-voltage-in,
+                      max-voltage-in,
+                      min-voltage-out,
+                      max-voltage-out,
+                      min-current-out,
+                      max-current-out,
+                      description)
+  add(REGULATORS, RegulatorBlock(reg, generator))  
+
+public defn add-switching-regulator (generator:(RailRefs, RailRefs) -> ?,
+                                     max-dcycle: Double,
+                                     noise: Double|SwitchedNoise,
+                                     efficiency: Double,
+                                     tjmax: Double,
+                                     thetaja: Double,
+                                     min-voltage-in: Double,
+                                     max-voltage-in: Double,
+                                     min-voltage-out: Double,
+                                     max-voltage-out: Double,
+                                     min-current-out: Double,
+                                     max-current-out: Double) :
+  add-switching-regulator(generator, false, max-dcycle, noise, efficiency,
+                          tjmax, thetaja, min-voltage-in, max-voltage-in, min-voltage-out,
+                          max-voltage-out, min-current-out, max-current-out) 
+
+val LOADS = Vector<LoadBlock>()
+public defn make-load (generator:RailRefs -> ?,
+                       description:String|False
+                       voltage:Double,
+                       current:Double,
+                       noise:Double) :
+  val id = length(LOADS)
+  add(LOADS, LoadBlock(Load(id, voltage, current, noise, description), generator))
+
+public defn make-load (generator:RailRefs -> ?,
+                       voltage:Double,
+                       current:Double,
+                       noise:Double) :
+  make-load(generator, false, voltage, current, noise)
+
+;============================================================
+;==================== Generation ============================
+;============================================================ 
+public defn generate-power-system (src-voltage:Double, tamb:Double,
+                                   src-pos:Ref, src-neg:Ref) -> RailProps :
+  val lp = collapse-loads(src-voltage, seq(load, LOADS))
+  val loads = preprocess(lp)
+  val regs = to-tuple(seq(reg, REGULATORS))
+  val supplies = gen-power-supplies(Env(src-voltage, tamb), loads, regs)
+  if empty?(supplies) :
+    throw(PowerSupplyGenError())
+
+  ;Call generators
+  val s = postprocess(lp, next(supplies))
+  export-graphviz(s, "power-system.gv")
+  export-module-graphviz("system-architecture.gv")
+  call-generators(s, src-pos, src-neg, REGULATORS, LOADS)
+
+  ;Clear loads
+  clear(LOADS)
+
+  ;Return input rail
+  lookup(rails(s), 0)
+
+defn call-generators (rl:RegList, src-pos:Ref, src-neg:Ref,
+                      regblocks:Vector<RegulatorBlock>,
+                      loadblocks:Vector<LoadBlock>) :
+  inside pcb-module :
+    ;Gather rail properties
+    val rail-props = IntTable<RailProps>()
+    for r in rails(rl) do :
+      rail-props[key(r)] = value(r)
+      
+    ;Create references for rails
+    val rail-refs = IntTable<RailRefs>()
+    for r in rails(rl) do :      
+      val props = value(r)
+      if key(r) == 0 :
+        rail-refs[key(r)] = RailRefs(src-pos, src-neg, voltage(props))
+      else :
+        node rpos : pin
+        node rneg : pin
+        rail-refs[key(r)] = RailRefs(rpos, rneg, voltage(props))
+
+    ;Call generators for regulators
+    for r in regs(rl) do :
+      val rblock = regblocks[id(reg(r))]
+      generator(rblock)(rail-refs[input(r)], rail-refs[n(r)])
+
+    ;Call generators for loads
+    for l in loads(rl) do :
+      val lblock = loadblocks[id(load(l))]
+      generator(lblock)(rail-refs[input(l)])      
+  
+public defstruct PowerSupplyGenError <: Exception
+defmethod print (o:OutputStream, e:PowerSupplyGenError) :
+  print(o, "Error generating power supply.")
+
+;============================================================
+;================== Pre/Post Processors =====================
+;============================================================
+deftype LoadProcessor
+defmulti preprocess (p:LoadProcessor) -> Tuple<Load>
+defmulti postprocess (p:LoadProcessor, rl:RegList) -> RegList
+
+defn collapse-loads (src-voltage:Double, loads:Seqable<Load>) -> LoadProcessor :
+  ;Group loads by voltage value
+  val load-table = HashTable<Double, List<Load>>(List())
+  val src-loads = Vector<Load>()
+  for l in loads do :
+    if voltage(l) == src-voltage :
+      add(src-loads, l)
+    else :
+      update(load-table, cons{l, _}, voltage(l))
+  val load-groups = to-tuple(values(load-table))
+
+  ;Create new merged loads
+  val new-loads = to-tuple $
+    for (loads in load-groups, i in 0 to false) seq :
+      if length(loads) == 1 : sub-id(head(loads), i)
+      else : merge(i, loads)
+
+  ;Postprocess
+  defn postprocess (rl:RegList) :
+    val loads* = Vector<LoadNode>()
+    ;Add original groups back
+    for lnode in /loads(rl) do :
+      val idx = id(load(lnode))
+      for l in load-groups[idx] do :
+        add(loads*, LoadNode(n(lnode), input(lnode), l))
+    ;Add source loads
+    for l in src-loads do :
+      add(loads*, LoadNode(0, 0, l))
+    ;Adjust source rails current
+    val rails* =
+      if empty?(src-loads) :
+        rails(rl)
+      else :
+        val r = lookup(rails(rl), 0)
+        val current* = sum(seq(current, src-loads)) + current(r)
+        val r* = RailProps(voltage(r), current*, noise(r))
+        replace(rails(rl), 0, r*)        
+    RegList(env(rl), regs(rl), to-tuple(loads*), rails*)
+
+  ;Return processor
+  new LoadProcessor :
+    defmethod preprocess (this) : new-loads
+    defmethod postprocess (this, rl:RegList) : postprocess(rl)
+
+defn merge (id:Int, ls:Seqable<Load>) :
+  val [voltage*, current*, noise*] = fork-on-seq(ls,
+    fn (ls) : voltage(next(ls))
+    fn (ls) : sum(seq(current, ls))
+    fn (ls) : minimum(seq(noise, ls)))
+  Load(id, voltage*, current*, noise*)
+
+defn replace<?K,?T> (xs:Tuple<KeyValue<?K&Equalable, ?T>>, k:K&Equalable, v:T) :
+  for x in xs map :
+    if key(x) == k : k => v
+    else : x
+  
+;<example>===================================================
+;======================= Example ============================
+;============================================================
+
+within (input, output) =
+  add-LDO("MXP3"      ;description
+          1.0e-4,     ;noise
+          0.67,       ;drop out
+          125.0,      ;tjmax
+          41.8,       ;thetaja
+          2.7, 5.5,   ;vin
+          0.6, 5.0,   ;vout
+          0.0, 3.0) : ;iout
+  inside pcb-module :        
+    ;Code for generating the LDO        
+    println("Generating LDO MXP3")
+
+    ;Create nets
+    println("Input rail is at voltage: %_" % [voltage(input)])
+    println("Between %_ and %_" % [pos(input), neg(input)])
+
+    println("Output rail is at voltage: %_" % [voltage(output)])
+    println("Between %_ and %_" % [pos(output), neg(output)])
+
+within (input, output) =
+  add-LDO("LDO SDF"      ;description
+          0.33e-4,       ;noise
+          1.65,          ;drop out
+          125.0,         ;tjmax
+          29.0,          ;thetaja
+          1.2, 40.0,     ;vin
+          0.0, 38.50,    ;vout
+          0.5e-3, 0.2) : ;iout
+  inside pcb-module :        
+    ;Code for generating the LDO        
+    println("Generating LDO SDF")
+
+    ;Create nets
+    println("Input rail is at voltage: %_" % [voltage(input)])
+    println("Between %_ and %_" % [pos(input), neg(input)])
+
+    println("Output rail is at voltage: %_" % [voltage(output)])
+    println("Between %_ and %_" % [pos(output), neg(output)])
+
+within (input, output) =
+  add-switching-regulator(
+    "SWR1"                                 ;description
+    0.85,                                  ;max duty_cycle
+    SwitchedNoise(1.4e6, 1.0e-6, 4.4e-5),  ;Noise(fs, L, C)
+    0.8,                                   ;efficiency
+    125.0,                                 ;tjmax
+    46.0,                                  ;thetaja
+    4.5, 18.0,                             ;vin
+    0.6, 20.0,                             ;vout
+    0.0, 3.0) :                            ;iout
+  inside pcb-module :        
+    ;Code for generating the LDO        
+    println("Generating switching regulator SWR1")
+
+    ;Create nets
+    println("Input rail is at voltage: %_" % [voltage(input)])
+    println("Between %_ and %_" % [pos(input), neg(input)])
+
+    println("Output rail is at voltage: %_" % [voltage(output)])
+    println("Between %_ and %_" % [pos(output), neg(output)])
+
+    println("\n")
+
+within (input, output) =
+  add-switching-regulator(
+    "SW150"         ;description
+    1.0,            ;max duty_cycle
+    7.e-2,          ;noise
+    0.87,           ;efficiency
+    125.0,          ;tjmax
+    0.0,            ;thetaja
+    18.0, 75.0,     ;vin
+    5.0, 5.0,       ;vout
+    0.0, 3.0) :     ;iout
+  inside pcb-module :        
+    ;Code for generating the LDO        
+    println("Generating switching regulator SW150")
+
+    ;Create nets
+    println("Input rail is at voltage: %_" % [voltage(input)])
+    println("Between %_ and %_" % [pos(input), neg(input)])
+
+    println("Output rail is at voltage: %_" % [voltage(output)])
+    println("Between %_ and %_" % [pos(output), neg(output)])
+    println("\n")
+
+within (rail) = make-load("Washing Machine", 3.0, 1.0, 5.0e-3) :
+  println("Generate load (1A) on rail with voltage = %_" % [voltage(rail)])
+  println("Rail from %_ to %_" % [pos(rail), neg(rail)])
+  println("\n")
+
+within (rail) = make-load("Dryer", 3.0, 0.1, 5.0e-3) :
+  println("Generate load (0.1A) on rail with voltage = %_" % [voltage(rail)])
+  println("Rail from %_ to %_" % [pos(rail), neg(rail)])
+  println("\n")
+
+within (rail) = make-load("DryerB", 4.0, 0.05, 5.0e-3) :
+  println("Generate load (0.1A) on rail with voltage = %_" % [voltage(rail)])
+  println("Rail from %_ to %_" % [pos(rail), neg(rail)])
+  println("\n")
+
+within (rail) = make-load("BigFuse", 18.0, 3.0, 5.0e-3) :
+  println("Generate load (0.1A) on rail with voltage = %_" % [voltage(rail)])
+  println("Rail from %_ to %_" % [pos(rail), neg(rail)])
+  println("\n")
+
+pcb-module main-module :
+  generate-power-system(18.0, 75.0,
+                        Ref("BATTERY-POS"), Ref("BATTERY-NEG"))
+    
+
+;============================================================
+;============================================================
+;===================================================<example>

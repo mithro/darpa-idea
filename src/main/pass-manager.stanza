@@ -1,0 +1,182 @@
+defpackage pass-manager :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-reader
+  import rtm/ir-gen
+  import rtm/utils
+  import param-manager
+  import rtm/errors
+  import jitpcb/config
+  import jitpcb/errors
+  import serialize
+  import jitpcb/task-graph
+  import pass-manager-io
+  import plugins/slave
+  import plugins/master
+
+public defn run-passes (arg:PassArg,
+                        output:String|False,
+                        param-filename:String|False,
+                        passes:List<Symbol>,
+                        configs:List<Symbol>) -> False :
+  ;Clear all errors first, and start with a clean slate.
+  error-report()
+  
+  ;Get the pass path
+  val pass-path = TaskPath(passes, PASSES, InvalidPassPath)
+
+  ;Retrieve the input directory and input project name
+  val [in-dir, in-proj-name] = split-filepath(filename(arg))
+
+  ;Retrieve the output directory and output project name
+  val [dir, proj-name] =
+    match(output:String) : split-filepath(output)
+    else : [in-dir, in-proj-name]
+
+  ;Write out the generated ESIR if it is a generator
+  match(arg:GenArg) :
+    val filename = norm-path("%_%_.esir" % [dir, proj-name])
+    spit(filename, "%n" % [prog(arg)])
+
+  ;Retrieve the parameter file
+  val params = read-params(over-file, configs) where :
+    val over-file =
+      match(param-filename:String) :
+        param-filename
+      else :
+        val path = norm-path("%_%_.params" % [in-dir, in-proj-name])
+        path when file-exists?(path)
+
+  ;Serialize state of errors
+  defn read-errors (filename:String) :
+    val file = FileInputStream(filename)
+    report-error(deserialize(file) as ErrorReport)
+    close(file)
+  defn write-errors (filename:String) :
+    val file = FileOutputStream(filename)
+    serialize(file, ErrorReport(error-buffer()))
+    close(file)
+  
+  ;Retrieve the filename of the ESIR following a pass
+  defn pass-result-filename (p:ThruPass) :
+    norm-path("%_%_.%_.esir" % [dir, proj-name, name(p)])  
+  defn pass-error-filename (p:ThruPass) :
+    norm-path("%_%_.%_.errors" % [dir, proj-name, name(p)])
+  defn output-files-exist? (p:ThruPass) :
+    file-exists?(pass-result-filename(p)) and
+    file-exists?(pass-error-filename(p))
+
+  ;Retrieve the passes to execute, along with the initial program
+  val [exec-passes, initial-prog] = match(arg) :
+    ;For files, start from the most recent esir
+    (arg:FileArg) :
+      ;Get the filepath to the input file
+      val input-file = string-join([filename(arg) ".esir"])
+      
+      ;Construct candidates to choose from.
+      ;Each candidate is an index => time-modified.
+      ;An index of 2 means that we should start from after pass number 2.
+      ;An index of -1 means that we should start from the input.
+      val candidates = Vector<KeyValue<Int,Long>>()
+      add(candidates, -1 => input-time) where :
+        val input-time = time-modified(input-file) when file-exists?(input-file)
+                    else 0L        
+      for i in 0 to length(tasks(pass-path)) do :
+        val t = tasks(pass-path)[i]
+        match(t:ThruTask) :
+          val p = t as ThruTask & ThruPass
+          if output-files-exist?(p) :
+            add(candidates, i => time-modified(pass-result-filename(p)))
+          
+      ;Select most recent candidate
+      val candidate = key(maximum(value, candidates))
+
+      ;If we want to start from the beginning
+      if candidate == -1 :
+        [tasks(pass-path) as Collection<Pass>, parse-rtm(input-file)]
+      ;Otherwise start from the middle
+      else :
+        ;Retrieve task
+        val t = tasks(pass-path)[candidate] as ThruPass
+
+        ;Notify user
+        println("Detected the presence of %~. Starting execution from after pass %~." % [
+          pass-result-filename(t), name(t)])
+
+        ;Compute remaining tasks, and read in ESIR from task output
+        val passes = tasks(pass-path)[(candidate + 1) to false]
+        val prog = parse-rtm(pass-result-filename(t))
+        read-errors(pass-error-filename(t))
+        [passes, prog]
+    ;For generators, always start from the generated esir.
+    (arg:GenArg) :
+      [tasks(pass-path) as Collection<Pass>, prog(arg)]
+
+  ;Execute passes
+  var prog:Collection<TStmt> = initial-prog
+  for p in exec-passes do :
+    match(p) :
+      ;For a thru pass, execute it and save its result for the later passes
+      (p:ThruPass) :
+        prog = run(p, dir, proj-name, prog, params)
+        ;Write out the program if desired
+        if output?(p) :
+          spit(pass-result-filename(p), "%n" % [prog])
+          write-errors(pass-error-filename(p))
+      ;For an end pass just execute it for its side-effects
+      (p:EndPass) :
+        run(p, dir, proj-name, prog, params)
+    
+;============================================================
+;================== Pass Definition =========================
+;============================================================
+public deftype Pass <: Task
+public deftype ThruPass <: Pass & ThruTask
+public deftype EndPass <: Pass & EndTask
+public defmulti run (p:ThruPass, dir:String, name:String,
+                     input:Collection<TStmt>, params:Params) -> Collection<TStmt>                     
+public defmulti run (p:EndPass, dir:String, name:String,
+                     input:Collection<TStmt>, params:Params) -> False
+
+val PASSES = Vector<Pass>()
+val PASS-PARENTS = HashTable<Symbol,Symbol>()
+
+public defn add-pass (p:Pass) :
+  add(PASSES, p)
+  
+public defn add-path (src:Symbol, dst:Symbol) :
+  fatal("Pass %_ already has a parent!" % [dst]) when key?(PASS-PARENTS, dst)
+  PASS-PARENTS[dst] = src
+
+public defn add-paths (path0:Seqable<Symbol>) :
+  val path = to-seq(path0)
+  if not empty?(path) :
+    let loop (prev:Symbol = next(path)) :
+      if not empty?(path) :
+        val name = next(path)
+        add-path(prev, name)
+        loop(name)
+
+defmethod parent (p:Pass) :
+  PASS-PARENTS[name(p)]
+
+;============================================================
+;================== Calling Entry Points ====================
+;============================================================
+public defn call-plugin-entry-point (plugin:Symbol, name:Symbol, arg) :
+  ;Retrieve the function for running the entry point
+  val func = plugin-entry-point(plugin, name)
+
+  ;Fatal error if there is no such entry point
+  if empty?(func) :
+    fatal("There is no plugin registered called %~ with entry point %~." % [plugin, name])
+    
+  ;If there is a substitute plugin that we wish to call instead.
+  val plugin-path = norm-path("%_/plugins/%_.plugin" % [jitpcb-install-dir(), plugin])
+  if file-exists?(plugin-path) :
+    println("There is a substitute plugin found at %~. Calling its %~ entry point." % [plugin-path, name])
+    call(Plugin(plugin-path), name, arg)
+  ;There is no substitute plugin, just call the entry function
+  else :
+    value!(func)(arg)

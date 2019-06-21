@@ -1,0 +1,12 @@
+defpackage jitpcb/launcher :
+  import core
+  import collections
+  import jitpcb/driver
+  import rtm/errors
+
+try :
+  LAUNCH-FN()
+catch (e) :
+  val error? = print-error-report(e)
+  exit(-1) when error?
+  

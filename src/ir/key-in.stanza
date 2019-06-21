@@ -1,0 +1,103 @@
+defpackage key-in :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir/errors
+  import rtm/utils
+  import rtm/errors
+  import rtm/ir-utils
+  import plugins/slave
+  import key-in-analysis
+
+;============================================================
+;====================== Driver ==============================
+;============================================================
+defn export-keyin (prog:Collection<TStmt>, dir:String, proj-name:String) :
+  val filename = norm-path("%_%_.kyn" % [dir, proj-name])
+  val board = analyze(prog)
+  val file = FileOutputStream(filename)
+  try :
+    print-nets(file, board)
+    print-parts(file, board)
+  finally :
+    close(file)
+
+add-plugin-entry-point(`keyin, `export,
+  fn ([prog, dir, proj-name]:[Collection<TStmt>, String, String]) :
+    export-keyin(prog, dir, proj-name))
+
+;============================================================
+;====================== Utilities ===========================
+;============================================================
+defn print-item-line (o:OutputStream, xs0:Seqable) :
+  ;Column counter
+  var col-counter:Int = 0
+  defn P (s:String) :
+    print(o, s)
+    col-counter = col-counter + length(s)
+  defn NL () :
+    print(o, '\n')
+    col-counter = 0
+
+  ;Print items until we reach 80 characters
+  defn P80 (xs:Seq<String>) :
+    let loop () :
+      if not empty?(xs) :
+        val x = peek(xs)
+        if 3 + 1 + length(x) > 80 :
+          fatal("Name %_ is too long!" % [length(x)])
+        if col-counter + 1 + length(x) <= 80 :
+          P(" ")
+          P(next(xs))
+          loop()        
+    
+  ;Retrieve sequence
+  val xs = seq(to-string, xs0)
+  
+  ;# First Line #
+  if not empty?(xs) :
+    ;Print first item followed by 3 spaces
+    P(to-string("%_  " % [next(xs)]))
+    ;Print items until we reach 80 columns
+    P80(xs)
+    ;Print continuation lines
+    NL()
+
+  ;# Subsequent Lines #
+  while not empty?(xs) :
+    P("*  ")
+    P80(xs)
+    NL()
+
+;============================================================
+;===================== Formatting ===========================
+;============================================================
+defn ref-string (r:Ref) :
+  flatten(DefaultFlattener(), r)
+
+defn format (p:KPin) :
+  "%_-%_" % [ref-designator(p), pin-name(p)]
+  
+defn print-nets (o:OutputStream, b:Board) :
+  println(o, NET-INTRO)
+  for net in knets(b) do :
+    print-item-line(o, cat([name(net)], seq(format, pins(net))))
+
+val NET-INTRO =
+\<S>%NET
+%PRIORITY=1
+%PAGE=0<S>
+  
+defn print-parts (o:OutputStream, b:Board) :      
+  println(o, PART-INTRO)
+  for part in parts(b) do :
+    print-item-line(o, cat([mpn(part)], ref-designators(part)))
+
+val PART-INTRO = \<S>
+%PART<S>
+
+val KEYIN-INTRO =
+\<S>;; Keyin Netlist File
+;; V4.1.0
+;;<S>
+

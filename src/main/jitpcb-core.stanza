@@ -1,0 +1,85 @@
+defpackage jitpcb/core :
+  import core
+  import collections
+  import plugins
+  import plugins/slave
+  import rtm/ir
+  import rtm/ir-reader
+  import rtm/errors
+  import jitpcb/errors
+  import pass-manager-io
+  import pass-manager
+  import passes
+  import jitpcb/config
+
+  ;Import all subplugins
+  import rtm/ir-check
+  import rtm/ir-passes
+  import key-in
+
+;============================================================
+;================== Process Entry Point =====================
+;============================================================
+
+add-plugin-entry-point(`core, `process, enter) where :
+  defn enter ([arg, output, param-filename, passes, configs]:
+              [PassArg, String|False, String|False, List<Symbol>, List<Symbol>]) :
+    run-passes(arg, output, param-filename, passes, configs)
+
+;============================================================
+;================= Compilation Entry Point ==================
+;============================================================
+
+defn flatten-strings (x) :
+  val strings = Vector<String>()
+  let loop (x = x) :
+    match(x:String) : add(strings, x)
+    else : do(loop, x as Seqable)
+  to-tuple(strings)
+
+add-plugin-entry-point(`core, `compile, enter) where :
+  defn enter ([filenames, output, asm, optimize?, pkgs?, verbose?]:
+              [List<String>, String|False, String|False, True|False, True|False, True|False]) :
+    ;Verification
+    if empty?(filenames) :
+      throw(NoJitPCBFiles())
+
+    ;Retrieve file from jitpcb home
+    defn root-file (filename:String) :
+      norm-path("%_/%_" % [jitpcb-install-dir(), filename])
+
+    ;Collect arguments
+    val arg-accum = Vector<String>()
+    defn add-args (s) : add-all(arg-accum, flatten-strings(s))
+
+    ;Call the jstanza compile command
+    add-args $ [root-file("jstanza") "compile"]
+
+    ;With the following stanza files
+    add-args $ ["jitpcb/driver" filenames "jitpcb/launcher"]
+
+    ;And the following C files
+    add-args $ ["-ccfiles" root-file("runtime/rtm-utils.c")]
+    
+    ;If pkgs are desired, then output them to the installation directory.
+    if pkgs? : add-args $ ["-pkg" root-file("pkgs")]
+
+    ;If an assembly file is desired,
+    match(asm:String) : add-args $ ["-s" asm]
+
+    ;If an executable is desired
+    match(output:String) : add-args $ ["-o" output]
+    
+    ;If optimization is requested
+    if optimize? : add-args("-optimize")
+
+    ;Log
+    if verbose? :
+      println("Calling jstanza command: %s" % [arg-accum])
+
+    ;Call system
+    call-system(arg-accum[0], arg-accum)
+
+    ;This plugin returns false
+    false
+

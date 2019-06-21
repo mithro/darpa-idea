@@ -1,0 +1,207 @@
+defpackage csolver :
+  import core
+  import collections
+
+public deftype Constraint
+public defmulti exp (c:Constraint) -> Exp
+public defstruct EQConstraint <: Constraint :
+  x: Int
+  exp: Exp<Double> with: (as-method => true)
+  monotonic?: True|False with: (default => false)
+public defstruct LEConstraint <: Constraint :
+  x: Int
+  exp: Exp<Double> with: (as-method => true)
+public defstruct GEConstraint <: Constraint :
+  x: Int
+  exp: Exp<Double> with: (as-method => true)
+public defstruct CheckConstraint <: Constraint :
+  exp: Exp<True|False> with: (as-method => true)
+public defstruct RangeConstraint <: Constraint :
+  x: Int
+  exp: Exp<[Double, Double]> with: (as-method => true)
+
+public defstruct Exp<T> :
+  eval: Array<Double> -> T
+  vars: Tuple<Int>
+  description: String
+
+defmethod print (o:OutputStream, e:Exp) :
+  print(o, description(e))
+
+defmethod print (o:OutputStream, c:Constraint) :
+  print{o, _} $ match(c) :
+    (c:EQConstraint) :
+      "V%_ = %_" % [x(c), exp(c)]
+    (c:LEConstraint) :
+      "V%_ <= %_" % [x(c), exp(c)]
+    (c:GEConstraint) :
+      "V%_ >= %_" % [x(c), exp(c)]
+    (c:CheckConstraint) :
+      "check %_" % [exp(c)]
+    (c:RangeConstraint) :
+      "V%_ ~ %_" % [x(c), exp(c)]
+
+val NUM-ITERATIONS = 100
+public defn solve-constraints (n:Int, cs:Vector<Constraint>) -> Seq<Tuple<Double>> :
+  ;Process constraints
+  defn process-constraints (f:Vector<Constraint> -> False) :
+    val cs* = Vector<Constraint>()
+    f(cs*)
+    clear(cs)
+    add-all(cs, cs*)
+
+  ;Group LE/GE constraints
+  within constraints = process-constraints() :
+    ;Find all variables with equality constraints
+    val eq-set = IntSet()
+    for c in filter-by<EQConstraint>(cs) do :
+      add(eq-set, x(c))
+
+    val le-table = IntTable<List<Exp<Double>>>(List())
+    val ge-table = IntTable<List<Exp<Double>>>(List())
+    for c in cs do :
+      match(c:LEConstraint|GEConstraint) :
+        if eq-set[x(c)] :
+          defn eval* (xs:Array<Double>) :
+            val xval = xs[x(c)]
+            val result = eval(exp(c))(xs)
+            match(c) :
+              (c:LEConstraint) : xval <= result
+              (c:GEConstraint) : xval >= result
+          val vars* = to-tuple(cat([x(c)], vars(exp(c))))
+          val description* = to-string $ "V%_ %_ %_" % [x(c), op, exp(c)] where :
+            val op = "<=" when c is LEConstraint else ">="
+          add(constraints, CheckConstraint(Exp<True|False>(eval*, vars*, description*)))
+        else :
+          val table = le-table when c is LEConstraint
+                 else ge-table
+          update(table, cons{exp(c), _}, x(c))
+      else :
+        add(constraints, c)
+
+    for v in unique(cat(keys(le-table), keys(ge-table))) do :
+      val le-exps = le-table[v]
+      val ge-exps = ge-table[v]
+      fatal("No lower bound for V%_" % [v]) when empty?(ge-exps)
+      fatal("No upper bound for V%_" % [v]) when empty?(le-exps)
+      defn eval* (xs:Array<Double>) :
+        [a, b] where :
+          val a = maximum $
+            for e in ge-exps seq :
+              eval(e)(xs)
+          val b = minimum $
+            for e in le-exps seq :
+              eval(e)(xs)
+      val vars* = to-tuple $ unique $
+        seq-cat(vars, cat(le-exps, ge-exps))
+      defn descriptionf (f:String, exps:List<Exp>) :
+        switch(length(exps)) :
+          1 : description(head(exps))
+          else : "%_(%,)" % [f, seq(description,exps)]
+      val description* = to-string("{%_, %_}" % [
+        descriptionf("max", ge-exps),
+        descriptionf("min", le-exps)])
+      add(constraints, RangeConstraint(v, Exp<[Double,Double]>(eval*, vars*, description*)))
+
+  ;println("Grouped Constraints:")
+  ;within indented() :
+  ;  do(println, cs)
+
+  ;Order in forward dataflow order
+  ;Maps the variable to the constraint index
+  within constraints = process-constraints() :
+    ;Map variables to their constraint index
+    val var-constraint-table = Array<Int>(n)
+    for (c in cs, i in 0 to false) do :
+      match(c:EQConstraint|RangeConstraint) :
+        var-constraint-table[x(c)] = i
+
+    ;Find roots and children
+    val roots = Vector<Int>()
+    val children = IntTable<List<Int>>(List())
+    for (c in cs, i in 0 to false) do :
+      val vs = vars(exp(c))
+      if empty?(vs) :
+        add(roots, i)
+      else :
+        for v in vs do :
+          update(children, cons{i, _}, var-constraint-table[v])
+
+    ;Compute post order
+    val ordering = Vector<Int>()
+    do(loop, roots) where :
+      val visited = Array<True|False>(length(cs), false)
+      defn loop (i:Int) :
+        if not visited[i] :
+          visited[i] = true
+          do(loop, children[i])
+          add(ordering, i)
+
+    ;Shuffle constraints in reverse post order
+    for i in in-reverse(ordering) do :
+      add(constraints, cs[i])
+
+  ;println("Reordered Constraints:")
+  ;within indented() :
+  ;  do(println, cs)
+
+  ;Check feasibility
+  val min-xs = Array<Double>(n, DOUBLE-NEGATIVE-INFINITY)
+  val max-xs = Array<Double>(n, DOUBLE-POSITIVE-INFINITY)
+  val feasible? = label<True|False> break* :
+    for c in cs do :
+      defn break (x:True|False) :
+        #if-defined(DEBUG) :
+          println("Failed on constraint: %_" % [c])
+          for v in 0 to n do :
+            println("V%_ ~ [%_ to %_]" % [v, min-xs[v], max-xs[v]])
+        break*(x)
+      match(c) :
+        (c:EQConstraint) :
+          if monotonic?(c) :
+            min-xs[x(c)] = eval(exp(c))(min-xs)
+            max-xs[x(c)] = eval(exp(c))(max-xs)
+            break(false) when min-xs[x(c)] > max-xs[x(c)]
+        (c:RangeConstraint) :
+          val [amin, bmin] = eval(exp(c))(min-xs)
+          val [amax, bmax] = eval(exp(c))(max-xs)
+          min-xs[x(c)] = amin
+          max-xs[x(c)] = bmax
+          break(false) when amin > bmax
+        (c) : false
+    true
+
+  ;Evaluate if feasible
+  if feasible? :
+    val sel-xs = Array<Double>(n)
+    within repeat-while() :
+      val failures = Vector<Int>()
+      let loop (iter:Int = 0) :
+        val result = label<Maybe<Tuple<Double>>> break* :
+          for (c in cs, i in 0 to false) do :
+            defn break (x:None) :
+              add(failures, i)
+              break*(x)
+            match(c) :
+              (c:EQConstraint) :
+                sel-xs[x(c)] = eval(exp(c))(sel-xs)
+              (c:CheckConstraint) :
+                val pass? = eval(exp(c))(sel-xs)
+                break(None()) when not pass?
+              (c:RangeConstraint) :
+                val [min, max] = eval(exp(c))(sel-xs)
+                break(None()) when min > max
+                val sample = min + rand-double() * (max - min)
+                sel-xs[x(c)] = sample
+          One(to-tuple(sel-xs))
+        if empty?(result) and iter < NUM-ITERATIONS :
+          loop(iter + 1)
+        else :
+          #if-defined(DEBUG) :
+            if result is None :
+              for f in failures do :            
+                println("Failed on %_" % [cs[f]])
+          result
+  else :
+    ;No solutions
+    to-seq([])
