@@ -6,6 +6,7 @@ defpackage modules :
   import rtm/ir-utils
   import jitpcb/flags
   import footprints
+  import symbols
   import interfaces
   import parts
   import components
@@ -14,7 +15,100 @@ defpackage modules :
 
 #use-added-syntax(ir-gen)
 
+;==== Helper functions ===================================================================
+public defn bypass-caps (power-pin:Ref|Symbol, gnd-pin:Ref|Symbol, voltage:Double, caps:Tuple<Double>, name:Symbol) :
+  inside pcb-module:
+    val n-caps = length(caps)
+    for i in 0 to n-caps do :
+      val cap-name = Ref("%_-%_" % [name i])
+      inst c : {gen-cap-cmp(caps[i], 20.0, voltage)}
+      match(power-pin) :
+        (r:Ref) :
+          net - (r, c.p[0])
+        (s:Symbol) :
+          net {Ref(s)} (c.p[0])
+      match(gnd-pin) :
+        (r:Ref) :
+          net - (r, c.p[1])
+        (s:Symbol) :
+          net {Ref(s)} (c.p[1])
+
+public defn res-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, res ) :
+  inside pcb-module:
+    inst rid : {gen-res-cmp(res)}
+    match(power-pin) :
+      (r:Ref) :
+        net - (r, rid.p[0])
+      (s:Symbol) :
+        net {Ref(s)} (rid.p[0])
+    match(proc-pin) :
+      (r:Ref) :
+        net - (r, rid.p[1])
+      (s:Symbol) :
+        net {Ref(s)} (rid.p[1])
+    rid
+
+public defn cap-strap ( proc-pin, power-pin, capacitance ) :
+  cap-strap( proc-pin, power-pin, capacitance, "0402" )
+
+public defn cap-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, capacitance, pkg:String ) :
+  inside pcb-module:
+    inst cap : {gen-cap-cmp(capacitance, pkg)}
+    match(power-pin) :
+      (r:Ref) :
+        net - (r, cap.p[0])
+      (s:Symbol) :
+        net {Ref(s)} (cap.p[0])
+    match(proc-pin) :
+      (r:Ref) :
+        net - (r, cap.p[1])
+      (s:Symbol) :
+        net {Ref(s)} (cap.p[1])
+    cap
+
+; Assign schematic and layout groups
+; sch-lay-grp([[inst0] [i1 i2]])
+public defn sch-lay-grp (mods:Tuple<Tuple<Ref>>) :
+  inside pcb-module :
+    val g-count = to-seq(0 to false)  
+    for m in mods do :
+      val g-name = Ref("g-sg-%_" % [next(g-count)])
+      for r in m do :
+        schematic-group(r) = {g-name}
+
+public defn maybe-place (ref:Ref, pkg-loc:Pose, pkg-side:Side, sym-loc:Pose) :
+  inside pcb-module :
+    if flag?("force-placement") :
+      package(ref) at pkg-loc on pkg-side
+
+public defn maybe-place (ref:Ref, pkg-loc:Pose, pkg-side:Side) :
+  maybe-place(ref, pkg-loc, pkg-side, loc(0.0, 0.0))
+
+public defn maybe-place (ref:Ref, pkg-loc:Pose, sym-loc:Pose) :
+  maybe-place(ref, pkg-loc, Top, sym-loc)
+
+public defn maybe-place (ref:Ref, pkg-loc:Pose) :
+  maybe-place(ref, pkg-loc, Top)
+
+public defn maybe-place (ref:Ref) :
+  maybe-place(ref, loc(0.0, 0.0))
+
 ; Power regulators
+public defstruct RegulatorInterface <: Equalable&Hashable :
+  en:Ref
+  dac:Ref
+  v-out:Ref
+
+defmethod equal? (a:RegulatorInterface, b:RegulatorInterface) :
+  en(a) == en(b) and
+  dac(a) == dac(b) and
+  v-out(a) == v-out(b)
+
+defmethod hash (a:RegulatorInterface) :
+  hash([en(a), dac(a), v-out(a)])
+
+public val REG-INTFS = Vector<RegulatorInterface>()
+
 within (input, output) =
   add-LDO("LDO-ti-LP38501TSX-ADJ",
           1.0e-4,     ;noise
@@ -29,24 +123,29 @@ within (input, output) =
 
     ;Create nets
     inst ps : {ti-LP38501TSX-ADJ(voltage(output))}
+    schematic-group(ps) = power
     net - (ps.src.neg, neg(input), neg(output))
-    net - (ps.src.pos, pos(input))
+    net pow-vInt (ps.src.pos, pos(input))
     net - (ps.dst.pos, pos(output))
+    add(REG-INTFS, RegulatorInterface(ps.en, ps.fb, ps.dst.pos))
 
 pcb-module ti-LP38501TSX-ADJ (v-out:Double) :
   port src : power
   port dst : power
+  pin en
+  pin fb
   inst reg : ti-LP38501TSX-ADJ-cmp
   inst c : {gen-cap-cmp(10.0, "0603")}[2]
   inst r-pu : {gen-res-cmp(10.0e3)}
   inst r2 : {gen-res-cmp(10.0e3, 1.0)}
   val r-set = (v-out - 0.6) / 0.00006075
   inst r1 : {gen-res-cmp(r-set, 1.0)}
+  package(reg) at loc(0.0, 0.0) on Top
   net - (src.pos, reg.in, r-pu.p[0], c[0].p[0])
   net - (src.neg, dst.neg, reg.gnd, reg.dap, c[0].p[1], c[1].p[1], r2.p[1])
   net - (reg.out, dst.pos, c[1].p[0], r1.p[0])
-  net - (reg.en, r-pu.p[1])
-  net - (reg.adj, r1.p[1], r2.p[0])
+  net - (reg.en, r-pu.p[1], en)
+  net - (reg.adj, r1.p[1], r2.p[0], fb)
 
 within (input, output) =
   add-LDO("LDO-linear-LT3082EST"
@@ -62,15 +161,19 @@ within (input, output) =
 
     ;Create nets
     inst ps : {linear-LT3082EST(voltage(output))}
+    schematic-group(ps) = power
     net - (ps.src.neg, neg(input), neg(output))
-    net - (ps.src.pos, pos(input))
+    net pow-vInt (ps.src.pos, pos(input))
     net - (ps.dst.pos, pos(output))
+    add(REG-INTFS, RegulatorInterface(ps.en, ps.fb, ps.dst.pos))
 
-pcb-module linear-LT3082EST (v-out:Double) :
+public pcb-module linear-LT3082EST (v-out:Double) :
   port src : power
   port dst : power
-
+  pin en
+  pin fb
   inst reg : linear-LT3082EST-cmp
+  package(reg) at loc(0.0, 0.0) on Top
   inst cin : {gen-cap-cmp(1.0)}
   inst cout : {gen-cap-cmp(2.2)}
   inst cset : {gen-cap-cmp(0.1)}
@@ -79,7 +182,7 @@ pcb-module linear-LT3082EST (v-out:Double) :
 
   net - (src.pos, reg.in, cin.p[0])
   net - (src.neg, dst.neg, cin.p[1], cout.p[1], cset.p[1], r-set.p[1])
-  net - (r-set.p[0], cset.p[0], reg.set)
+  net - (r-set.p[0], cset.p[0], reg.set, fb)
   net - (cout.p[0], reg.out-0, reg.out-1, dst.pos)
 
 within (input, output) =
@@ -98,63 +201,54 @@ within (input, output) =
 
     ;Create nets
     inst ps : {mps-MPM3630-converter(voltage(output))}
+    schematic-group(ps) = power
     net - (ps.src.neg, neg(input), neg(output))
-    net - (ps.src.pos, pos(input))
+    net pow-vInt (ps.src.pos, pos(input))
     net - (ps.dst.pos, pos(output))
+    add(REG-INTFS, RegulatorInterface(ps.en, ps.fb, ps.dst.pos))
 
 ; TODO: Merge with MPM3620A module
 public pcb-module mps-MPM3630-converter (v-out:Double) :
   port src : power
   port dst : power
-
+  pin en
+  pin fb
   inst mpm : mps-MPM3630-cmp
+  package(mpm) at loc(0.0, 0.0) on Top
 
   val mpm-vref = 0.6 ; NOTE: this is different than MPM3620A
   inst fb-net : {voltage-divider(mpm-vref / v-out, 56000.0)}
+  package(fb-net.r-hi) at loc(-4.5, 2.0, -90.0) on Top
+  package(fb-net.r-lo) at loc(-3.5, 2.0, 90.0) on Top
 
   inst c-fb : murata-cap-22pf-cmp
+  package(c-fb) at loc(-5.5, 2.0, -90.0) on Top
 
   inst c-in : murata-cap-22uf-25v-cmp
+  package(c-in) at loc(1.0, 5.0, 180.0) on Top
 
   inst c-out-0 : murata-cap-22uf-25v-cmp
+  package(c-out-0) at loc(4.0, 0.0, -90.0) on Top
   
   inst c-out-1 : murata-cap-22uf-25v-cmp
+  package(c-out-1) at loc(6.0, 0.0, -90.0) on Top
 
   inst en-r : {gen-res-cmp(100000.0)}
+  package(en-r) at loc(-2.0, 5.0, 90.0) on Top
 
   net vin (src.pos, c-in.p[1], mpm.vin, en-r.p[1])
-  net en (en-r.p[0], mpm.en)
+  net - (en-r.p[0], mpm.en, en)
 
   ;; net vss (src.neg, c-in.p[0], mpm.pgnd[0], mpm.pgnd[1], mpm.pgnd[2], c-out-0.p[0], c-out-1.p[0], dst.neg)
   net vss (src.neg, c-in.p[0], mpm.pgnd[0], mpm.pgnd[1], c-out-0.p[0], c-out-1.p[0], dst.neg)
 
   net vout (dst.pos, mpm.out[0], mpm.out[1], mpm.out[2], fb-net.src.pos, c-fb.p[1], c-out-0.p[1], c-out-1.p[1])
 
-  net fb (mpm.fb, c-fb.p[0], fb-net.dst.pos)
-  net agnd (mpm.agnd, fb-net.src.neg)
+  net - (mpm.fb, c-fb.p[0], fb-net.dst.pos, fb)
+  net agnd (mpm.agnd, fb-net.src.neg, src.neg)
   
   net sw (mpm.sw[0], mpm.sw[1], mpm.sw[2])
-
-within (input, output) =
-  add-switching-regulator(
-    "buck-ge-SHHD003A0A41-SRZ"
-    1.0,            ;max duty_cycle
-    7.e-2,          ;noise
-    0.87,           ;efficiency
-    125.0,          ;tjmax
-    0.0,            ;thetaja
-    18.0, 75.0,     ;vin
-    5.0, 5.0,       ;vout
-    0.0, 3.0) :     ;iout
-  inside pcb-module :        
-    ;Code for generating the LDO        
-    inst ps : ge-SHHD003A0A41-SRZ
-    ;Create nets
-    net - (ps.reg.vin-, neg(input))
-    net - (ps.reg.vout-, neg(output))
-    net - (ps.reg.vin+, pos(input))
-    net - (ps.reg.vout+, pos(output))
-
+  
 
 pcb-module ge-SHHD003A0A41-SRZ :
   inst reg : ge-SHHD003A0A41-SRZ-cmp
@@ -173,15 +267,18 @@ within (input, output) =
     0.0, 3.0) :     ;iout
   inside pcb-module :        
     inst ps : {ti-TLV62130A(voltage(output))}
+    schematic-group(ps) = power
     ;Create nets
     net - (ps.src.neg, neg(input), neg(output))
-    net - (ps.src.pos, pos(input))
+    net pow-vInt (ps.src.pos, pos(input))
     net - (ps.dst.pos, pos(output))
+    add(REG-INTFS, RegulatorInterface(ps.en, ps.fb, ps.dst.pos))
 
 public pcb-module ti-TLV62130A (v-out:Double) :
   port src : power
   port dst : power
-
+  pin en
+  pin fb
   inst buck : ti-TLV62130A-cmp
   inst c-in  : {gen-cap-cmp(10.0, 10.0, 16.0, false, "0603")}
   inst c-inx : {gen-cap-cmp(0.1, 20.0, 16.0)}
@@ -195,16 +292,256 @@ public pcb-module ti-TLV62130A (v-out:Double) :
   inst l : abracon-ind-2uh2-cmp
 
   net g (dst.neg, src.neg, buck.def, buck.p-gnd[0], buck.p-gnd[1], buck.a-gnd, buck.pad, c-in.p[1], c-inx.p[1], c-ss.p[1], r-fb1.p[1], c-out.p[1])
-  net - (src.pos, buck.en, buck.a-vin, buck.p-vin[0], buck.p-vin[1], c-in.p[0], c-inx.p[0])
+  net - (src.pos, buck.en, buck.a-vin, buck.p-vin[0], buck.p-vin[1], c-in.p[0], c-inx.p[0], en)
   net - (c-ss.p[0], buck.ss)
   net - (l.p[0], buck.sw[0], buck.sw[1], buck.sw[2])
   net - (r-pg.p[1], buck.pg)
-  net - (r-fb2.p[1], r-fb1.p[0], buck.fb)
+  net - (r-fb2.p[1], r-fb1.p[0], buck.fb, fb)
   net - (dst.pos, buck.fsw, buck.vos, l.p[1], r-pg.p[0], r-fb2.p[0], c-out.p[0])
+
+
+  package(buck) at loc(0.0, 0.0) on Top
+  package(c-inx) at loc(2.9, -2.0, 270.0) on Top (relative-to buck)
+  package(c-in) at loc(2.9, 1.1, 90.0) on Top (relative-to buck)
+  package(c-out) at loc(0.3, 4.0) on Top (relative-to buck)
+  package(l) at loc(-5.1, 2.0, 90.0) on Top (relative-to buck)
+  ;; package(r-fb1) at loc(-0.5, -3.4) on Top (relative-to buck)
+  package(r-fb1) at loc(-2.25, -3.4, 180.0) on Top (relative-to buck)
+  package(r-fb2) at loc(-2.25, -2.5) on Top (relative-to buck)
+
+; Boost converter
+pcb-module ti-TPS55340RTER :
+  port src : power
+  port dst : power
+
+  inst Ccomp2 : {gen-cap-cmp(820.0e-6, 40.0, 50.0)}
+  inst Cinx : {gen-cap-cmp(100.0e-3, 40.0, 50.0, false, "0603")}
+  inst Css : {gen-cap-cmp(27.0e-3, 40.0)}
+  inst Ccomp : {gen-cap-cmp(33.0e-3, 40.0, 50.0, false, "0805")}
+  inst Cin : {gen-cap-cmp(6.8, 40.0, 35.0, false, "0805")}[2]
+  inst Coutx : {gen-cap-cmp(1.0, 40.0, 35.0, false, "0805")}
+  inst Rfbb : {gen-res-cmp(10.0e3, 1.0)}
+  inst Rfbt : {gen-res-cmp(187.0e3, 1.0, "0805")}
+  inst Rt : {gen-res-cmp(66.5e3, 1.0)}
+  inst Rcomp : {gen-res-cmp(2.94e3, 1.0)}
+  inst Cout : panasonic-cap-22uf-cmp
+  inst D1 : smc-SBRD10200TR-cmp
+  inst L1 : coilcraft-XAL6060-682MEB-cmp
+  inst boost : ti-TPS55340RTER-cmp
+
+  net gnd (src.neg, dst.neg, Ccomp2.p[1], Cinx.p[1], Css.p[1], Ccomp.p[1],
+  Cin[0].p[1], Cin[1].p[1], Coutx.p[1], Rfbb.p[1], Rt.p[1], Cout.c,
+  boost.p-gnd[0], boost.p-gnd[1], boost.p-gnd[2], boost.pad, boost.agnd)
+
+  net vin (src.pos, Cinx.p[0], Cin[0].p[0], Cin[1].p[0], L1.p[0], boost.vin, boost.en)
+  net vout (dst.pos, Cout.a, Rfbt.p[0], Coutx.p[0], D1.c)
+  net sw (boost.sw[0], boost.sw[1], boost.sw[2], L1.p[1], D1.a[0], D1.a[1])
+  net fb (boost.fb, Rfbt.p[1], Rfbb.p[0])
+  net comp (boost.comp, Rcomp.p[0], Ccomp2.p[0])
+  net - (Rcomp.p[1], Ccomp.p[0])
+  net freq (boost.freq, Rt.p[0])
+  net ss (boost.ss, Css.p[0])
+
+pcb-module power-dist-5v0 :
+  port src-48v0 : power
+  port src-12v0 : power
+  port src-5v0 : power
+  port src-3v3 : power
+  port dst-5v0 : power
+  port dst-3v3 : power
+
+  inst ldo : ti-LP2985-33DBVR-cmp
+  inst c : {gen-cap-cmp(0.1)}
+
+  net - (c.p[0], ldo.bypass)
+  net - (c.p[1], ldo.gnd)
+
+  net - (ldo.on-off, ldo.vin)
+
+  net - (src-5v0.neg, ldo.gnd, src-3v3.neg, dst-3v3.neg)
+  net - (dst-3v3.pos, ldo.vout)
+  net - (src-5v0.pos, dst-5v0.pos, ldo.vin)
+  net - (src-3v3, dst-3v3)
+  net - (src-5v0, dst-5v0)
+
+pcb-module power-dist-3v0 :
+ ; TPS610981 Boost converter, currently hardwired low output, not using second 3V rail.
+  port src-48v0 : power
+  port src-12v0 : power
+  port src-5v0 : power
+  port src-3v3 : power
+  port dst-5v0 : power
+
+  port src-3v0 : power
+  port dst-3v0 : power
+  port dst-3v3 : power
+
+  inst boost : ti-TPS610981-cmp
+  package(boost) at loc(0.0, 0.0) on Top
+  inst c-bat : {gen-cap-cmp(10.0)}
+  inst c-in : {gen-cap-cmp(0.1)}
+  inst l : murata-ind-4uh7-cmp
+  inst c0 : {gen-cap-cmp(10.0)}
+  ;inst c1 : {gen-cap-cmp(10.0)}
+  inst r : {gen-res-cmp(390.0)}
+
+ ; net - (c.p[0], boost.bypass)
+ ; short-trace(c.p[0], boost.bypass)
+ ; net - (c.p[1], boost.gnd)
+ ; short-trace(c.p[1], boost.gnd)
+
+  net - (c-bat.p[1],  c-in.p[1], c0.p[1], src-3v0.neg, boost.gnd, dst-3v3.neg)
+  net - (src-3v0.pos, c-bat.p[0], l.p[0], r.p[0])
+  net - (l.p[1], boost.sw)
+  net - (r.p[1], boost.vin, c-in.p[0])
+  net - (dst-3v3.pos, boost.vmain, c0.p[0])
+
+  net - (src-3v0, dst-3v0)
+
+
+  ; hack mode pin low
+  net - (boost.mode, boost.gnd)
+
+pcb-module power-dist-passthrough :
+  port src-48v0 : power
+  port src-12v0 : power
+  port src-5v0 : power
+  port src-3v3 : power
+  port dst-5v0 : power
+  port dst-3v3 : power
+
+  net - (src-5v0, dst-5v0)
+  net - (src-3v3, dst-3v3)
+
+;public pcb-module lin-reg-wrapper (rail-params:RailParams, default-on?:True|False) :
+;  port src-pwr : power
+;  port dst-pwr : power
+;  port src-3v3 : power
+;  pin adj
+;  pin enable
+;
+;  val curr-max = curr-max(rail-params)
+;  val volt-min = volt-min(rail-params)
+;  val volt-max = volt-max(rail-params)
+;  val source = source(rail-params)
+;  
+;  val high-curr? = curr-max > 0.25 ; max current for 1/16W 1ohm resistor
+;  val high-volt-in? = source == `src-12v0
+;  val low-volt-out? = volt-min < 0.8
+;  val high-volt-out? = volt-max > 5.0
+;  
+;  net - (src-pwr.neg, dst-pwr.neg)
+;
+;  val [reg-pos-ref, reg-neg-ref, reg-en-ref, r-en-x] = if high-volt-in? :
+;    inst reg : microchip-MIC5225YM5-TR-cmp
+;    package(reg) at loc(0.0, 0.0, 180.0) on Top
+;
+;    net - (src-pwr.pos, reg.in)
+;    net - (src-pwr.neg, reg.gnd)
+;    net - (reg.out, dst-pwr.pos)
+;    net - (adj, reg.adj)
+;    net - (enable, reg.en)
+;
+;    [reg.out, reg.gnd, reg.en, -7.0]
+;
+;  else :
+;    inst reg : microchip-MCP1824T-ADJE-DC-cmp
+;    package(reg) at loc(0.0, 0.0, -90.0) on Top
+;    
+;    inst r-lim : {gen-res-cmp(1000.0)}
+;    package(r-lim) at loc(-8.0, -5.0, -90.0) on Top
+;
+;    net - (src-pwr.pos, reg.vin)
+;    net - (src-pwr.neg, reg.gnd, reg.tab)
+;    net - (reg.vout, dst-pwr.pos)
+;    net - (adj, reg.adj)
+;    
+;    ; Need current limiting resistor to allow a 3.3V enable signal
+;    ; to be clamped to 2.8V. Assumes a 10k pull up/down resistor 
+;    net - (r-lim.p[0], reg.shdn)
+;    net - (enable, r-lim.p[1])
+;
+;    [reg.vout, reg.gnd, reg.shdn, -7.0]
+;
+;  val [c-out-gen, c-out-x, c-out-angle] = if high-curr? :
+;    [Ref(`panasonic-EEE-1EA101XP-cmp), 10.0, 90.0] ; 100uF 15V 6.3mm
+;  else if high-volt-out? :
+;    [Ref(`tdk-C3216X5R1E106K085AC-cmp), 7.0, -90.0] ; 10uF 25V 1206
+;  else :
+;    [Ref(`kemet-C1206C106M8PACTU-cmp), 7.0, -90.0] ; 10uF 10V 1206
+;   
+;pcb-module reg-3v3 :
+;  port src-pwr : power
+;  port dst-3v3 : power
+;
+;  inst reg : microchip-MCP1824T-ADJE-DC-cmp
+;  package(reg) at loc(0.0, 0.0) on Top
+;  
+;  inst c-in : kemet-C1206C106M8PACTU-cmp
+;  package(c-in) at loc(-5.0, 1.5, -90.0) on Top
+;
+;  inst c-out : kemet-C1206C106M8PACTU-cmp
+;  package(c-out) at loc(5.0, 1.5, -90.0) on Top
+;
+;  val v-ref = 0.41
+;  inst vd : {voltage-divider(v-ref / 3.3)}
+;  package(vd.r-hi) at loc(4.5, -3.0, 90.0) on Top
+;  package(vd.r-lo) at loc(5.5, -3.0, -90.0) on Top
+;  
+;  net - (src-pwr.pos, c-in.p[1], reg.vin, reg.shdn)
+;  net - (src-pwr.neg, reg.gnd, reg.tab, dst-3v3.neg, c-in.p[0], c-out.p[0])
+;  net - (reg.vout, c-out.p[1], dst-3v3.pos)
+;  
+;  net - (dst-3v3, vd.src)
+;  net - (vd.dst.pos, reg.adj)
+
+; Connectors
+
+pcb-module power-48v0-conn :
+  port dst-48v0 : power
+  
+  inst power-conn : {phoenix-combicon-mc-cmp(2)}
+  maybe-place(power-conn)
+  
+  net - (power-conn.p[0], dst-48v0.neg)
+  net - (power-conn.p[1], dst-48v0.pos)
+
+pcb-module sma-wrapper :
+  pin sig
+  pin gnd
+
+  inst conn : johnson-142-0701-801-cmp
+  package(conn) at loc(0.0, 0.0) on Top
+
+  net - (sig, conn.sig)
+  net - (gnd, conn.gnd-0, conn.gnd-1, conn.gnd-2, conn.gnd-3)
+
+public pcb-module diff-sma-wrapper (end-launch:True|False) :
+  port diff : diff-pair
+  pin gnd
+
+  if end-launch == true :
+   inst sma : johnson-142-0701-801-cmp[2]
+   package(sma[0]) at loc(0.0, 0.0) on Top
+   package(sma[1]) at loc(11.25, 0.0) on Top (relative-to sma[0])
+   net - (diff.D_N, sma[0].sig)
+   net - (diff.D_P, sma[1].sig)
+   net - (gnd, sma[0].gnd-0, sma[0].gnd-1, sma[0].gnd-2, sma[0].gnd-3)
+   net - (gnd, sma[1].gnd-0, sma[1].gnd-1, sma[1].gnd-2, sma[1].gnd-3)
+
+  else :
+   inst sma : molex-732511350-cmp[2]
+   package(sma[0]) at loc(0.0, 0.0) on Top
+   package(sma[1]) at loc(7.5, 0.0) on Top (relative-to sma[0])
+   net - (diff.D_N, sma[0].sig)
+   net - (diff.D_P, sma[1].sig)
+   net - (gnd, sma[0].gnd-0, sma[0].gnd-1, sma[0].gnd-2, sma[0].gnd-3)
+   net - (gnd, sma[1].gnd-0, sma[1].gnd-1, sma[1].gnd-2, sma[1].gnd-3)
 
 pcb-module conn-wrapper-micro-USB :
   port p : pin[11]
   inst m : amphenol-10118192-0001LF-cmp
+  package(m) at loc(0.0, 0.0) on Top
 
   net - (m.vcc , p[0])
   net - (m.dat-, p[1])
@@ -216,19 +553,48 @@ pcb-module conn-wrapper-CR2450 :
   port p : pin[2]
 
   inst b : mpd-BK-5033-cmp
+  package(b) at loc(0.0, 0.0) on Top
 
   net - (b.gnd, p[0])
   net - (b.vdd0, b.vdd1, p[1])
+
+; Power connector with passthrough and high-side switch
+pcb-module conn-wrapper-XT-60-pass :
+  pin pos
+  pin neg
+
+  inst x1 : XT-60-cmp
+  package(x1) at loc(0.0, 0.0) on Top
+  inst x2 : XT-60-cmp
+  package(x2) at loc(24.0, 0.0, 180.0) on Top
+  inst hs : inf-BTS6133D-cmp
+  package(hs) at loc(11.5, -9.0, 90.0) on Top
+  inst sw : ck-JS102011SAQN-cmp
+  package(sw) at loc(1.0, -16.0, -90.0) on Top
+  inst l : {gen-diode-cmp(`led)}
+  package(l) at loc(-2.0, -7.5, 90.0) on Top
+  inst r : {gen-res-cmp(1200.0)}
+
+  net - (hs.en, sw.p1)
+  net - (hs.vout[0], r.p[0])
+  net - (r.p[1], l.a)
+  net - (l.c, neg)
+
+  net - (x1.pos, hs.vin)
+  net - (hs.vout[0], hs.vout[1], pos, x2.pos)
+  net - (x1.neg, x2.neg, sw.common, neg)
 
 public pcb-module power-decouple (max-v:Double, c-ins:Double, c-high:Double) :
   port src : power
   port dst : power
 
   inst c0 : {gen-cap-cmp(c-high, 40.0, max-v)}
+  package(c0) on Top
   
   val [c1, c1n, c1p] = let :
     ; TODO: fix the difference between this and {gen-cap-cmp-insertion(c-ins, 40.0, max-v, true)}
     inst c1 : {gen-cap-cmp(c-ins, 40.0, max-v)}
+    package(c1) on Top
     [c1, c1.p[0], c1.p[1]]
 
   net - (c0.p[0], c1n, dst.neg)
@@ -287,14 +653,16 @@ public pcb-module binary-led (res-side:Symbol|False, package:Symbol|False, drive
       else :
         net - (r.p[1], l.c)
         net - (l.a, src-3v3.pos)
-      ;match(res-side) :
-      ;  (s:Symbol) : 
-      ;    switch(s) :
-      ;      else : false
-      ;  (o) : false
+      match(res-side) :
+        (s:Symbol) : 
+          switch(s) :
+            `top : package(r) on Top
+            `bottom : package(r) on Bottom
+            else : false
+        (o) : false
       l
   
-  false
+  package(l) at loc(0.0, 0.0) on Top
 
 public defn binary-led (res-side:Symbol|False) :
   binary-led(res-side, false, false)
@@ -316,6 +684,7 @@ public pcb-module rgb-led-array (poses:List<[Double, Double, Double]>) :
   ;nxp-2n7002p-cmp[num-banks]
   inst l : SX-3528-cmp[num-leds]
   inst d : ISSI-IS31FL3236-cmp 
+  package(d) on Bottom
   inst pd : {power-decouple()}
   inst r : {gen-res-cmp(3300.0)}
     
@@ -323,6 +692,9 @@ public pcb-module rgb-led-array (poses:List<[Double, Double, Double]>) :
   net - (d.gnd0, d.gnd1, pd.dst.neg)
   net - (d.sdb, d.vcc, pd.dst.pos)
 
+  maybe-place(d)
+  maybe-place(pd)
+  maybe-place(r)
 
   net - (src-3v3.neg, d.gnd0, d.gnd1, d.ad, d.thermal, r.p[0])
   net - (r.p[1], d.r_ext)
@@ -333,6 +705,7 @@ public pcb-module rgb-led-array (poses:List<[Double, Double, Double]>) :
     for s in 0 to 12 do :
       val idx = i * 12 + s
       val [x,y,th] = poses[idx]
+      package(l[idx]) at loc(x, y, th) on Top
       net - (d.out[(3 * s)],     l[idx].r)
       net - (d.out[(3 * s + 1)], l[idx].g)
       net - (d.out[(3 * s + 2)], l[idx].b)
@@ -347,14 +720,16 @@ public pcb-module rgb-led-group (led-package:String, external-driver:True|False,
   val l = switch(led-package) :
     "PLCC4" : 
       inst l : SX-3528-cmp[num-leds]
-      ;for i in 0 to num-leds do :
-      ;  val [x,y,th] = poses[i]
+      for i in 0 to num-leds do :
+        val [x,y,th] = poses[i]
+        package(l[i]) at loc(x, y, th) on Top
       l
 
     "side-firing" :
       inst l : rohm-MSL0104RGB-cmp[num-leds]
-      ;for i in 0 to num-leds do :
-      ;  val [x,y,th] = poses[i]
+      for i in 0 to num-leds do :
+        val [x,y,th] = poses[i]
+        package(l[i]) at loc(x, y, th) on Top
       l
     else : fatal("Invalid led-package")
 
@@ -395,15 +770,80 @@ public pcb-module rgb-led-group (led-package:String, external-driver:True|False,
     for i in 0 to 3 do :
       net - (src-3v3.neg, q[i].s, r-q[i].p[1])
       net - (q[i].g, r-q[i].p[0], pwm[i])
+
+pcb-module make-analog-buffers (passives:Tuple<Tuple<Double>>) :
+  val n-buf = length(passives)
+
+  port src-pwr : power
+  port vi : pin[n-buf]
+  port vo : pin[n-buf]
+
+  val n-quad-amps = n-buf / 4
+  val n-single-amps = n-buf % 4
   
-pcb-module rhom-SMLP34RGB :
+  inst quad : {ti-LMV3XX-cmp(4)}[n-quad-amps]
+  inst solo : {ti-LMV3XX-cmp(1)}[n-single-amps]
+  
+  for i in 0 to n-buf do :
+    val [chip-idx, chip-ref, opamp-idx] = if i < (n-quad-amps * 4) :
+      [i / 4, quad[i / 4], i % 4]
+    else :
+      [n-quad-amps + i - (n-quad-amps * 4), solo[i - (n-quad-amps * 4)], 0]
+    
+    val vs-_ref = chip-ref.vs-
+    val vs+_ref = chip-ref.vs+
+    val vi-_ref = chip-ref.vi-[opamp-idx]
+    val vi+_ref = chip-ref.vi+[opamp-idx]
+    val vo_ref = chip-ref.vo[opamp-idx]
+    
+    ;val r-div-h = Ref("r-div-h-%_-%_" % [chip-idx opamp-idx])
+    ;val r-div-l = Ref("r-div-l-%_-%_" % [chip-idx opamp-idx])
+    ;val r-lp = Ref("r-lp-%_-%_" % [chip-idx opamp-idx])
+    ;val c-lp = Ref("c-lp-%_-%_" % [chip-idx opamp-idx])
+      
+    ; Add Vs decoupling cap if this is the first op-amp of a chip
+    if opamp-idx == 0 :
+      inst capd : {tdk-cap-cmp(0.1)}
+      
+      net - (src-pwr.pos, capd.p[0], vs+_ref)
+      
+      net - (src-pwr.neg, capd.p[1], vs-_ref)
+    
+    ; Instantiate voltage divider and lowpass filter around op-amp buffer
+    if length(passives[i]) >= 4 :
+      inst r-div-h : {gen-res-cmp(passives[i][0], 2.0, 0.1)}
+      inst r-div-l : {gen-res-cmp(passives[i][1], 2.0, 0.1)}
+      inst r-lp : {gen-res-cmp(passives[i][2], 2.0, 0.1)}
+      inst c-lp : {tdk-cap-cmp(passives[i][3])}
+      
+      net - (vi[i], r-div-h.p[0])
+
+      net - (vi+_ref, r-div-h.p[1], r-div-l.p[0])
+      
+      net - (vi-_ref, vo_ref, r-lp.p[0])
+      
+      net - (src-pwr.neg, c-lp.p[1], r-div-l.p[1])
+      
+      net - (c-lp.p[0], r-lp.p[1], vo[i])
+    
+    else : 
+      fatal("Not enough passive values for analog buffer.")
+    
+    ; A 5th passive value indicates 5V clamp diode should be instantiated
+    if length(passives[i]) == 5 :
+      inst d-clamp : on-SD05T1G-cmp
+      net - (d-clamp.a, src-pwr.neg)
+      net - (d-clamp.c, vi[i])
+  
+pcb-module rohm-SMLP34RGB :
   pin r
   pin g
   pin b
-  port src-3v3 : power
+  port src : power
 
-  inst rgb : rhom-SMLP34RGB-cmp
-  net - (rgb.anode src-3v3.pos)
+  inst rgb : rohm-SMLP34RGB-cmp
+  package(rgb) at loc(0.0, 0.0) on Top
+  net - (rgb.anode src.pos)
 
   inst res-r : {gen-res-cmp(180.0)}
   inst res-g : {gen-res-cmp(150.0)}
@@ -475,9 +915,9 @@ public pcb-module power-monitor (addr:Int, tdk-cap?:True|False, cmp-locs:Tuple<F
   val loc-cnt = to-seq(0 to false)
 
   defn place-next (r: Ref) :
-    ;match(cmp-locs[next(loc-cnt)]) :
-    ;  (f:False) : false
-    false
+    match(cmp-locs[next(loc-cnt)]) :
+      ([p,s]:[Pose,Side]) : package(r) at p on s
+      (f:False) : false
     
   inst pm : ti-INA3221AIRGVR-cmp
   place-next(pm)
@@ -539,9 +979,9 @@ public pcb-module power-monitor-array (
   val loc-cnt = to-seq(0 to false)
 
   defn place-next (r: Ref) :
-    ;match(pm-locs[next(loc-cnt)]) :
-    ;  (f:False) : false
-    false
+    match(pm-locs[next(loc-cnt)]) :
+      ([p,s]:[Pose,Side]) : package(r) at p on s
+      (f:False) : false
    
   for i in 0 to n do :
     inst pm : {power-monitor(i, tdk-cap?, cmp-locs)}
@@ -563,7 +1003,30 @@ public defn power-monitor-array (n:Int, pm-locs:Tuple<False|[Pose,Side]>) :
 
 public defn power-monitor-array (n:Int) :
   power-monitor-array(n, to-tuple $ for i in 0 to 4 seq : false)
-  
+
+;TODO: Actually do something with sw-voltage information
+
+public pcb-module logic-driven-hi-side-switch (sw-voltage:Double|False) :
+  pin sig-in
+  port pow-in : power
+  pin out
+
+  inst hi-fet : nexperia-PMV250EPEAR-cmp
+  inst pullup : {gen-res-cmp(10.0e3, 5.0, 0.1)}
+  net - (hi-fet.s pow-in.pos pullup.p[1])
+  net - (hi-fet.d out)
+  match(sw-voltage) :
+    (v:Double) :
+      net hi-gate (sig-in hi-fet.g, pullup.p[0])
+    (f) : 
+      inst lo-fet : di-2N7002A-7-cmp
+      net hi-gate (hi-fet.g lo-fet.d pullup.p[0])
+      net - (sig-in lo-fet.g )
+      net gnd (lo-fet.s pow-in.neg)
+
+public defn logic-driven-hi-side-switch () :
+  logic-driven-hi-side-switch(false)
+
 pcb-module lo-side-solenoid-driver :
   inst fet : di-ZXMN6A09GTA-cmp
   inst d : mcc-SK88L-TP-cmp
@@ -641,7 +1104,7 @@ public pcb-module temp-sensor (addr:Int) :
   pin alert
 
   inst ts : microchip-MCP9809-cmp
-  inst c : {tdk-cap-cmp(0.1)}
+  inst c : {gen-cap-cmp(0.1)}
   
   net - (src-3v3.neg, ts.gnd, ts.ep, c.p[0])
   net - (src-3v3.pos, ts.vdd, c.p[1])
@@ -703,13 +1166,22 @@ pcb-module can-transceiver :
   inst r25 : {gen-res-cmp(300.0, 2.0, 0.1)}
   inst fl1 : bourns-DR331-513AE-cmp
   inst d11 : nexperia-PESD1CAN-UX-cmp
+  ;package(split-jpr) on Top
+  ;package(chk-h-jpr) at loc(5.0, 0.0) on Top (relative-to split-jpr)
+  ;package(chk-l-jpr) at loc(10.0, 0.0) on Top (relative-to split-jpr)
+  ;package(fl-l-jpr ) at loc(15.0, 0.0) on Top (relative-to split-jpr)
+  ;package(fl-h-jpr ) at loc(20.0, 0.0) on Top (relative-to split-jpr)
+  ;package(join-jpr ) at loc(25.0, 0.0) on Top (relative-to split-jpr)
 
   net s82 (c10.p[1], mcp.vss, c13.p[1], c14.p[1], d11.common)
   
   net s84 (split-jpr.p[0], mcp.split)
   net s85 (c10.p[0], mcp.vdd)
+  ;short-trace(c10.p[0], mcp.vdd)
   net s86 (mcp.canh, fl1.l0[0], chk-h-jpr.p[0])
   net s87 (mcp.canl, fl1.l1[0], chk-l-jpr.p[1])
+  ;short-trace(mcp.canh, fl1.l0[0])
+  ;short-trace(mcp.canl, fl1.l1[0])
   net s88 (fl1.l0[1], chk-h-jpr.p[1], fl-h-jpr.p[0], d11.c0)
   net s89 (fl1.l1[1], chk-l-jpr.p[0], fl-l-jpr.p[0], d11.c1)
   net s90 (fl-h-jpr.p[1], r21.p[0])
@@ -717,6 +1189,29 @@ pcb-module can-transceiver :
   net s92 (r25.p[0], split-jpr.p[1])
   net s93 (r21.p[1], c14.p[0], join-jpr.p[0])
   net s94 (r25.p[1], r22.p[1], c13.p[0], join-jpr.p[1])
+
+pcb-module servo-connectors :
+  port i2c : i2c
+  port src-3v3 : power
+
+  inst throttle : {pin-header-cmp(3,1,2.54,2.54)}
+  inst steering : {pin-header-cmp(3,1,2.54,2.54)}
+  package(throttle) at loc(-2.0, 0.0) on Top
+  package(steering) at loc(2.0, 0.0) on Top
+  ; TODO: Make assigment capability driven with interfaces
+  inst pwm-drv : PCA9685-pwm-driver
+  net - (i2c, pwm-drv.i2c)
+  net - (src-3v3, pwm-drv.src-3v3)
+  net - (throttle.p[0], pwm-drv.pca.out[0])
+  net - (steering.p[0], pwm-drv.pca.out[1])
+  net - (throttle.p[1], steering.p[1])
+  net - (throttle.p[2], steering.p[2], src-3v3.neg)
+
+  inst breakout : {pin-header-cmp(7,1,2.54,2.54)}
+  package(breakout) at loc(14.0, -2.54, 90.0) on Top
+  for i in 0 to 6 do :
+    net - (breakout.p[i], pwm-drv.pca.out[(i + 2)])
+  net - (breakout.p[6], src-3v3.neg)
 
 ; TODO: add i2c configuration, make interface number parametric
 pcb-module PCA9685-pwm-driver :
@@ -726,6 +1221,7 @@ pcb-module PCA9685-pwm-driver :
   inst pd :power-decouple
   inst pca : nxp-PCA9685-cmp
   inst r : {gen-res-cmp(10000.0)}
+  package(pca) at loc(0.0, 0.0) on Top
 
   net - (src-3v3, pd.src)
   net - (pca.vss, pd.dst.neg)
@@ -741,16 +1237,13 @@ pcb-module PCA9685-pwm-driver :
     
 public pcb-module silkscreen-mod (xys:List<[Double,Double]>) :
   false
-  ;val pt-list = to-list $ for xy in xys seq :
-  ;  Point(xy[0], xy[1])
-  ;
 
 public defn button () :
   button(`omron-B3U-1000P)
 
 public pcb-module button (pkg:Symbol) :
   ; button with pulldown resistor, debounced
-  port src-3v3 : power
+  port src : power
   pin dio
   
   val cmp-gen = if pkg == `JST-PH :
@@ -759,16 +1252,35 @@ public pcb-module button (pkg:Symbol) :
     Ref(`omron-B3U-1000P-cmp)
 
   inst b : {cmp-gen}
+  package(b) at loc(0.0, 0.0) on Top
   
   if not flag?("preview") :
     inst r : {gen-res-cmp(10000.0)}
     inst c : {gen-cap-cmp(0.1)}
-    net - (b.p[0], src-3v3.pos)
-    net - (b.p[1], dio)
+    maybe-place(r)
+    maybe-place(c)
+    maybe-place(b)
+    net - (b.p[0], src.pos)
     net - (b.p[1], r.p[0])
-    net - (r.p[1], src-3v3.neg)
-    net - (c.p[1], src-3v3.neg)
-    net - (b.p[1], c.p[0])
+    net - (dio, r.p[1] , c.p[0])
+    net - (c.p[1], src.neg)
+
+pcb-module ir-sensor :
+  port src-5v0 : power
+  port uart : uart
+  
+  inst pd : {power-decouple()}
+  maybe-place(pd, loc(-5.0, 12.0))
+  net - (src-5v0, pd.src)
+
+  inst sensor-conn : {phoenix-combicon-mc-cmp(4)}
+  maybe-place(sensor-conn)
+
+  net - (sensor-conn.p[0], pd.dst.neg)
+  net - (sensor-conn.p[3], pd.dst.pos)
+  
+  net - (sensor-conn.p[1], uart.tx)
+  net - (sensor-conn.p[2], uart.rx)
 
 pcb-module eeprom :
   port src-3v3 : power
@@ -776,6 +1288,7 @@ pcb-module eeprom :
   pin wp
 
   inst ee : on-LE24512AQF-cmp
+  package(ee) at loc(0.0, 0.0) on Top
   
   if not flag?("preview") :
     inst pd : power-decouple
@@ -797,6 +1310,7 @@ pcb-module vibration-switch :
   pin dio
   
   inst sw : SW-58010P-cmp
+  package(sw) at loc(0.0, 0.0) on Top
   
   if not flag?("preview") :
     inst r : {gen-res-cmp(10000.0)}
@@ -804,55 +1318,79 @@ pcb-module vibration-switch :
     net - (sw.contact, dio, r.p[0])
     net - (r.p[1], src-3v3.neg)
 
-public pcb-module microSD :
-  ;microSD card attached via SPI
+pcb-module ant-2GHz4-inverted-f :
+  pin ant-launch
+  inst c : {gen-cap-cmp(0.1)}
+  package(c) at loc(-1.5, -0.75) on Top
+  net a (c.p[1], ant-launch)
 
-  port src-3v3 : power
-  port spi : spi
+public pcb-module microSD (intf:Ref):
+  ;microSD card attached via SPI or SDMMC
+
+  port src : power
   pin det-sw
 
   inst uSD : molex-5025700893-cmp
-  inst r0 : {gen-res-cmp(100000.0)}
-  inst r1 : {gen-res-cmp(100000.0)}
+  inst pullup : {gen-res-cmp(100.0e3)}[2]
   inst r2 : {gen-res-cmp(47000.0)}
   inst c : {gen-cap-cmp(0.1)}
+  package(uSD) at loc(0.0, 0.0) on Top
+  net - (src.pos, pullup[0].p[0]) 
+  net - (uSD.dat2, pullup[0].p[1]) 
+  net - (src.pos, pullup[1].p[0]) 
+  net - (uSD.dat1, pullup[1].p[1]) 
 
-  net - (spi.ss, uSD.dat3) 
-  net - (spi.mosi, uSD.cmd) 
-  net - (spi.miso, uSD.dat0) 
-  net - (spi.sck, uSD.clk) 
-  net - (src-3v3.neg, uSD.gnd) 
-  net - (src-3v3.pos, uSD.vdd) 
+  switch(intf) :
+    Ref(`spi) :
+      port spi : spi
+      net - (spi.ss, uSD.dat3) 
+      net - (spi.mosi, uSD.cmd) 
+      net - (spi.miso, uSD.dat0) 
+      net - (spi.sck, uSD.clk) 
+    Ref(`sd) :
+      inst pullup-d : {gen-res-cmp(100.0e3)}[2]
+      net - (src.pos, pullup-d[0].p[0], pullup-d[1].p[0]) 
+      port sd : sd
+      net - (uSD.dat2, sd.dat[2])
+      net - (uSD.dat3, sd.dat[3], pullup-d[0].p[1])
+      net - (uSD.cmd, sd.cmd)
+      net - (uSD.clk, sd.clk)
+      net - (uSD.dat0, sd.dat[0], pullup-d[1].p[1])
+      net - (uSD.dat1, sd.dat[1])
+    else :
+      fatal("Unsupported interface for SD card")
+
+  net - (src.neg, uSD.gnd) 
+  net - (src.pos, uSD.vdd) 
   net - (det-sw, uSD.det-sw) 
   net - (c.p[0], uSD.det-sw) 
-  net - (c.p[1], src-3v3.neg) 
+  ;short-trace(c.p[0], uSD.det-sw) 
+  net - (c.p[1], src.neg) 
   net - (r2.p[0], uSD.det-sw) 
-  net - (r2.p[1], src-3v3.pos) 
-  net - (src-3v3.neg, uSD.det-lvr) 
+  net - (r2.p[1], src.pos) 
+  net - (src.neg, uSD.det-lvr) 
 
-  net - (src-3v3.pos, r0.p[0]) 
-  net - (uSD.dat2, r0.p[1]) 
-  net - (src-3v3.pos, r1.p[0]) 
-  net - (uSD.dat1, r1.p[1]) 
 
-  net - (src-3v3.neg, uSD.case_gnd0) 
-  net - (src-3v3.neg, uSD.case_gnd1) 
-  net - (src-3v3.neg, uSD.case_gnd2) 
-  net - (src-3v3.neg, uSD.case_gnd3) 
-
+  net - (src.neg, uSD.case_gnd0) 
+  net - (src.neg, uSD.case_gnd1) 
+  net - (src.neg, uSD.case_gnd2) 
+  net - (src.neg, uSD.case_gnd3) 
 
 public pcb-module MCP9808-temperature-sensor (A0:Int, A1:Int, A2:Int) :
-  val a0 = if A0 == 0 : 0 else : 1
-  val a1 = if A1 == 0 : 0 else : 1
-  val a2 = if A2 == 0 : 0 else : 1
+  ; TODO: Cleanup
+  val a0 = A0 != 0
+  val a1 = A1 != 0
+  val a2 = A2 != 0
 
   port src-3v3 : power
   port host_i2c : i2c
 
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-2.0, 0.0, 90.0))
   net - (src-3v3, pd.src)
 
   inst MCP9808 : mcp-MCP9808-cmp
+  maybe-place(MCP9808, loc(2.0, 0.0))
 
   net - (MCP9808.GND, pd.dst.neg)
   net - (MCP9808.VCC, pd.dst.pos)
@@ -860,20 +1398,20 @@ public pcb-module MCP9808-temperature-sensor (A0:Int, A1:Int, A2:Int) :
   net - (MCP9808.SDA, host_i2c.sda)
   net - (MCP9808.SCL, host_i2c.scl)
 
-  if a0 == 0 :
-    net - (MCP9808.A0, pd.dst.neg)
-  else :
+  if a0 :
     net - (MCP9808.A0, pd.dst.pos)
-
-  if a1 == 0 :
-    net - (MCP9808.A1, pd.dst.neg)
   else :
+    net - (MCP9808.A0, pd.dst.neg)
+
+  if a1 :
     net - (MCP9808.A1, pd.dst.pos)
-
-  if a2 == 0 :
-    net - (MCP9808.A2, pd.dst.neg)
   else :
+    net - (MCP9808.A1, pd.dst.neg)
+
+  if a2 :
     net - (MCP9808.A2, pd.dst.pos)
+  else :
+    net - (MCP9808.A2, pd.dst.neg)
 
 public pcb-module uart-to-rs485 :
   port src-3v3 : power
@@ -889,10 +1427,13 @@ public pcb-module uart-to-rs485 :
 
   ; power decoupling
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-2.0, 0.0, 90.0))
   net - (src-3v3, pd.src)
 
   ; interface chip
-  inst interface : isl-ISL32459E-cmp
+  inst interface : isl-ISL32458E-cmp
+  package(interface) at loc(0.0, 0.0) on Top
+  maybe-place(interface, loc(2.0, 0.0))
 
   ; terminator enable chip
   inst terminator-en : ti-SN74LVC1G66DCKR-cmp
@@ -926,6 +1467,24 @@ public pcb-module uart-to-rs485 :
 
   net - (src-power.neg, connector.p[0])
   net - (src-power.pos, connector.p[3])
+
+pcb-module isl-ISL32458E :
+  port src : power
+  port uart : uart
+  port rs485 : rs485
+  pin drive-en
+
+  ; interface chip
+  inst interface : isl-ISL32458E-cmp
+  cap-strap(interface.gnd, interface.vcc, 0.1)
+
+  net gnd (src.neg, interface.gnd)
+  net pwr (src.pos, interface.vcc)
+  net d- (interface.d-, rs485.d-)
+  net d+ (interface.d+, rs485.d+)
+  net en (drive-en, interface.driver-en, interface.receiver-out-en_n)
+  net - (uart.tx, interface.receiver-out)
+  net - (uart.rx, interface.driver-in)
 
 public pcb-module INA240-basic :
   port src-3v3 : power
@@ -1114,6 +1673,7 @@ public pcb-module DRV8312-basic :
 
   inst DRV8312 : ti-DRV8312-cmp
 
+  package(DRV8312) at loc(0.0, 0.0) on Top
 
 
   ; power decoupling
@@ -1131,20 +1691,20 @@ public pcb-module DRV8312-basic :
   net PVDD (pd48v.dst.pos, DRV8312.PVDD_A_1, DRV8312.PVDD_A_2, DRV8312.PVDD_B, DRV8312.PVDD_C_1, DRV8312.PVDD_C_2)
 
   ; input power
-  val max-current = 3.;0
-  ;max-current-draw(DRV8312.PVDD_A_1) = max-current
-  ;max-current-draw(DRV8312.PVDD_A_2) = max-current
-  ;max-current-draw(DRV8312.PVDD_B)   = max-current
-  ;max-current-draw(DRV8312.PVDD_C_1) = max-current
-  ;max-current-draw(DRV8312.PVDD_C_2) = max-current
-  ;
-  ;max-current-draw(DRV8312.GND_A) = max-current
-  ;max-current-draw(DRV8312.GND_B) = max-current
-  ;max-current-draw(DRV8312.GND_C) = max-current
-  ;
-  ;max-current-draw(DRV8312.OUT_A) = max-current
-  ;max-current-draw(DRV8312.OUT_B) = max-current
-  ;max-current-draw(DRV8312.OUT_C) = max-current
+  val max-current = 3.0
+  max-current-draw(DRV8312.PVDD_A_1) = max-current
+  max-current-draw(DRV8312.PVDD_A_2) = max-current
+  max-current-draw(DRV8312.PVDD_B)   = max-current
+  max-current-draw(DRV8312.PVDD_C_1) = max-current
+  max-current-draw(DRV8312.PVDD_C_2) = max-current
+
+  max-current-draw(DRV8312.GND_A) = max-current
+  max-current-draw(DRV8312.GND_B) = max-current
+  max-current-draw(DRV8312.GND_C) = max-current
+
+  max-current-draw(DRV8312.OUT_A) = max-current
+  max-current-draw(DRV8312.OUT_B) = max-current
+  max-current-draw(DRV8312.OUT_C) = max-current
 
   net - (pd12v.dst.neg, DRV8312.GND_1, DRV8312.GND_2, DRV8312.GND_3)
 
@@ -1507,6 +2067,31 @@ public pcb-module regulator-LM5166-48v0-12v0-mod :
   net - (ind.p[0], Resr.p[1], out.pos)
   net - (Resr.p[0], Cout.a, out.pos)
 
+
+; untested and probably broken
+public pcb-module regulator-12v0-3v3-mod-broken :
+  port src-12v0 : power
+  port out-3v3 : power
+
+  inst pd : {power-decouple()} ; specify voltage
+  net - (src-12v0, pd.src)
+
+  inst TPS62177 : ti-TPS62177-cmp
+
+  inst Cin : {gen-cap-cmp(2.2, 40.0, 24.0)}
+  inst Cout : {gen-cap-cmp(22.0)}
+
+  net - (TPS62177.VIN, TPS62177.EN, pd.dst.pos, Cin.p[1])
+  net - (TPS62177.PGND, TPS62177.AGND, TPS62177.NC, TPS62177.PG, pd.dst.neg, out-3v3.neg, TPS62177.FB, Cin.p[0])
+
+
+
+  inst ind : coilcraft-LPS4018-103MRB-cmp
+
+  net - (TPS62177.SW, ind.p[1])
+  net - (ind.p[0], TPS62177.VOS, Cout.p[1], out-3v3.pos)
+
+
 public pcb-module imu-6dof (A0:Int) :
   val a = if A0 == 0 : 0 else : 1
   port src-3v3 : power
@@ -1514,9 +2099,12 @@ public pcb-module imu-6dof (A0:Int) :
   pin int1
   pin int2
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-2.0, 0.0, 90.0))
   net - (src-3v3, pd.src)
 
   inst LSM6DS3US : st-LSM6DS3US-cmp
+  package(LSM6DS3US) at loc(0.0, 0.0) on Top
+  maybe-place(LSM6DS3US, loc(2.0, 0.0))
 
   ; we want to use i2c without it acting as a master so we want mode 1
   ; this means:
@@ -1554,10 +2142,13 @@ public pcb-module MLX90363 :
 
   ; power decoupling
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-2.0, 0.0, 90.0))
   net - (src-3v3, pd.src)
 
   ; mag chip
   inst MLX90363 : melexis-MLX90363-cmp
+  package(MLX90363) at loc(0.0, 0.0) on Top
+  maybe-place(MLX90363, loc(2.0, 0.0))
 
   ; power nets
   net - (MLX90363.gnd pd.dst.neg)
@@ -1596,10 +2187,12 @@ public pcb-module AEAT-6600-T16 :
 
   ; power decoupling
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-3.0, 0.0, 90.0))
   net - (src-3v3, pd.src)
 
   ; mag chip
   inst magnetometer : avago-AEAT-6600-T16-cmp
+  package(magnetometer) at loc(0.0, 0.0) on Top
 
   ; power nets
   net - (magnetometer.GND pd.dst.neg)
@@ -1628,9 +2221,11 @@ public pcb-module accel (A0:Int) :
   pin int2
 
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-2.0, 0.0, 90.0))
 
 
   inst ADXL345 : ad-ADXL345-cmp
+  package(ADXL345) at loc(0.0, 0.0) on Top
   net - (src-3v3, pd.src)
   net - (ADXL345.gnd0, ADXL345.gnd1, ADXL345.gnd2, pd.dst.neg)
   net - (ADXL345.cs, ADXL345.vddio, pd.dst.pos)
@@ -1649,6 +2244,8 @@ pcb-module mic :
   pin dst-sig
   
   inst m : knowles-SPH1642HT5H-1-cmp
+  package(m) at loc(0.0, 0.0) on Top
+  maybe-place(m)
 
   net - (src-3v3.neg, m.gnd0, m.gnd1)
   net - (src-3v3.pos, m.vdd)
@@ -1660,6 +2257,7 @@ public pcb-module bandpass-amp (f-low:Double, f-high:Double, gain:Double) :
   pin dst-sig
 
   inst opamp : {ti-LMV3XX-cmp(1)}
+  maybe-place(opamp, loc(-2.0, -2.0), loc(0.0, 10.0 * 1.27))
  
   ; TODO: choose values based on frequency cutoffs
   inst c1 : {gen-cap-cmp(1.0)}
@@ -1669,8 +2267,10 @@ public pcb-module bandpass-amp (f-low:Double, f-high:Double, gain:Double) :
   inst r4 : {gen-res-cmp(47000.0)}
 
   for (i in 0 to 5, c in [c1, r1, r2, r3, r4]) do :
+    maybe-place(c,
       loc(-3.0 + 1.5 * to-double(i), 2.0, 90.0),
       loc((-10.0 + 5.0 * to-double(i)) * 1.27, -10.0 * 1.27, 90.0)
+    )
   
   net - (src-sig, c1.p[0])
   net - (c1.p[1], r1.p[0])
@@ -1689,16 +2289,55 @@ public pcb-module bandpass-mic-amp (f-low:Double, f-high:Double, gain: Double) :
   pin dst-sig
 
   inst pd : {power-decouple()}
+  maybe-place(pd, loc(-5.5, 0.0))
   net - (src-3v3, pd.src)
 
   inst m : mic
+  package(m) at loc(0.0, 0.0) on Top
+  maybe-place(m, loc(2.0, -2.0), loc(5.0 * 1.27, 0.0))
 
   inst a : {bandpass-amp(f-low, f-high, gain)}
+  maybe-place(a, loc(0.0, 0.0), loc(-5.0 * 1.27, 0.0))
 
   net - (pd.dst, m.src-3v3, a.src-3v3)
 
   net - (m.dst-sig, a.src-sig)
   net - (a.dst-sig, dst-sig)
+
+pcb-module power-dist-48v0-to-many :
+  port src-48v0 : power
+  port dst-12v0 : power
+  port dst-5v0  : power
+  port dst-3v3  : power
+  port src-3v3  : power
+  pin enable-12v
+
+  inst reg-12v0 : regulator-LM5008-12v-mod
+  inst reg-3v3 : regulator-3v3-mod
+
+  ; add enable and disable for 12v rail for motor driver project
+  ; UVLO at 15 volts from 3v3 supply
+  inst fet-en : di-2N7002A-7-cmp
+  inst fet-proc : di-2N7002A-7-cmp
+
+  inst fet-r-hi : {gen-res-cmp(20000.0)}   ; 4v output at 12v to ensure the fet can turn on
+  inst fet-r-lo : {gen-res-cmp(10000.0)}   ; 2v at 6v so the fet should be on enough down to the uvlo
+  inst fet-r-pu : {gen-res-cmp(20000.0)}
+
+  net - (fet-r-pu.p[1], dst-3v3.pos)
+
+  net - (reg-12v0.enable, fet-en.d)
+  net - (fet-r-hi.p[0], fet-en.g, fet-r-lo.p[1], fet-proc.d)
+  net - (fet-r-hi.p[1], src-48v0.pos)
+  net - (fet-r-lo.p[0], src-48v0.neg, fet-proc.s dst-3v3.neg, fet-en.s)
+  net enable-12v-pin (fet-r-pu.p[0], fet-proc.g, enable-12v)
+
+  net - (reg-12v0.src-48v0 src-48v0)
+  net - (reg-3v3.src-48v0 src-48v0)
+
+  net - (reg-12v0.out-12v0, dst-12v0)
+  net - (reg-3v3.outA, dst-3v3)
+  net - (src-3v3, dst-3v3)
 
 public pcb-module external-ssr-sense () :
   port src-5v0 : power
@@ -1764,6 +2403,7 @@ public pcb-module digital-buffer (r-pu-val:Double, r-in-val:False|Double) :
 ; Default is 1k pull-up with no in-line resistor
 public defn digital-buffer () :
   digital-buffer(1000.0, false)
+
 
 public pcb-module chain-power-sense (sense-type:Symbol, voltage:Double, i-ranges:List<Double>) :
   val n-range = length(i-ranges)
@@ -1956,6 +2596,134 @@ public pcb-module chain-power-led-conn (voltage:Double) :
   net pwr-led (r.p[0], conn.p[1])
   net - (conn.p[0], src.neg)
 
+public pcb-module power-connector-ptc-zener-protector (nominal-voltage:Double, max-current:Double) :
+  ; Puts a PTC and Zener in front of a power rail heading off-board.
+  port local-power : power
+  pin remote-power
+
+  ; TODO: Select appropriate zener and PTC from array of options.  Hardcoded to protect a 12V line right now.
+  inst d-clamp : {gen-zener-cmp(nominal-voltage)}
+  inst ptc-ser : {gen-ptc-cmp(max-current)}
+
+  ;Suppose we have option = 1 / 2 / or 3.
+  ;If it is 1, then create an instance of PartA,
+  ;if it is 2, then PartB,
+  ;else, PartC
+
+  ;if option == 1 : 
+  ;  inst i : PartA
+  ;else if option == 2 :
+  ;  inst i : PartB
+  ;else :
+  ;  inst i : PartC
+
+  ;val part-to-create = partoption(option)
+  ;inst i : {part-to-create}
+
+  ; Net up
+  net - (d-clamp.c, local-power.pos)
+  net - (d-clamp.a, local-power.neg)
+  net - (ptc-ser.p[0], d-clamp.c)
+  net - (ptc-ser.p[1], remote-power)
+
+public pcb-module digital-input-signal-protector (bandwidth:Double) :
+  ; Put a protective impedance in front of the signal and clamp to the power rail
+  pin local-signal   ; Signal on our side of the board (protected)
+  pin remote-signal  ; Signal that will be exposed to environment
+  port local-power : power    ; Power rail to clamp to
+
+  ; TODO: Parameterize? 10nC safe value for now
+  val c-val = 10.0e-9
+  val r-val = 1.0 / (2.0 * 3.14159 * c-val * bandwidth)
+  val tol = 5.0
+  ; Capacitor to ground
+  inst c-g : {gen-cap-cmp(c-val)}
+  ; Resistor from remote signal to capacitor forming 1st order filter
+  inst r-ser : {gen-res-cmp(closest-std-val(r-val, tol), tol)}
+  ; Extra resistor from capacitor to IO pin to reduce current in an overload
+  ; Just copy the same value as the series resistor
+  inst r-pro : {gen-res-cmp(closest-std-val(r-val, tol), tol)}
+
+  inst d-clamp : on-BAT54SLT1G-cmp
+
+  ; Connect signal path
+  net - (local-signal, r-pro.p[0])
+  net - (r-pro.p[1], r-ser.p[0])
+  net - (r-ser.p[1], remote-signal)
+  ; Cap to gnd
+  net - (r-ser.p[0],c-g.p[1])
+  net - (c-g.p[0], local-power.neg)
+  ; Clamp
+  net - (r-ser.p[0], d-clamp.ca)
+  net - (local-power.neg, d-clamp.a)
+  net - (local-power.pos, d-clamp.c)
+
+pcb-module protected-swill-connector :
+  ;port p : pin[8]
+  port hall-out : pin[2]
+  port solenoid-in : pin[2]
+  port power-12v0 : power
+  port power-5v0 : power
+
+  ; Pinout:
+  ; 0: Solenoid0 switched 12V
+  ; 1: Solenoid0 GND
+  ; 2: Solenoid1 switched 12V
+  ; 3: Solenoid1 GND
+  ; 4: Hall effect power 5V
+  ; 5: Hall effect GND
+  ; 6: Hall0 signal
+  ; 7: Hall1 signal
+
+  ; TODO: Move to DB9 or RJ45
+  inst connector : {phoenix-combicon-mc-cmp(8)}
+  ;package(connector) at loc(wherever) on Top
+
+  inst hall-sig-protector : {digital-input-signal-protector(10.0e3)}[2]
+  inst hall-pwr-protector : {power-connector-ptc-zener-protector( 5.0, 0.05)}
+  inst overload-protector : {power-connector-ptc-zener-protector(12.0, 0.50)}[2]
+
+  inst ssr : {ssr-array(`single, 1)}[2] ; TODO: This SSR is a bummer, use a better one
+
+  inst catch-diode : smc-DSS16UTR-cmp[2]
+
+  ; Net up SSRs
+  for i in 0 to 2 do:
+    net - (solenoid-in[i], ssr[i].en[0])
+    net - (ssr[i].src, power-12v0)
+    net - (ssr[i].src-5v0, power-5v0)
+    net - (ssr[i].ch[0], overload-protector[i].local-power.pos)
+
+  ; Net up overload protectors
+  for i in 0 to 2 do:
+    net - (overload-protector[i].local-power.neg, power-12v0.neg)
+
+  net - (connector.p[0],overload-protector[0].remote-power)
+  net - (connector.p[1],overload-protector[0].local-power.neg)
+  net - (connector.p[2],overload-protector[1].remote-power)
+  net - (connector.p[3],overload-protector[1].local-power.neg)
+
+  ; Net up hall protectors
+  net - (power-5v0,hall-pwr-protector.local-power)
+  net - (connector.p[4],hall-pwr-protector.remote-power)
+  net - (connector.p[5],hall-pwr-protector.local-power.neg)
+
+  for i in 0 to 2 do:
+    net - (hall-sig-protector[i].local-power, power-5v0)
+    net - (hall-sig-protector[i].local-signal, hall-out[i])
+
+  net - (connector.p[6],hall-sig-protector[0].remote-signal)
+  net - (connector.p[7],hall-sig-protector[1].remote-signal)
+
+  for i in 0 to 2 do:
+    net - (hall-out[i],hall-sig-protector[i].local-signal)
+    net - (power-5v0,hall-sig-protector[i].local-power)
+
+  ; Net up catch diodes
+  for i in 0 to 2 do:
+    net - (catch-diode[i].a,connector.p[1]) ; Gnd
+    net - (catch-diode[i].c,overload-protector[i].remote-power); Pwr
+
 public pcb-module voltage-divider (ratio:Double, total:Double, tol:Double) :
   port src : power
   port dst : power
@@ -1979,7 +2747,7 @@ public pcb-module rc-low-pass (r-val:Double, c-val:Double) :
   port src : power
   port dst : power
 
-  inst r : {gen-res-cmp(r-val)}
+  inst r : {gen-res-cmp(r-val, 1.0)}
   inst c : {gen-cap-cmp(c-val)}
 
   net - (src.neg, dst.neg, c.p[0])
@@ -2047,25 +2815,27 @@ public pcb-module pass-conv () :
 
   net - (src, dst)
 
+
 pcb-module solenoid-driver :
-  port src-7v4 : power
+  port src-12v0 : power
   port src-5v0 : power
   port channel-en : pin[4]
 
   inst out-conn : phoenix-1778683-cmp
+  package(out-conn) at loc(0.0, 0.0) on Top
   inst ssr : {ssr-array(`quad, 4)}
 
   inst cap : panasonic-cap-220uf-cmp
-  net - (cap.a, src-7v4.pos)
-  net - (cap.c, src-7v4.neg)
+  net - (cap.a, src-12v0.pos)
+  net - (cap.c, src-12v0.neg)
 
   inst r-pd : {gen-res-cmp(2700.0)}[4]
 
-  net pwr-src (src-7v4, ssr.src)
+  net pwr-src (src-12v0, ssr.src)
   net pwr-5v0 (src-5v0, ssr.src-5v0)
 
   for i in 0 to 4 do :
-    net - (src-7v4.neg, out-conn.p[i * 2], r-pd[i].p[1])
+    net - (src-12v0.neg, out-conn.p[i * 2], r-pd[i].p[1])
     net conv-ssr-en (channel-en[i], ssr.en[i], r-pd[i].p[0])
     net conv-vout (ssr.ch[i], out-conn.p[i * 2 + 1])
 
@@ -2077,8 +2847,11 @@ pcb-module raspi-with-level-shifters :
 
   inst r-con : harwin-M20-7812045-cmp
   ; Raspi assingments made for connector placed on bottom
+  package(r-con) at loc(0.0, 0.0) on Top
 
   inst mount : {mounting-hole-cmp(1.375)}[2]
+  package(mount[0]) at loc(0.0, 29.0) on Top (relative-to r-con)
+  package(mount[1]) at loc(0.0, -29.0) on Top (relative-to r-con)
 
   inst fet : di-2N7002A-7-cmp[4]
   inst r-pu : {gen-res-cmp(2700.0)}[7]
@@ -2269,6 +3042,7 @@ pcb-module swd-tag-connect :
 
   inst tag : TC2030-MCP-NL-cmp
   inst r : {gen-res-cmp(10000.0)}
+  package(tag) at loc(0.0, 0.0) on Top
 
   net - (tag.p[0], src-3v3.pos, r.p[0])
   net - (swd.swdio, tag.p[1])
@@ -2305,6 +3079,8 @@ pcb-module MCP9700A-temperature-sensor :
   net - (pd.dst.neg, t.gnd)
   net - (pd.dst.pos, t.vdd)
   net - (adc, t.vout)
+  maybe-place(t)
+  maybe-place(pd)
 
 pcb-module pressure-sensor :
   port src-3v3 : power
@@ -2321,6 +3097,9 @@ pcb-module pressure-sensor :
 
   net - (i2c.sda, p.sda)
   net - (i2c.scl, p.scl)
+  maybe-place(c)
+  maybe-place(pd)
+  maybe-place(p)
 
 pcb-module i2c-bus :
   port src-3v3 : power
@@ -2328,8 +3107,10 @@ pcb-module i2c-bus :
   port dst-i2c : i2c
   
   inst r-scl : {gen-res-cmp(2700.0, 2.0, 0.1)}
+  maybe-place(r-scl, loc(0.0, 1.0))
 
   inst r-sda : {gen-res-cmp(2700.0, 2.0, 0.1)}
+  maybe-place(r-sda, loc(0.0, -1.0), loc(0.0, 1.0))
 
   net scl (r-scl.p[0], src-i2c.scl, dst-i2c.scl)
   net sda (r-sda.p[0], src-i2c.sda, dst-i2c.sda)
@@ -2348,6 +3129,7 @@ public pcb-module decoupled-level-shifter (n:Int) :
     else : fatal("Incorrect n-pin for decoupled level shifter:%_" % [n])
   
   inst ls-inst : {ad-ADG330X-cmp(n)}
+  package(ls-inst) at loc(0.0, pac-ls-y) on Top
 
   net - (en, ls-inst.en)
   for i in 0 to n do :
@@ -2356,6 +3138,8 @@ public pcb-module decoupled-level-shifter (n:Int) :
 
   inst pda : {power-decouple()}
     
+  package(pda.c0) at loc(-2.0, 1.5, 180.0) on Top
+  package(pda.c1) at loc(-2.0, 3.0, 180.0) on Top
   
   net - (src-pwr-a, pda.src)
   net - (pda.dst.neg, ls-inst.gnd)
@@ -2363,6 +3147,8 @@ public pcb-module decoupled-level-shifter (n:Int) :
 
   inst pdb : {power-decouple()}
   
+  package(pdb.c0) at loc(2.0, 1.5) on Top
+  package(pdb.c1) at loc(2.0, 3.0) on Top
 
   net - (src-pwr-b, pdb.src)
   net - (pdb.dst.neg, ls-inst.gnd)
@@ -2391,8 +3177,8 @@ public pcb-module level-shifter-group (n:Int, pts:List<[Double,Double]>, assign-
     
     inst {ls-container-ref} : {decoupled-level-shifter(n-inst-pin)}
 
-    ;if assign-groups? :
-    ;  schematic-group(ls-container-ref) = {Ref("ls-container-%_-grp" % [inst-i])}
+    if assign-groups? :
+      schematic-group(ls-container-ref) = {Ref("ls-container-%_-grp" % [inst-i])}
 
     add(ls-insts, ls-container-ref)
     
@@ -2417,6 +3203,9 @@ pcb-module t-filter :
   net - (c.p[1], l1.p[0], l2.p[0])
   net - (l2.p[1], out)
   net - (l1.p[1], gnd)
+  package(l2) at loc(0.0, 0.0) on Top
+  package(l1) at loc(-1.4, 0.6, 90.0) on Top (relative-to l2)
+  package(c) at loc(-2.8, 0.0) on Top (relative-to l2)
 
 pcb-module xtal :
   port xc : pin[2]
@@ -2427,6 +3216,9 @@ pcb-module xtal :
   net - (xc[1], xtal.p[1], xtal-cap[1].p[0])
   for i in 0 to 2 do :
     net - (gnd, xtal-cap[i].p[1], xtal.g[i])
+  package(xtal) at loc(0.0, 0.0) on Top
+  package(xtal-cap[0]) at loc(0.5, 1.15, 180.0) on Top (relative-to xtal)
+  package(xtal-cap[1]) at loc(-1.35, 0.5, 90.0) on Top (relative-to xtal)
 
 pcb-module nordic-nRF52832-proc :
   port pow3v0 : power
@@ -2440,12 +3232,17 @@ pcb-module nordic-nRF52832-proc :
   net - (proc.ANT, lpf.in)
   net - (lpf.out, t.in)
   net - (t.out, ant.feed)
+  package(proc) at loc(0.0, 0.0) on Top
+  package(lpf) at loc(4.7, -0.2) on Top (relative-to proc)
+  package(t.l2) at loc(9.6, -0.2) on Top (relative-to proc)
+  package(ant) at loc(12.9, -0.2) on Top (relative-to proc)
 
   ; External oscillator
   inst xtal : xtal
   net XC1 (proc.xc[0], xtal.xc[0])
   net XC2 (proc.xc[1], xtal.xc[1])
   net - (gnd, xtal.gnd)
+  package(xtal.xtal) at loc(6.35, 3.9) on Top (relative-to proc)
   ; Decoupling caps
   inst c0 : {gen-cap-cmp(4.7)}
   inst c1 : {gen-cap-cmp(0.1)}[3]
@@ -2456,6 +3253,12 @@ pcb-module nordic-nRF52832-proc :
   net - (c1[2].p[0], proc.dec[0])
   net - (c7.p[0], proc.dec[2])
   net - (c10.p[0], proc.dec[3])
+  package(c7) at loc(5.1, 1.5) on Top (relative-to proc)
+  package(c1[0]) at loc(3.8, 3.8, 90.0) on Top (relative-to proc)
+  package(c1[1]) at loc(-3.0, -4.2, 180.0) on Top (relative-to proc)
+  package(c1[2]) at loc(-3.8, 2.9, 90.0) on Top (relative-to proc)
+  package(c0) at loc(-2.2, 4.5, 90.0) on Top (relative-to proc)
+  package(c10) at loc(-1.4, 4.5, 90.0) on Top (relative-to proc)
 
   for i in 0 to 32 do :
     supports dio :
@@ -2486,3 +3289,219 @@ pcb-module nordic-nRF52832-proc :
       require pins:bar-pin[2] from proc
         uart.tx => proc.pins[0]
         uart.rx => proc.pins[1]
+
+pcb-module broken-out-teensy :
+  inst teensy : {pjrc-teensy-3-2-cmp(`all-pins)}
+  inst con-tbr-1 : {pin-header-cmp(14)}[2]
+  inst con-tbr-2 : {pin-header-cmp(5)}
+  inst con-tbr-3 : {pin-header-cmp(7)}
+  inst con-tbr-4 : {pin-header-cmp(12)}
+  inst con-reset-pgm : {JST-PH-cmp(2)}
+  inst res-p : {gen-res-cmp(100000.0, 2.0)}[2]
+  inst res-s : {gen-res-cmp(1000.0, 2.0)}[2]
+  schematic-group(teensy) = teensy
+  schematic-group(con-tbr-1[0]) = teensy-jumpers-1
+  schematic-group(con-tbr-1[1]) = teensy-jumpers-2
+  schematic-group(con-tbr-2) = teensy-jumpers-3
+  schematic-group(con-tbr-3) = teensy-jumpers-4
+  schematic-group(con-tbr-4) = teensy-jumpers-5
+  schematic-group(con-reset-pgm) = teensy-jumpers-6
+  schematic-group(res-p[0]) = teensy
+  schematic-group(res-p[1]) = teensy
+  schematic-group(res-s[0]) = teensy
+  schematic-group(res-s[1]) = teensy
+
+  package(teensy) at loc(0.0, 0.0) on Top
+  package(con-tbr-1[0]) at loc(-12.62, 0.0) on Top (relative-to teensy)
+  package(con-tbr-1[1]) at loc(12.62, 0.0, 180.0) on Top (relative-to teensy)
+  package(con-tbr-2) at loc(0.0, -21.5, 90.0) on Top (relative-to teensy)
+  package(con-tbr-3) at loc(-15.16, (2.5 * -2.54)) on Top (relative-to teensy)
+  package(con-tbr-4) at loc(15.16, 0.0, 180.0) on Top (relative-to teensy)
+  package(con-reset-pgm) at loc(12.2, -21.5, -90.0) on Top (relative-to teensy)
+
+  net gnd (teensy.gnd[0], teensy.gnd[1], teensy.gnd[2])
+  net pow3v3 (teensy.src-3v3[0], teensy.src-3v3[1], teensy.src-3v3[2])
+
+  net t1 (teensy.gnd[0], con-tbr-1[0].p[0])
+  for i in 1 to 14 do :
+    net {Ref("IO%_" % [(i - 1)])} (teensy.io[i - 1], con-tbr-1[0].p[i])
+  for i in 14 to 25 do :
+    net {Ref("IO%_" % [(i - 1)])} (teensy.io[i - 1], con-tbr-1[1].p[i - 14])
+  net t2 (teensy.src-3v3[2], con-tbr-1[1].p[11])
+  net AGND (teensy.agnd, con-tbr-1[1].p[12])
+  net t3 (teensy.vin, con-tbr-1[1].p[13])
+
+  net VBAT (teensy.vbat, con-tbr-2.p[0])
+  net t4 (teensy.src-3v3[0], con-tbr-2.p[1])
+  net t5 (teensy.gnd[1], con-tbr-2.p[2])
+  net PGM (teensy.program, con-tbr-2.p[3])
+  net A14 (teensy.a[4], con-tbr-2.p[4])
+
+  for i in 24 to 29 do :
+    net {Ref("IO%_" % [i])} (teensy.io[i], con-tbr-3.p[i - 22])
+  net A12 (con-tbr-3.p[0], teensy.a[2])
+  net t6 (con-tbr-3.p[1], teensy.gnd[2])
+
+  for i in 29 to 34 do : 
+    net {Ref("IO%_" % [i])} (con-tbr-4.p[i - 29], teensy.io[i])
+  net t7 (teensy.src-3v3[1], con-tbr-4.p[5])
+  net A13 (teensy.a[3], con-tbr-4.p[6])
+  net A11 (teensy.a[1], con-tbr-4.p[7])
+  net A10 (teensy.a[0], con-tbr-4.p[8])
+  net AREF (teensy.aref, con-tbr-4.p[9])
+  net VUSB (teensy.vusb, con-tbr-4.p[11])
+
+  net t8 (res-p[0].p[0], teensy.src-3v3[0])
+  net t9 (res-p[0].p[1], res-s[0].p[0], teensy.reset)
+  net RESET (res-s[0].p[1], con-reset-pgm.p[0])
+
+  net t10 (res-p[1].p[0], teensy.gnd[1])
+  net t11 (res-p[1].p[1], res-s[1].p[0], teensy.program)
+  net PROGRAM (res-s[1].p[1], con-reset-pgm.p[1])
+
+pcb-module reset-button :
+  port pow-vio : power
+  pin reset
+  inst b : omron-B3U-1000P-cmp
+  ;pull down for now
+  inst r : {gen-res-cmp(10.0e3)}[2]
+  inst c : {gen-cap-cmp(0.1)}
+  net - (r[0].p[1], pow-vio.pos)
+  net - (b.p[1], r[0].p[0], r[1].p[0])
+  net - (r[1].p[1], c.p[0], reset)
+  net - (c.p[1], b.p[0], pow-vio.neg)
+
+pcb-module stmicro-STM32F103CBT6 :
+  port src : power
+  port uart : uart
+  ; This is the swd port that will program the host MCU
+  ; NOT the swd port that will program the st-link MCU
+  port swd : swd
+
+  ; Main processor and bypass caps
+  inst proc : stmicro-STM32F103CBT6-cmp
+  inst xtal :  ndk-NX3225GD-cmp
+  inst bypass-cap : {gen-cap-cmp(0.1)}[4]
+  for i in 0 to 4 do :
+    net - (src.neg, bypass-cap[i].p[0])
+    net - (src.pos, bypass-cap[i].p[1])
+  net - (bypass-cap[0].p[1], proc.VDD[0])
+  net - (bypass-cap[1].p[1], proc.VDD[1])
+  net - (bypass-cap[2].p[1], proc.VDD[2])
+  net - (bypass-cap[3].p[1], proc.VDDA)
+  net vdd (proc.VDD[0], proc.VDD[1], proc.VDD[2], proc.VDDA, src.pos)
+  net gnd (proc.VSS[0], proc.VSS[1], proc.VSS[2], proc.VSSA, src.neg)
+  ; Pin straps
+  ;   PC13 and PC14 are board ID straps.
+  ;   Pull PC13 down, leave PC14 floating
+  res-strap( proc.PC13, src.neg, 10.0e3 )
+  ;res-strap( proc.PC14, src.neg, 10e3 )
+  res-strap( proc.PB14, proc.PB12, 100.0 )
+  res-strap( proc.BOOT0, src.neg, 100.0e3 )
+
+  ; Voltage monitoring
+  res-strap( proc.PA0, src.pos, 4.7e3 )
+  res-strap( proc.PA0, src.neg, 4.7e3 )
+
+  ; 8MHz xtal
+  cap-strap( proc.OSC_IN, src.neg, 10.0e-12 )
+  cap-strap( proc.OSC_OUT, src.neg, 10.0e-12 )
+  net - ( xtal.p[0], proc.OSC_IN )
+  net - ( xtal.p[1], proc.OSC_OUT )
+
+pcb-module usb-conn :
+  ; ESD protected USB connector with host detection and 
+  ; re-enumerate input.  Drawn from ST-Link schematic
+  port src : power
+  port usb : usb-2
+  pin renum
+
+  inst usb-conn : molex-0476420001-cmp
+  res-strap( usb-conn.id, src.neg, 100.0e3 )
+  inst usb-esd : stmicro-EMIF02-USB03F2-cmp
+  net - ( usb-esd.d+in, usb-esd.d+out, usb-conn.dat+, usb.dat+ )
+  net - ( usb-esd.d-in, usb-esd.d-out, usb-conn.dat-, usb.dat- )
+  net - ( usb-esd.id, usb-conn.id )
+  net - ( usb-esd.vbus, usb-conn.vcc )
+  net - ( usb-esd.gnd, src.neg )
+
+  inst npn : nxp-PMBT3904-cmp
+  net - ( npn.c, src.pos )
+  res-strap( npn.b, renum, 100.0 )
+  res-strap( npn.b, src.neg, 36.0e3 )
+  res-strap( npn.b, usb-esd.vbus, 10.0e3 )
+  res-strap( npn.e, usb-esd.d+out, 1.5e3 )
+
+pcb-module marvell-88E1510-A0-NNB2C000 :
+  port P2P5V : power
+  port P3P3V : power
+  port mdi : diff-pair[4]
+  port rgmii : rgmii
+  pin mdio
+  pin mdc
+  pin nRESET
+
+  inst phy : marvell-88E1510-A0-NNB2C000-cmp
+  net gnd (phy.VSS, P2P5V.neg, P3P3V.neg)
+  net - (P2P5V.pos, phy.VDDO)
+  net - (P3P3V.pos, phy.REG-IN, phy.AVDD33)
+  net - (mdi, phy.mdi)
+  net - (rgmii, phy.rgmii)
+  res-strap(phy.mdio, phy.VDDO, 4.99e3)
+  res-strap(phy.nRESET, phy.VSS, 4.99e3)
+  cap-strap(phy.REGCAP1, phy.REGCAP2, 0.22)
+  bypass-caps(phy.VDDO, phy.VSS, 6.3, [0.1 0.1 0.1 10.0], `vddo)
+  net - (phy.DVDD, phy.DVDD-OUT)
+  bypass-caps(phy.DVDD, phy.VSS, 6.3, [0.1 0.1 10.0], `dvdd)
+  bypass-caps(phy.REG-IN, phy.VSS, 6.3, [0.1 10.0], `reg-in)
+  bypass-caps(phy.AVDD18, phy.VSS, 6.3, [0.1 0.1 0.1 10.0], `avdd18)
+  net - (phy.AVDD18, phy.AVDDC18, phy.AVDD18-OUT)
+  bypass-caps(phy.AVDD33, phy.VSS, 6.3, [0.1 0.1 10.0], `avdd33)
+  inst xtal : xtal
+  net gnd (xtal.gnd)
+  net - (xtal.xc[0], phy.xtal-in)
+  net - (xtal.xc[1], phy.xtal-out)
+
+pcb-module fmc :
+  inst fmc : zcu106-cmp
+  val n-io = 116
+  for i in 0 to 30 do :
+    supports dio : 
+      require pin:bar-pin from fmc
+        dio => fmc.pin 
+  for i in 0 to 5 do :
+    supports i2c : 
+      require pins:bar-pin[2] from fmc
+        i2c.sda => fmc.pins[0]
+        i2c.scl => fmc.pins[1]
+  for i in 0 to 8 do :
+    supports rgmii : 
+      require pins:bar-pin[12] from fmc
+        rgmii.txd[0] => fmc.pins[0]
+        rgmii.txd[1] => fmc.pins[1]
+        rgmii.txd[2] => fmc.pins[2]
+        rgmii.txd[3] => fmc.pins[3]
+        rgmii.rxd[0] => fmc.pins[4]
+        rgmii.rxd[1] => fmc.pins[5]
+        rgmii.rxd[2] => fmc.pins[6]
+        rgmii.rxd[3] => fmc.pins[7]
+        rgmii.tx-clk => fmc.pins[8]
+        rgmii.tx-ctrl => fmc.pins[9]
+        rgmii.rx-clk => fmc.pins[10]
+        rgmii.rx-ctrl => fmc.pins[11]
+
+pcb-module usb-connector :
+  ; ESD protected USB connector with host detection and 
+  ; re-enumerate input.  Drawn from ST-Link schematic
+  port src : power
+  port usb : usb-2
+  pin renum
+
+  inst usb-conn : molex-0476420001-cmp
+  res-strap( usb-conn.id, src.neg, 100.0e3 )
+  net - (usb-conn.dat+, usb.dat+ )
+  net - (usb-conn.dat-, usb.dat- )
+
+  supports usb-2 :
+    usb-2.dat+ => usb-conn.dat+
+    usb-2.dat- => usb-conn.dat-

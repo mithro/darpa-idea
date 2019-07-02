@@ -1,0 +1,72 @@
+defpackage standalone-generator :
+  import core
+  import collections
+  import math
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-connections
+  import rtm/ir-utils
+  import interfaces
+  import components
+  import connections
+  import modules
+  import footprints
+  import symbols
+  import parts
+  import power-system-gen
+  import powergen 
+  import modulegen
+
+#use-added-syntax(ir-gen)
+jitpcb/repl-lib/clear-user-statements()
+
+val brd-outline = rectangle(100.0, 100.0)
+
+pcb-module rs485-connector :
+  inst screw-terminal : {phoenix-combicon-mc-cmp(2)}
+  supports rs485 :
+    rs485.d- => screw-terminal.p[0]
+    rs485.d+ => screw-terminal.p[1]
+
+pcb-module adapt :
+
+  inst connector : usb-connector
+  inst micro : stmicro-STM32F103CBT6
+
+  add-center-node("stmicro-STM32F103CBT6", 0.0, 0.0)
+  within (rail) = make-load("MCU power", 3.3, 0.2, 15.0e-3) :  
+    net gnd (neg(rail), micro.src.neg)
+    net P3P3V (pos(rail), micro.src.pos)
+
+  generate-power-system(5.0, 30.0, connector.src.pos, connector.src.neg)
+
+  require e-usb:usb-2 from connector
+  require usb:usb-2 from micro.proc
+  connect (connector.e-usb, micro.proc.usb)
+
+  inst mod:rs485-connector
+  require rs485:rs485 from mod
+  require uart:uart from micro.proc
+  connect (mod.rs485, micro.proc.uart)
+
+  inst fmc:fmc
+  inst RJ45:pulse-J0G-0009NL-cmp[4]
+  require eth:rgmii[4] from fmc
+  for i in 0 to 4 do:
+    require eth:ethernet-1000 from RJ45[i]
+    connect (fmc.eth[i], RJ45[i].eth)
+
+
+;==== Schematic ================================================================
+
+defn make-adapt-schematic () :
+  make-schematic(adapt)
+
+;==== Project ==================================================================
+
+defn make-adapt-project () :
+  make-adapt-schematic()
+
+make-adapt-project()
+  
+jitpcb/repl-lib/dump-esir("adapt", [`prune-lower])

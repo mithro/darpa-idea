@@ -120,7 +120,7 @@ defmethod print (o:OutputStream, s:DefStmt) :
 defmethod print (o:OutputStream, s:RefStmt) :
   print(o, "Ref(%_, %_, %_)" % [ns(s), tag(s), name(s)])
 
-defn gather-definitions (prog:Seqable<TStmt>) :
+defn gather-definitions (prog:Seqable<TStmt>, intermediate-lowering?:True|False) :
   val def-stmts = Vector<DefStmt|RefStmt>()
 
   ;Convenience definitions
@@ -149,6 +149,7 @@ defn gather-definitions (prog:Seqable<TStmt>) :
       (s:Union) : do(+refer, shapes(s))
       (s) : false
 
+
   ;Scan module level statement
   defn scan-mstmts (mns:NS, ss:Seqable<MStmt>) :
     ;Check duplicate definitions
@@ -161,12 +162,31 @@ defn gather-definitions (prog:Seqable<TStmt>) :
       val k = [name, r, unit]
       if key?(defined, k) : report-error(DuplicateMStmt(defined[k]))
       else : defined[k] = s
-          
+
+    ;Factored out check for SupportsStmt because it is used for both
+    ;SupportsStmt and also for InstSupportsStmt
+    defn check (s:SupportsStmt) :
+      +refer(CapabilityNS(), capability(s))
+      val capns = LocalNS()
+      +define(capns, `port, capability(s))
+      for option in options(s) do :
+        val pins-with-props = HashSet<Ref>()
+        for p in properties(option) do :
+          +refer(mns, [`pin, `inst, `inst-supports], ref(p))
+          if not add(pins-with-props, ref(p)) :
+            report-error(DuplicateMStmt(p))
+        scan-mstmts(mns, requires(option))
+        scan-mstmts(mns, properties(option))
+        for [src, dst] in kvs(mappings(mapping(option))) do :
+          +refer(capns, `port, src)
+          +refer(mns, [`pin, `inst, `inst-supports], dst)
+              
+    ;For each module statement in the module
     for ms in ss do :
       match(ms) :
         (ms:NetStmt) :
           attempt: +define(mns, `net, name(ms) as? Symbol)
-          do(+refer{mns, [`pin, `inst], _} refs(ms))
+          do(+refer{mns, [`pin, `inst, `inst-supports], _} refs(ms))
         (ms:InstStmt) :
           +define(mns, `inst, name(ms))
           +refer(type(ms))
@@ -175,7 +195,7 @@ defn gather-definitions (prog:Seqable<TStmt>) :
           +refer(type(ms))
         (ms:RequireStmt) :
           +refer(capability(ms))
-          +refer(mns, `inst, inst(ms))
+          +refer(mns, [`inst, `inst-supports], inst(ms))
           match(name(ms)) :
             (n:Symbol) :
               for [src, dst] in kvs(mappings(mapping(ms))) do :
@@ -187,26 +207,37 @@ defn gather-definitions (prog:Seqable<TStmt>) :
               if not empty?(mapping(ms)) :
                 report-error(RequirePinsWithoutName(capability(ms), inst(ms)))          
         (ms:SupportsStmt) :
-          +refer(CapabilityNS(), capability(ms))
-          val capns = LocalNS()
-          +define(capns, `port, capability(ms))
-          for option in options(ms) do :
-            scan-mstmts(mns, requires(option))
-            for [src, dst] in kvs(mappings(mapping(option))) do :
-              +refer(capns, `port, src)
-              +refer(mns, [`pin, `inst], dst)          
+          check(ms)
+        (ms:PinPropertiesStmt) :
+          ensure-unique!(`pin-properties, ref(ms), level(ms), ms)
+          +refer(mns, [`pin, `inst, `inst-supports], ref(ms))
+        (ms:ConnectionStmt) :
+          val arg-regs = for a in args(ms) seq-cat :
+            match(a) :
+              (a:Ref) : [a]
+              (a:Tuple<Ref>) : a
+          for r in arg-regs do :
+            +refer(mns, [`pin, `inst, `inst-supports], r)              
         (ms:InstSupportsStmt) :
-          report-error(UnsupportedInstSupports(inst(ms), capability(ms)))
+          if intermediate-lowering? :
+            +define(mns, `inst-supports, name(base(inst(ms))))
+            check(supports-stmt(ms))
+          else :
+            report-error(UnsupportedInstSupports(inst(ms), capability(ms)))
         (ms:PackageStmt) :
           let :
             defn chk (type:Symbol) : ensure-unique!(type, ref(ms), ms)
             if instance?(ms) :
               chk(`package) when package(ms) is-not False
+              chk(`package-pose) when pose(ms) is-not False or side(ms) is-not False
             else :
               chk(`packages) when package(ms) is-not False
+              chk(`packages-pose) when pose(ms) is-not False or side(ms) is-not False
           match(instance?(ms)) :
             (inst?:True) : +refer(mns, `inst, ref(ms))
             (inst?:False) : +refer(ComponentNS(), [`component], ref(ms))
+          attempt:
+            +refer(mns, `inst, anchor(ms) as? Ref)
           attempt:
             val [name, mapping] = package(ms) as? [Symbol, Mapping]
             +refer(PackageNS(), name)
@@ -220,10 +251,23 @@ defn gather-definitions (prog:Seqable<TStmt>) :
         (ms:ReferenceStmt) :
           ensure-unique!(`reference, ref(ms), ms)
           +refer(mns, `inst, ref(ms))
+        (ms:SchematicGroupStmt) :
+          if unit(ms) is False :
+            ensure-unique!(`schematic-group, ref(ms), ms)
+          else :
+            ensure-unique!(`schematic-group, ref(ms), unit(ms) as Int, ms)
+          +refer(mns, `inst, ref(ms))
+        (ms:MaxCurrentDrawStmt) :
+          do(+refer{mns, `inst, _}, refs(ms))
+        (ms:EStateStmt) :
+          ensure-unique!(`estate, ref(ms), ms)
+          +refer(mns, `inst, ref(ms))
         (ms:AttachStmt) :
           +refer(AttachNS(), attach(ms))
-          do(+refer{mns, [`pin, `inst], _}, args(ms))    
-    
+          do(+refer{mns, [`pin, `inst, `inst-supports], _}, args(ms))
+        (ms:SupportedByStmt) :
+          ;Todo: Very quick and dirty
+          +refer(mns, [`inst, `inst-supports], ref(ms))
 
   ;Scan top level statements
   for s in prog do :
@@ -243,10 +287,14 @@ defn gather-definitions (prog:Seqable<TStmt>) :
         attempt: +refer(ComponentNS(), `component, component(s) as? Symbol)
       (s:DefComponent) :
         ;Check which statements already defined.
-        val defined = HashTable<Symbol,CStmt>()
+        val defined = HashTable<Symbol|[Symbol,Ref],CStmt>()
         defn ensure-unique! (type:Symbol, s:CStmt) :
           if key?(defined, type) : report-error(DuplicateCStmt(defined[type]))
           else : defined[type] = s
+        defn ensure-unique! (type:Symbol, ref:Ref, s:CStmt) :
+          val k = [type, ref]
+          if key?(defined, k) : report-error(DuplicateCStmt(defined[k]))
+          else : defined[k] = s
 
         +define(ComponentNS(), `component, name(s))
         val cns = LocalNS()
@@ -255,6 +303,12 @@ defn gather-definitions (prog:Seqable<TStmt>) :
           +refer(type(p))
         for cs in stmts(s) do :
           match(cs) :
+            (cs:GroundStmt) :
+              do(+refer{cns, `pin, _}, refs(cs))
+            (cs:PowerStmt) :
+              do(+refer{cns, `pin, _}, refs(cs))
+            (cs:DiffPairStmt) :
+              do(+refer{cns, `pin, _}, cat-all(pairs(cs)))
             (cs:DefaultPackageStmt) :
               ensure-unique!(`DefaultPackage, cs)
               +refer(PackageNS(), package(cs))
@@ -271,11 +325,23 @@ defn gather-definitions (prog:Seqable<TStmt>) :
               if any?({not empty?(requires(_))}, options(cs)) :
                 report-error(ComponentSupportsWithRequires(capability(cs), name(s)))
               for option in options(cs) do :
+                val pins-with-props = HashSet<Ref>()
+                for p in properties(option) do :
+                  +refer(cns, `pin, ref(p))
+                  if not add(pins-with-props, ref(p)) :
+                    report-error(DuplicateCStmt(p))                
                 for [src, dst] in kvs(mappings(mapping(option))) do :
                   +refer(capns, `port, src)
                   +refer(cns, `pin, dst)
+            (cs:PinPropertiesStmt) :
+              ensure-unique!(`pin-properties, ref(cs), cs)
+              +refer(cns, `pin, ref(cs))
             (cs:ReferencePrefixStmt) :
               ensure-unique!(`ReferencePrefix, cs)
+            (cs:MaxCurrentDrawStmt) :
+              do(+refer{cns, `pin, _}, refs(cs))
+            (cs:EStateStmt) :
+              +refer(cns, `pin, ref(cs))
       (s:DefPackage) :
         +define(PackageNS(), name(s))
         val pad-def-ns = LocalNS()
@@ -299,13 +365,13 @@ defn gather-definitions (prog:Seqable<TStmt>) :
         do(+define{mns, `pin, _}, args(s))
         do(+refer{type(_)}, pins(s))
         scan-mstmts(mns, stmts(s))
-      (s:MakeBoard) :
+      (s:MakeSchematic) :
         +refer(ComponentNS(), `module, module(s))
 
   ;Return stmts
   def-stmts
 
-defn check-definitions (prog:Seqable<TStmt>) :
+defn check-definitions (prog:Seqable<TStmt>, intermediate-lowering?:True|False) :
   ;Table for storing definitions
   val nametable = HashTable<[NS, Symbol|Ref], False|Symbol>()
 
@@ -327,7 +393,7 @@ defn check-definitions (prog:Seqable<TStmt>) :
       (a:Tuple<Symbol>, b:Symbol) : contains?(a, b)
 
   ;Get stmts
-  val def-stmts = gather-definitions(prog)
+  val def-stmts = gather-definitions(prog, intermediate-lowering?)
 
   ;First pass through stmts
   for s in def-stmts do :
@@ -335,7 +401,9 @@ defn check-definitions (prog:Seqable<TStmt>) :
       (s:DefStmt) :
         val k = [ns(s), name(s)]
         if key?(nametable, k) :
-          if ns(s) is-not AttachNS :
+          defn duplicates-allowed? (tag:Symbol|False, old-tag:Symbol|False) :
+            (tag == `inst-supports or tag == `net) and (old-tag == tag)            
+          if not duplicates-allowed?(tag(s), nametable[k]) :
             report-error(AlreadyDefined(ns(s), nametable[k], name(s)))
         else :
           nametable[k] = tag(s)
@@ -470,6 +538,13 @@ defn type-check (prog:Collection<TStmt>) :
     match(t:InstType|False) : t
     else : report-error(NotAnInst(r, t as RefType))
 
+  ;Check that a reference refers to something from which we
+  ;can require capabilities from.
+  defn check-requirement-source (env:TypeEnv, r:Ref) :
+    val t = check-ref(env,r)
+    match(t:InstType|InstSupportsType|False) : t
+    else : report-error(NotARequirementSource(r, t as RefType))
+
   ;Check that a reference refers to an instance or instance array
   defn check-inst-array (env:TypeEnv, r:Ref) :
     val t = check-ref(env, r)
@@ -491,7 +566,7 @@ defn type-check (prog:Collection<TStmt>) :
     val t = check-ref(env, r)
     match(t) :
       (t:NetType) : if type(t) is-not SinglePin : report-error(NotANet(r, t))
-      (t:RefType) : report-error(NotANet(r, t as RefType))
+      (t:RefType) : report-error(NotANet(r, t))
       (t:False) : false
 
   ;Retrieve the base instance type of the reference
@@ -501,19 +576,31 @@ defn type-check (prog:Collection<TStmt>) :
       (t:InstType) : [r,t]
       (t:PinType) : inst-base!(env, undot(r))
 
+  ;Check the LHS of mappings are wellformed
+  defn check-mapping-keys-wellformed (env:TypeEnv, ms:Seqable<Mapping>) :
+    all?(check-mapping-keys-wellformed{env, _}, ms)
+  defn check-mapping-keys-wellformed (env:TypeEnv, m:Mapping) :
+    for [src,dst] in kvs(mappings(m)) all? :
+      match(check-pin(env,src)) :
+        (t:PinType) : true
+        (t) : false
+
+
   ;Check that a package pad mapping is wellformed
   defn check-pad-mapping (component-name:Symbol, package-name:Symbol, m:Mapping) :
     val cenv = ComponentEnv(ir-table, component-name)
     val defc = component(ir-table, component-name)
-    val mt = MappingTable(cenv, true, mentries) where :
-      val mentries = Vector<MapEntry>()
-      for p in pins(defc) do :
-        add(mentries, MapEntry(Ref(name(p)), Ref(name(p)), 0, 0))
-      for [pin-ref, pad] in kvs(mappings(m)) do :
-        add(mentries, MapEntry(pin-ref, pad))
-    val ptable = ptable(ir-table, package-name)
-    for e in mt do :
-      report-error(BadPackagePad(package-name, ref(e))) when pad?(ptable,ref(e)) is False
+    if check-mapping-keys-wellformed(cenv, m) :
+      val mt = MappingTable(cenv, true, mentries) where :
+        val mentries = Vector<MapEntry>()
+        for p in pins(defc) do :
+          add(mentries, MapEntry(Ref(name(p)), Ref(name(p)), 0, 0))
+        for [pin-ref, pad] in kvs(mappings(m)) do :
+          add(mentries, MapEntry(pin-ref, pad))
+      val ptable = ptable(ir-table, package-name)
+      for e in mt do :
+        report-error(BadPackagePad(package-name, ref(e))) when pad?(ptable,ref(e)) is False
+
 
   ;Check no redundant requires statements from instances
   defn check-redundant-requires (mtable:MTable) :
@@ -537,63 +624,124 @@ defn type-check (prog:Collection<TStmt>) :
 
   ;Check mstmts
   defn check-mstmts (ctxt:TContext, env:TypeEnv, mtable:MTable, ss:Seqable<MStmt>) :
+    ;Track the types defined by previous nets
+    val prev-net-table = HashTable<Symbol, PinType>()
+
+    defn check-anchor (r:Ref|False) :
+      ;1. Anchor must be an instance of a component
+      ;2. Anchor must be defined in current module
+      ;3. Anchor must not have an anchor itself
+      defn inst-of-component? (r:Ref) -> True|False :
+        check-inst-of-component(env,r) is InstType
+      defn in-current-module? (r0:Ref) -> True|False :
+        let loop (r:Ref = r0) :
+          match(r) :
+            (r:VarRef) : true
+            (r:FieldRef) : report-error(BadAnchorRef(ctxt, r0))
+            (r:IndexRef) : loop(ref(r))
+      defn no-anchor? (r:Ref) -> True|False :
+        val anchor = attempt: anchor(package?(mtable,r) as? PackageStmt)
+        match(anchor:Ref) : report-error(ChainedAnchor(ctxt, r))
+        else : true
+      match(r:Ref) :
+        inst-of-component?(r) and
+        in-current-module?(r) and
+        no-anchor?(r)    
+
+    ;Factor out check for SupportsStmt as it is used for checking both
+    ;SupportsStmt and InstSupportsStmt
+    defn check (ms:SupportsStmt) :
+      ;Check requirements are wellformed
+      for option in options(ms) do :
+        check-mstmts(ctxt, env, mtable, requires(option))
+
+      ;Check that pin-properties are wellformed.
+      ;Their references must refer to a pin.
+      for option in options(ms) do :
+        val senv = SupportOptionEnv(env, option)
+        for p in properties(option) do :
+          check-pin(senv, ref(p))
+            
+      ;1. Check that there is an appropriate mapping defined.
+      ;  1. If the capability requires pins, then a mapping must be given.
+      ;  2. If the capability does not support pins, then no mapping can be given.
+      ;2. Check that mappings are wellformed
+      ;  1. The left-hand-side refers to capability pins
+      ;  2. The right-hand-side refers to component pins
+      ;  3. The left-hand-side and right-hand-side have same type.
+      ;3. Check that mappings are complete and unambiguous
+      for option in options(ms) do :
+        val def = capability(ir-table, capability(ms))
+        match(type(def), empty?(mapping(option))) :
+          (t:PinType, e:True) :
+            report-error(NoCapabilityMapping(capability(ms), t))
+          (t:False, e:False) :
+            report-error(IllegalCapabilityMapping(capability(ms)))
+          (t:False, e:True) :
+            false
+          (t:PinType, e:False) :
+            ;Check mappings are wellformed
+            val cenv = CapabilityEnv(ir-table, Ref(capability(ms)), Capability(capability(ms)))
+            val senv = SupportOptionEnv(env, option)
+            val wellformed? = for [src, dst] in kvs(mappings(mapping(option))) all? :
+              val t0 = check-pin(cenv, src)
+              val t1 = check-pin(senv, dst)
+              match(t0:PinType, t1:PinType) :                          
+                if t0 == t1 : true
+                else : report-error(UnmatchedSupportsTypeError(src, t0, dst, t1))
+            ;Check mappings are complete and unambiguous
+            if wellformed? :
+              ;Construct mapping table
+              val table = MappingTable{cenv, false, _} $
+                for [src, dst] in kvs(mappings(mapping(option))) seq :
+                  MapEntry(src, dst)
+              ;Check that every expanded ref is listed in mapping table
+              for ref in expand(cenv, Ref(capability(ms))) do :
+                if not key?(table,ref) :
+                  report-error(NoCapabilityPortMappingError(ref))
+                      
     for ms in ss do :
       match(ms) :
         (ms:NetStmt) :
           if not empty?(refs(ms)) :
-            val ts = map(check-pin{env, _}, refs(ms))
             val r0 = head(refs(ms))
-            val t0 = head(ts)
-            for (t in tail(ts), r in tail(refs(ms))) do :
-              match(t0:PinType, t:PinType) :
-                if t != t0 :
-                  report-error(BadNetType(ctxt, name(ms), r0, t0, r, t))
+            val t0 = check-pin(env, r0)
+            match(t0:PinType) :
+              ;If net is named, then check that it is of the right type.
+              match(name(ms)) :
+                (name:Symbol) :
+                  match(get?(prev-net-table, name)) :
+                    ;The given name refers to a previously declared net.
+                    (t:PinType) :
+                      report-error(BadPrevNetType(ctxt, head(refs(ms)), t0, t, name)) when t != t0                        
+                    ;First time referencing this net, so it's okay.
+                    (t:False) :
+                      prev-net-table[name] = t0
+                ;Unnamed net
+                (name:False) : false
+              ;Check that net references are well formed and of the same type.
+              val ts = map(check-pin{env, _}, refs(ms))
+              for (t in tail(ts), r in tail(refs(ms))) do :
+                match(t:PinType) :
+                  report-error(BadNetType(ctxt, name(ms), r0, t0, r, t)) when t != t0                    
         (ms:InstStmt) :
           false
         (ms:NodeStmt) :
           false
         (ms:SupportsStmt) :
-          ;Check requirements are wellformed
-          for option in options(ms) do :
-            check-mstmts(ctxt, env, mtable, requires(option))
-                
-          ;1. Check that there is an appropriate mapping defined.
-          ;  1. If the capability requires pins, then a mapping must be given.
-          ;  2. If the capability does not support pins, then no mapping can be given.
-          ;2. Check that mappings are wellformed
-          ;  1. The left-hand-side refers to capability pins
-          ;  2. The right-hand-side refers to component pins
-          ;  3. The left-hand-side and right-hand-side have same type.
-          ;3. Check that mappings are complete and unambiguous
-          for option in options(ms) do :
-            val def = capability(ir-table, capability(ms))
-            match(type(def), empty?(mapping(option))) :
-              (t:PinType, e:True) :
-                report-error(NoCapabilityMapping(capability(ms), t))
-              (t:False, e:False) :
-                report-error(IllegalCapabilityMapping(capability(ms)))
-              (t:False, e:True) :
-                false
-              (t:PinType, e:False) :
-                ;Check mappings are wellformed
-                val cenv = CapabilityEnv(ir-table, Ref(capability(ms)), Capability(capability(ms)))
-                val senv = SupportOptionEnv(env, option)
-                val wellformed? = for [src, dst] in kvs(mappings(mapping(option))) all? :
-                  val t0 = check-pin(cenv, src)
-                  val t1 = check-pin(senv, dst)
-                  match(t0:PinType, t1:PinType) :                          
-                    if t0 == t1 : true
-                    else : report-error(UnmatchedSupportsTypeError(src, t0, dst, t1))
-                ;Check mappings are complete and unambiguous
-                if wellformed? :
-                  ;Construct mapping table
-                  val table = MappingTable{cenv, false, _} $
-                    for [src, dst] in kvs(mappings(mapping(option))) seq :
-                      MapEntry(src, dst)
-                  ;Check that every expanded ref is listed in mapping table
-                  for ref in expand(cenv, Ref(capability(ms))) do :
-                    if not key?(table,ref) :
-                      report-error(NoCapabilityPortMappingError(ref))
+          check(ms)
+        (ms:InstSupportsStmt) :
+          check(supports-stmt(ms))
+        (ms:PinPropertiesStmt) :
+          ;The reference must refer to a pin/port
+          check-pin(env, ref(ms))
+        (ms:ConnectionStmt) :
+          ;The references must refer to a pin/port
+          val refs = for a in args(ms) seq-cat :
+            match(a:Ref) : [a]
+            else : a as Seqable<Ref>
+          for r in refs do :
+            check-pin(env, r)
         (ms:RequireStmt) :
           ;1. Check that instance is defined as a single instance
           ;2. Check that the instance actually supports that capability
@@ -612,14 +760,16 @@ defn type-check (prog:Collection<TStmt>) :
             /report-error(e)
             errors? = true
             
-          val inst-t = check-inst(env, inst(ms))
-          match(inst-t:InstType) :
+          val inst-t = check-requirement-source(env, inst(ms))
+          match(inst-t:InstType|InstSupportsType) :
             let :
               val cname = name(base(capability(ms)))
-              val supports = supports(cmtable(ir-table, component(inst-t)))
+              val supports = match(inst-t) :
+                (inst-t:InstType) : supports(cmtable(ir-table, component(inst-t)))
+                (inst-t:InstSupportsType) : seq(supports-stmt, inst-supports(mtable, inst(ms)))
               val capability-supported? = any?({capability(_) == cname}, supports)
               if not capability-supported? :
-                report-error(UnsupportedCapability(inst(ms), component(inst-t), cname))
+                report-error(UnsupportedCapability(inst(ms), inst-t, cname))
             if not errors? :
               val c = capability(ir-table, name(base(capability(ms))))
               match(name(ms), type(c)) :
@@ -640,8 +790,6 @@ defn type-check (prog:Collection<TStmt>) :
                 MappingTable{lhs-env, false, _} $
                   for [src, dst] in kvs(mappings(mapping(ms))) seq :
                     MapEntry(src, dst)
-        (ms:InstSupportsStmt) :
-          false
         (ms:PackageStmt) :
           val component = match(instance?(ms), ref(ms)) :
             (i?:True, r:Ref) : attempt: component(check-inst(env, r) as? InstType)
@@ -653,6 +801,19 @@ defn type-check (prog:Collection<TStmt>) :
                 report-error(NotAnInstComponent(ref(ms), component))
               else : check-pad-mapping(component, name, mapping)
             (component, nm) : false
+          ;Check anchor
+          check-anchor(anchor(ms))
+          match(anchor(ms), pose(ms), side(ms)) :
+            (a:Ref, p:False, sd:False) : report-error(AnchorWithoutPose(ctxt, ref(ms), a))
+            (a, p, s) : false
+          ;Check pose/side consistency
+          match(pose(ms), side(ms)) :
+            (p:Pose, s:Side) :
+              if not consistent?(p,s) :
+                report-error(InconsistentPoseSide(ref(ms), p, s))
+            (p:Pose, s:False) :
+              report-error(PoseWithoutSide(ref(ms)))
+            (p, s) : false
         (ms:EModelStmt) :
           val t = check-inst-of-component(env, ref(ms))
           match(t:InstType) :
@@ -666,12 +827,51 @@ defn type-check (prog:Collection<TStmt>) :
           check-inst-of-component(env, ref(ms))
         (ms:ReferenceStmt) :
           check-inst-of-component(env, ref(ms))
+        (ms:SchematicGroupStmt) :
+          ;Possible cases:
+          ;Case 1: (unit is false, ref refers to a pin)
+          ;  Ensure that it is a pin of an instance of a component
+          ;Case 2: (unit is false, ref refers to an inst)
+          ;  It's fine
+          ;Case 3: (unit is int, ref refers to an inst)
+          ;  Ensure it is an instance of a component
+          ;Error 1: Schematic group statement expects a reference
+          ;to a pin or an instance.
+          ;Error 2: If an explicit symbol unit is given, then reference
+          ;must be to an instance of a component.
+          match(unit(ms), check-ref(env, ref(ms))) :
+            ;Case 1
+            (unit:False, type:PinType) : check-component-pin(env, ref(ms), "schematic group")
+            ;Case 2
+            (unit:False, type:InstType|InstArray) : false
+            ;Error 1
+            (unit:False, type:RefType) : bad-type(type, true)
+            ;Case 3
+            (unit:Int, type:InstType) : check-inst-of-component(env, ref(ms))
+            ;Error 2
+            (unit:Int, type:PinType) : bad-pin-reference()
+            ;Error 1
+            (unit:Int, type:RefType) : bad-type(type, false)
+            ;Other error
+            (unit, type:False) : false
+          where :
+            defn bad-type (type:RefType, array?:True|False) : report-error(NotAnInst(ref(ms), type, array?))
+            defn bad-pin-reference () : report-error(BadSchematicGroupPinReference(ref(ms)))
+        (ms:MaxCurrentDrawStmt) :
+          for r in refs(ms) do :
+            check-single-component-pin(env, r, "max-current-draw")
+        (ms:EStateStmt) :
+          check-single-component-pin(env, ref(ms), "estate")
         (ms:AttachStmt) :
           for arg in args(ms) do :
             match(check-ref(env, arg)) :
               (t:InstType|InstArray|PinType) : false
               (t:RefType) : report-error(NotAPinOrInst(arg, t))
               (t:False) : false
+        (ms:SupportedByStmt) :
+          ;TODO: Very quick and dirty
+          if port?(ms) : check-pin(env, ref(ms))
+          else : check-requirement-source(env, head(ref(ms)))
 
   for s in prog do :
     match(s) :
@@ -725,6 +925,13 @@ defn type-check (prog:Collection<TStmt>) :
         val env = ComponentEnv(ir-table, name(s))
         for cs in stmts(s) do :
           match(cs) :
+            (cs:GroundStmt) :
+              do(check-ref{env, _}, refs(cs))
+            (cs:PowerStmt) :
+              do(check-ref{env, _}, refs(cs))
+            (cs:DiffPairStmt) :
+              for r in cat-all(pairs(cs)) do :
+                check-single-pin(env, r, "diffpairs")
             (cs:DefaultPackageStmt) :
               check-pad-mapping(name(s), package(cs), mapping(cs))
             (cs:DefaultEModelStmt) :
@@ -737,9 +944,23 @@ defn type-check (prog:Collection<TStmt>) :
               val defp = part(ir-table, part(cs))
               if not weak-match?(defp, req) :
                 report-error(InappropriateDefaultPart(false, name(s), package, emodel, defp))
+            (cs:MaxCurrentDrawStmt) :
+              for r in refs(cs) do :
+                check-single-pin(env, r, "max-current-draw")
+            (cs:EStateStmt) :
+              check-single-pin(env, ref(cs), "estate")
             (cs:ReferencePrefixStmt) :
               false
+            (cs:PinPropertiesStmt) :
+              ;Check that reference refers to a pin.
+              check-pin(env, ref(cs))              
             (cs:SupportsStmt) :
+              ;Check that pin-properties are wellformed.n
+              ;Their references must refer to a pin.
+              for option in options(cs) do :
+                for p in properties(option) do :
+                  check-pin(env, ref(p))
+
               ;1. Check that there is an appropriate mapping defined.
               ;  1. If the capability requires pins, then a mapping must be given.
               ;  2. If the capability does not support pins, then no mapping can be given.
@@ -784,18 +1005,36 @@ defn type-check (prog:Collection<TStmt>) :
         false
       (s:DefPackage) :
         false
-      (s:MakeBoard) :
-        ;Check top-level appropriateness
+      (s:MakeSchematic) :
         val defm = module(ir-table, module(s))
         if not empty?(pins(defm)) :
           report-error(BadTopLevelModule(module(s)))
 
-public defn check (prog:Collection<TStmt>) :
+;<doc>=======================================================
+;===================== Driver ===============================
+;============================================================
+
+Input:
+  prog:Collection<TStmt>
+  intermediate-lowering?:True|False
+Description:
+  - prog is the collection statements to check for consistency.
+  - intermediate-lowering? is expected to be false if this is the
+    initial input from the user. Internal IR constructs (such as inst
+    supports) are not allowed at this stage.
+
+;============================================================
+;=======================================================<doc>
+
+
+public defn check (prog:Collection<TStmt>, intermediate-lowering?:True|False) :
   fork-on-seq(prog,
     [check-type-cycles,
      check-module-cycles,
-     check-definitions])
+     check-definitions{_, intermediate-lowering?}])
   end-if-errors()
   type-check(prog)
 
-add-plugin-entry-point(`check, `check, check)
+add-plugin-entry-point(`check, `check,
+  fn ([prog, intermediate-lowering?]:[Collection<TStmt>, True|False]) :
+    check(prog, intermediate-lowering?))

@@ -1,0 +1,3224 @@
+defpackage xcku060-cmp :
+  import core
+  import collections
+  import components
+  import symbols
+  import math
+  import input-spec/ir
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-connections
+  import rtm/ir-utils
+#use-added-syntax(ir-gen)
+pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
+  port aurora-0-clk : diff-pair
+  port aurora-1-clk : diff-pair
+  port ddr3-clk : diff-pair
+  port ddr3-dqs-0 : diff-pair
+  port ddr3-dqs-1 : diff-pair
+  port ddr3-dqs-2 : diff-pair
+  port ddr3-dqs-3 : diff-pair
+  port dmu-pdw-clk-0 : diff-pair
+  port dmu-pdw-clk-1 : diff-pair
+  port dmu-pdw-clk-2 : diff-pair
+  port dmu-pdw-clk-3 : diff-pair
+  port dmu-pdw-dval-0 : diff-pair
+  port dmu0-pdw-data-0 : diff-pair
+  port dmu0-pdw-data-1 : diff-pair
+  port fpga-aurora-rx0 : diff-pair
+  port fpga-aurora-rx1 : diff-pair
+  port lbdr-bus-0-0 : diff-pair
+  port lbdr-bus-0-1 : diff-pair
+  port lbdr-bus-0-2 : diff-pair
+  port lbdr-bus-1-0 : diff-pair
+  port lbdr-bus-1-1 : diff-pair
+  port lbdr-bus-1-2 : diff-pair
+  port lvds-cpld-fpga-0 : diff-pair
+  port lvds-cpld-fpga-1 : diff-pair
+  port lvds-cpld-fpga-2 : diff-pair
+  port lvds-cpld-fpga-3 : diff-pair
+  port lvds-fpga-cpld-0 : diff-pair
+  port lvds-fpga-cpld-1 : diff-pair
+  port lvds-fpga-cpld-2 : diff-pair
+  port lvds-fpga-cpld-3 : diff-pair
+  port pci-exp-rx : diff-pair
+  port pci-exp-tx : diff-pair
+  port mids-int : fullduplex-uart-w-enable
+  port pod-a-blank-1 : fullduplex-uart-w-enable
+  port pod-a-blank-2 : fullduplex-uart-w-enable
+  port pod-a-blank-3 : fullduplex-uart-w-enable
+  port pod-a-blank-4 : fullduplex-uart-w-enable
+  port pod-a-blank-5 : fullduplex-uart-w-enable
+  port pod-ab-aft-1 : fullduplex-uart-w-enable
+  port pod-ab-aft-2 : fullduplex-uart-w-enable
+  port pod-ab-aft-3 : fullduplex-uart-w-enable
+  port pod-ab-aft-4 : fullduplex-uart-w-enable
+  port pod-ab-aft-5 : fullduplex-uart-w-enable
+  port pod-ab-fwd-1 : fullduplex-uart-w-enable
+  port pod-ab-fwd-2 : fullduplex-uart-w-enable
+  port pod-ab-fwd-3 : fullduplex-uart-w-enable
+  port pod-ab-fwd-4 : fullduplex-uart-w-enable
+  port pod-ab-fwd-5 : fullduplex-uart-w-enable
+  port pod-blank-a : fullduplex-uart-w-enable
+  port pod-blank-b : fullduplex-uart-w-enable
+  port pod-exciter-sync-1 : fullduplex-uart-w-enable
+  port pod-exciter-sync-2 : fullduplex-uart-w-enable
+  port pod-exciter-sync-3 : fullduplex-uart-w-enable
+  port pod-exciter-sync-4 : fullduplex-uart-w-enable
+  port pod-exciter-sync-5 : fullduplex-uart-w-enable
+  port pod-f-blank-1 : fullduplex-uart-w-enable
+  port pod-f-blank-2 : fullduplex-uart-w-enable
+  port pod-f-blank-3 : fullduplex-uart-w-enable
+  port pod-f-blank-4 : fullduplex-uart-w-enable
+  port pod-f-blank-5 : fullduplex-uart-w-enable
+  port xcvr-spare-1 : fullduplex-uart-w-enable
+  port xcvr-spare-2 : fullduplex-uart-w-enable
+  port xcvr-spare-3 : fullduplex-uart-w-enable
+  port xcvr-spare-4 : fullduplex-uart-w-enable
+  port xcvr-spare-5 : fullduplex-uart-w-enable
+  port xcvr-spare-6 : fullduplex-uart-w-enable
+  port xcvr-spare-7 : fullduplex-uart-w-enable
+  port xcvr-spare-8 : fullduplex-uart-w-enable
+  port xcvr-spare-9 : fullduplex-uart-w-enable
+  port xcvr-spare-10 : fullduplex-uart-w-enable
+  port xcvr-spare-11 : fullduplex-uart-w-enable
+  port xcvr-spare-12 : fullduplex-uart-w-enable
+  port fpga-i2c : i2c
+  pin alt-xmit-tag-rx
+  pin audio-anlg-mcp-fail
+  pin audio-anlg-rcd-fail
+  pin audio-clr-n
+  pin audio-cs-n
+  pin audio-ldac-n
+  pin audio-out-0
+  pin audio-out-1
+  pin audio-out-2
+  pin audio-out-3
+  pin audio-out-4
+  pin audio-out-5
+  pin audio-out-6
+  pin audio-out-7
+  pin audio-pd-n
+  pin audio-wr-n
+  pin cb-ad-0
+  pin cb-ad-1
+  pin cb-ad-2
+  pin cb-ad-3
+  pin cb-ad-4
+  pin cb-ad-5
+  pin cb-ad-6
+  pin cb-ad-7
+  pin cb-ad-8
+  pin cb-ad-9
+  pin cb-ad-10
+  pin cb-ad-11
+  pin cb-ad-12
+  pin cb-ad-13
+  pin cb-ad-14
+  pin cb-ad-15
+  pin cb-ad-stb-tx-rx-n
+  pin cb-ad-tx-rx-n
+  pin cb-addr-strb
+  pin cb-data-strb
+  pin cb-frq-stb-tx-rx-n
+  pin cb-frq-strb
+  pin cclk-0
+  pin cfgbvs-0
+  pin clk-in-10mhz
+  pin clk-in-25mhz
+  pin config-done
+  pin cpld-spare-io-0
+  pin cpld-spare-io-1
+  pin cpld-spare-io-2
+  pin cpld-spare-io-3
+  pin cpld-spare-io-4
+  pin cpld-spare-io-5
+  pin cpld-spare-io-6
+  pin cpld-spare-io-7
+  pin cpld-spare-io-8
+  pin cpld-spare-io-9
+  pin cpld-spare-io-10
+  pin cpld-spare-io-11
+  pin cpld-spare-io-12
+  pin cpld-spare-io-13
+  pin cpld-spare-io-14
+  pin cpld-spare-io-15
+  pin d00-mosi-0
+  pin d01-din-0
+  pin d02-0
+  pin d03-0
+  pin ddr3-addr-0
+  pin ddr3-addr-1
+  pin ddr3-addr-2
+  pin ddr3-addr-3
+  pin ddr3-addr-4
+  pin ddr3-addr-5
+  pin ddr3-addr-6
+  pin ddr3-addr-7
+  pin ddr3-addr-8
+  pin ddr3-addr-9
+  pin ddr3-addr-10
+  pin ddr3-addr-11
+  pin ddr3-addr-12
+  pin ddr3-addr-13
+  pin ddr3-addr-14
+  pin ddr3-ba-0
+  pin ddr3-ba-1
+  pin ddr3-ba-2
+  pin ddr3-cas-n
+  pin ddr3-clk-en
+  pin ddr3-cs-n
+  pin ddr3-dm-0
+  pin ddr3-dm-1
+  pin ddr3-dm-2
+  pin ddr3-dm-3
+  pin ddr3-dq-0
+  pin ddr3-dq-1
+  pin ddr3-dq-2
+  pin ddr3-dq-3
+  pin ddr3-dq-4
+  pin ddr3-dq-5
+  pin ddr3-dq-6
+  pin ddr3-dq-7
+  pin ddr3-dq-8
+  pin ddr3-dq-9
+  pin ddr3-dq-10
+  pin ddr3-dq-11
+  pin ddr3-dq-12
+  pin ddr3-dq-13
+  pin ddr3-dq-14
+  pin ddr3-dq-15
+  pin ddr3-dq-16
+  pin ddr3-dq-17
+  pin ddr3-dq-18
+  pin ddr3-dq-19
+  pin ddr3-dq-20
+  pin ddr3-dq-21
+  pin ddr3-dq-22
+  pin ddr3-dq-23
+  pin ddr3-dq-24
+  pin ddr3-dq-25
+  pin ddr3-dq-26
+  pin ddr3-dq-27
+  pin ddr3-dq-28
+  pin ddr3-dq-29
+  pin ddr3-dq-30
+  pin ddr3-dq-31
+  pin ddr3-int-n
+  pin ddr3-odt
+  pin ddr3-ras-n
+  pin ddr3-reset-n
+  pin ddr3-we-n
+  pin dmc-int-n
+  pin dmu-alt-blank
+  pin dmu-en-0
+  pin dmu-en-1
+  pin dmu-en-2
+  pin dmu-en-3
+  pin dmu-iff-blank
+  pin dmu-int-n-0
+  pin dmu-int-n-1
+  pin dmu-int-n-2
+  pin dmu-int-n-3
+  pin dmu-mids-blank
+  pin dmu-pdw-dval-p-1
+  pin dmu-pdw-dval-p-2
+  pin dmu-pdw-dval-p-3
+  pin dmu-radar-blank
+  pin dmu-rxa-blank
+  pin dmu-rxb-blank
+  pin dmu-tacan-blank
+  pin dmu0-pdw-data-p-2
+  pin dmu0-pdw-data-p-3
+  pin dmu1-pdw-data-p-0
+  pin dmu1-pdw-data-p-1
+  pin dmu1-pdw-data-p-2
+  pin dmu1-pdw-data-p-3
+  pin dmu2-pdw-data-p-0
+  pin dmu2-pdw-data-p-1
+  pin dmu2-pdw-data-p-2
+  pin dmu2-pdw-data-p-3
+  pin dmu3-pdw-data-p-0
+  pin dmu3-pdw-data-p-1
+  pin dmu3-pdw-data-p-2
+  pin dmu3-pdw-data-p-3
+  pin done-0
+  pin dxn
+  pin dxp
+  pin fpga-reset-n
+  pin fpga-test-dwell-en
+  pin fpga-test-points-0
+  pin fpga-test-points-1
+  pin fpga-test-points-2
+  pin fpga-test-points-3
+  pin fpga-test-points-4
+  pin fpga-test-points-5
+  pin fpga-test-points-6
+  pin fpga-test-points-7
+  pin fpga-test-points-8
+  pin fpga-test-points-9
+  pin fpga-test-points-10
+  pin fpga-test-points-11
+  pin fpga-test-points-12
+  pin fpga-test-points-13
+  pin fpga-test-points-14
+  pin fpga-test-points-15
+  pin gnd
+  pin gndadc
+  pin iff-xmit-tag-rx
+  pin init-b-0
+  pin init-clk-m
+  pin init-clk-p
+  pin io-l10n-t1u-n7-qbc-ad4n-45
+  pin io-l10n-t1u-n7-qbc-ad4n-66
+  pin io-l10n-t1u-n7-qbc-ad4n-67
+  pin io-l10n-t1u-n7-qbc-ad4n-68
+  pin io-l10p-t1u-n6-qbc-ad4p-45
+  pin io-l10p-t1u-n6-qbc-ad4p-66
+  pin io-l10p-t1u-n6-qbc-ad4p-68
+  pin io-l11n-t1u-n9-gc-45
+  pin io-l11n-t1u-n9-gc-66
+  pin io-l11p-t1u-n8-gc-45
+  pin io-l11p-t1u-n8-gc-66
+  pin io-l12n-t1u-n11-gc-45
+  pin io-l12n-t1u-n11-gc-66
+  pin io-l12p-t1u-n10-gc-45
+  pin io-l12p-t1u-n10-gc-66
+  pin io-l13n-t2l-n1-gc-qbc-45
+  pin io-l13n-t2l-n1-gc-qbc-46
+  pin io-l13n-t2l-n1-gc-qbc-66
+  pin io-l13p-t2l-n0-gc-qbc-45
+  pin io-l13p-t2l-n0-gc-qbc-46
+  pin io-l13p-t2l-n0-gc-qbc-66
+  pin io-l14n-t2l-n3-gc-45
+  pin io-l14n-t2l-n3-gc-46
+  pin io-l14n-t2l-n3-gc-66
+  pin io-l14p-t2l-n2-gc-45
+  pin io-l14p-t2l-n2-gc-46
+  pin io-l14p-t2l-n2-gc-66
+  pin io-l15n-t2l-n5-ad11n-25
+  pin io-l15n-t2l-n5-ad11n-45
+  pin io-l15n-t2l-n5-ad11n-46
+  pin io-l15n-t2l-n5-ad11n-66
+  pin io-l15n-t2l-n5-ad11n-67
+  pin io-l15n-t2l-n5-ad11n-68
+  pin io-l15p-t2l-n4-ad11p-25
+  pin io-l15p-t2l-n4-ad11p-44
+  pin io-l15p-t2l-n4-ad11p-45
+  pin io-l15p-t2l-n4-ad11p-46
+  pin io-l15p-t2l-n4-ad11p-66
+  pin io-l15p-t2l-n4-ad11p-68
+  pin io-l16n-t2u-n7-qbc-ad3n-45
+  pin io-l16n-t2u-n7-qbc-ad3n-46
+  pin io-l16n-t2u-n7-qbc-ad3n-66
+  pin io-l16n-t2u-n7-qbc-ad3n-67
+  pin io-l16n-t2u-n7-qbc-ad3n-68
+  pin io-l16p-t2u-n6-qbc-ad3p-45
+  pin io-l16p-t2u-n6-qbc-ad3p-46
+  pin io-l16p-t2u-n6-qbc-ad3p-66
+  pin io-l16p-t2u-n6-qbc-ad3p-68
+  pin io-l17n-t2u-n9-ad10n-24
+  pin io-l17n-t2u-n9-ad10n-45
+  pin io-l17n-t2u-n9-ad10n-46
+  pin io-l17n-t2u-n9-ad10n-66
+  pin io-l17n-t2u-n9-ad10n-67
+  pin io-l17p-t2u-n8-ad10p-45
+  pin io-l17p-t2u-n8-ad10p-46
+  pin io-l17p-t2u-n8-ad10p-66
+  pin io-l18n-t2u-n11-ad2n-24
+  pin io-l18n-t2u-n11-ad2n-45
+  pin io-l18n-t2u-n11-ad2n-46
+  pin io-l18n-t2u-n11-ad2n-67
+  pin io-l18p-t2u-n10-ad2p-24
+  pin io-l18p-t2u-n10-ad2p-45
+  pin io-l18p-t2u-n10-ad2p-46
+  pin io-l19n-t3l-n1-dbc-ad9n-24
+  pin io-l19n-t3l-n1-dbc-ad9n-25
+  pin io-l19n-t3l-n1-dbc-ad9n-45
+  pin io-l19n-t3l-n1-dbc-ad9n-46
+  pin io-l19p-t3l-n0-dbc-ad9p-24
+  pin io-l19p-t3l-n0-dbc-ad9p-45
+  pin io-l19p-t3l-n0-dbc-ad9p-46
+  pin io-l1n-t0l-n1-dbc-24
+  pin io-l1n-t0l-n1-dbc-44
+  pin io-l1n-t0l-n1-dbc-46
+  pin io-l1n-t0l-n1-dbc-48
+  pin io-l1n-t0l-n1-dbc-66
+  pin io-l1n-t0l-n1-dbc-67
+  pin io-l1n-t0l-n1-dbc-68
+  pin io-l1p-t0l-n0-dbc-24
+  pin io-l1p-t0l-n0-dbc-45
+  pin io-l1p-t0l-n0-dbc-48
+  pin io-l1p-t0l-n0-dbc-66
+  pin io-l1p-t0l-n0-dbc-68
+  pin io-l20n-t3l-n3-ad1n-24
+  pin io-l20n-t3l-n3-ad1n-25
+  pin io-l20n-t3l-n3-ad1n-45
+  pin io-l20n-t3l-n3-ad1n-46
+  pin io-l20p-t3l-n2-ad1p-24
+  pin io-l20p-t3l-n2-ad1p-25
+  pin io-l20p-t3l-n2-ad1p-45
+  pin io-l20p-t3l-n2-ad1p-46
+  pin io-l21n-t3l-n5-ad8n-24
+  pin io-l21n-t3l-n5-ad8n-25
+  pin io-l21n-t3l-n5-ad8n-45
+  pin io-l21n-t3l-n5-ad8n-46
+  pin io-l21n-t3l-n5-ad8n-67
+  pin io-l21p-t3l-n4-ad8p-24
+  pin io-l21p-t3l-n4-ad8p-25
+  pin io-l21p-t3l-n4-ad8p-45
+  pin io-l21p-t3l-n4-ad8p-46
+  pin io-l22n-t3u-n7-dbc-ad0n-24
+  pin io-l22n-t3u-n7-dbc-ad0n-45
+  pin io-l22n-t3u-n7-dbc-ad0n-46
+  pin io-l22n-t3u-n7-dbc-ad0n-67
+  pin io-l22p-t3u-n6-dbc-ad0p-24
+  pin io-l22p-t3u-n6-dbc-ad0p-45
+  pin io-l22p-t3u-n6-dbc-ad0p-46
+  pin io-l23n-t3u-n9-24
+  pin io-l23n-t3u-n9-44
+  pin io-l23n-t3u-n9-45
+  pin io-l23n-t3u-n9-46
+  pin io-l23n-t3u-n9-67
+  pin io-l23p-t3u-n8-24
+  pin io-l23p-t3u-n8-45
+  pin io-l23p-t3u-n8-46
+  pin io-l24n-t3u-n11-24
+  pin io-l24n-t3u-n11-44
+  pin io-l24n-t3u-n11-45
+  pin io-l24n-t3u-n11-46
+  pin io-l24n-t3u-n11-dout-cso-b-65
+  pin io-l24p-t3u-n10-24
+  pin io-l24p-t3u-n10-44
+  pin io-l24p-t3u-n10-45
+  pin io-l24p-t3u-n10-46
+  pin io-l24p-t3u-n10-emcclk-65
+  pin io-l2n-t0l-n3-24
+  pin io-l2n-t0l-n3-48
+  pin io-l2n-t0l-n3-66
+  pin io-l2n-t0l-n3-67
+  pin io-l2n-t0l-n3-68
+  pin io-l2p-t0l-n2-24
+  pin io-l2p-t0l-n2-48
+  pin io-l2p-t0l-n2-66
+  pin io-l3n-t0l-n5-ad15n-48
+  pin io-l3n-t0l-n5-ad15n-66
+  pin io-l3n-t0l-n5-ad15n-67
+  pin io-l3n-t0l-n5-ad15n-68
+  pin io-l3p-t0l-n4-ad15p-24
+  pin io-l3p-t0l-n4-ad15p-48
+  pin io-l3p-t0l-n4-ad15p-66
+  pin io-l3p-t0l-n4-ad15p-68
+  pin io-l4n-t0u-n7-dbc-ad7n-48
+  pin io-l4n-t0u-n7-dbc-ad7n-66
+  pin io-l4n-t0u-n7-dbc-ad7n-67
+  pin io-l4n-t0u-n7-dbc-ad7n-68
+  pin io-l4p-t0u-n6-dbc-ad7p-48
+  pin io-l4p-t0u-n6-dbc-ad7p-66
+  pin io-l4p-t0u-n6-dbc-ad7p-68
+  pin io-l5n-t0u-n9-ad14n-48
+  pin io-l5n-t0u-n9-ad14n-66
+  pin io-l5n-t0u-n9-ad14n-67
+  pin io-l5n-t0u-n9-ad14n-68
+  pin io-l5p-t0u-n8-ad14p-48
+  pin io-l5p-t0u-n8-ad14p-66
+  pin io-l5p-t0u-n8-ad14p-68
+  pin io-l6n-t0u-n11-ad6n-48
+  pin io-l6n-t0u-n11-ad6n-66
+  pin io-l6n-t0u-n11-ad6n-67
+  pin io-l6p-t0u-n10-ad6p-48
+  pin io-l6p-t0u-n10-ad6p-66
+  pin io-l7n-t1l-n1-qbc-ad13n-46
+  pin io-l7n-t1l-n1-qbc-ad13n-48
+  pin io-l7n-t1l-n1-qbc-ad13n-66
+  pin io-l7n-t1l-n1-qbc-ad13n-67
+  pin io-l7n-t1l-n1-qbc-ad13n-68
+  pin io-l7p-t1l-n0-qbc-ad13p-48
+  pin io-l7p-t1l-n0-qbc-ad13p-66
+  pin io-l8n-t1l-n3-ad5n-45
+  pin io-l8n-t1l-n3-ad5n-66
+  pin io-l8n-t1l-n3-ad5n-67
+  pin io-l8p-t1l-n2-ad5p-45
+  pin io-l8p-t1l-n2-ad5p-48
+  pin io-l8p-t1l-n2-ad5p-66
+  pin io-l8p-t1l-n2-ad5p-68
+  pin io-l9n-t1l-n5-ad12n-45
+  pin io-l9n-t1l-n5-ad12n-66
+  pin io-l9n-t1l-n5-ad12n-67
+  pin io-l9n-t1l-n5-ad12n-68
+  pin io-l9p-t1l-n4-ad12p-45
+  pin io-l9p-t1l-n4-ad12p-66
+  pin io-l9p-t1l-n4-ad12p-68
+  pin io-t0u-n12-vrp-44
+  pin io-t0u-n12-vrp-46
+  pin io-t0u-n12-vrp-47
+  pin io-t0u-n12-vrp-48
+  pin io-t0u-n12-vrp-66
+  pin io-t0u-n12-vrp-67
+  pin io-t1u-n12-45
+  pin io-t1u-n12-46
+  pin io-t1u-n12-66
+  pin io-t1u-n12-67
+  pin io-t2u-n12-24
+  pin io-t2u-n12-45
+  pin io-t2u-n12-46
+  pin io-t2u-n12-67
+  pin io-t3u-n12-24
+  pin io-t3u-n12-44
+  pin io-t3u-n12-45
+  pin io-t3u-n12-46
+  pin io-t3u-n12-67
+  pin io-t3u-n12-68
+  pin lbdr-ctrl-0
+  pin lbdr-ctrl-1
+  pin lbdr-ctrl-2
+  pin lbdr-ctrl-3
+  pin lbdr-ctrl-4
+  pin lbdr-ctrl-5
+  pin lbdr-ctrl-6
+  pin lbdr-ctrl-7
+  pin lbdr-ctrl-8
+  pin lbdr-ctrl-9
+  pin lbdr-ctrl-10
+  pin lbdr-ctrl-11
+  pin lbdr-ctrl-12
+  pin lbdr-ctrl-13
+  pin lbdr-ctrl-14
+  pin lbdr0-aur-m
+  pin lbdr0-aur-p
+  pin lbdr1-aur-m
+  pin lbdr1-aur-p
+  pin m0-0
+  pin m1-0
+  pin m2-0
+  pin mgtavcc-l
+  pin mgtavcc-rn
+  pin mgtavcc-rs
+  pin mgtavtt-l
+  pin mgtavtt-rn
+  pin mgtavtt-rs
+  pin mgtavttrcal-l
+  pin mgtavttrcal-rs
+  pin mgthrxn0-126
+  pin mgthrxn0-127
+  pin mgthrxn0-128
+  pin mgthrxn0-224
+  pin mgthrxn0-225
+  pin mgthrxn0-226
+  pin mgthrxn0-228
+  pin mgthrxn1-126
+  pin mgthrxn1-127
+  pin mgthrxn1-128
+  pin mgthrxn1-224
+  pin mgthrxn1-225
+  pin mgthrxn1-226
+  pin mgthrxn1-227
+  pin mgthrxn1-228
+  pin mgthrxn2-126
+  pin mgthrxn2-127
+  pin mgthrxn2-128
+  pin mgthrxn2-224
+  pin mgthrxn2-225
+  pin mgthrxn2-226
+  pin mgthrxn2-228
+  pin mgthrxn3-126
+  pin mgthrxn3-127
+  pin mgthrxn3-128
+  pin mgthrxn3-224
+  pin mgthrxn3-226
+  pin mgthrxn3-227
+  pin mgthrxn3-228
+  pin mgthrxp0-126
+  pin mgthrxp0-127
+  pin mgthrxp0-128
+  pin mgthrxp0-224
+  pin mgthrxp0-225
+  pin mgthrxp0-226
+  pin mgthrxp0-228
+  pin mgthrxp1-126
+  pin mgthrxp1-127
+  pin mgthrxp1-128
+  pin mgthrxp1-224
+  pin mgthrxp1-225
+  pin mgthrxp1-226
+  pin mgthrxp1-227
+  pin mgthrxp1-228
+  pin mgthrxp2-126
+  pin mgthrxp2-127
+  pin mgthrxp2-128
+  pin mgthrxp2-224
+  pin mgthrxp2-225
+  pin mgthrxp2-226
+  pin mgthrxp2-228
+  pin mgthrxp3-126
+  pin mgthrxp3-127
+  pin mgthrxp3-128
+  pin mgthrxp3-224
+  pin mgthrxp3-226
+  pin mgthrxp3-227
+  pin mgthrxp3-228
+  pin mgthtxn0-126
+  pin mgthtxn0-127
+  pin mgthtxn0-128
+  pin mgthtxn0-224
+  pin mgthtxn0-225
+  pin mgthtxn0-226
+  pin mgthtxn0-228
+  pin mgthtxn1-126
+  pin mgthtxn1-127
+  pin mgthtxn1-128
+  pin mgthtxn1-224
+  pin mgthtxn1-225
+  pin mgthtxn1-226
+  pin mgthtxn1-227
+  pin mgthtxn1-228
+  pin mgthtxn2-126
+  pin mgthtxn2-127
+  pin mgthtxn2-128
+  pin mgthtxn2-224
+  pin mgthtxn2-225
+  pin mgthtxn2-226
+  pin mgthtxn2-228
+  pin mgthtxn3-126
+  pin mgthtxn3-127
+  pin mgthtxn3-128
+  pin mgthtxn3-224
+  pin mgthtxn3-226
+  pin mgthtxn3-227
+  pin mgthtxn3-228
+  pin mgthtxp0-126
+  pin mgthtxp0-127
+  pin mgthtxp0-128
+  pin mgthtxp0-224
+  pin mgthtxp0-225
+  pin mgthtxp0-226
+  pin mgthtxp0-228
+  pin mgthtxp1-126
+  pin mgthtxp1-127
+  pin mgthtxp1-128
+  pin mgthtxp1-224
+  pin mgthtxp1-225
+  pin mgthtxp1-226
+  pin mgthtxp1-227
+  pin mgthtxp1-228
+  pin mgthtxp2-126
+  pin mgthtxp2-127
+  pin mgthtxp2-128
+  pin mgthtxp2-224
+  pin mgthtxp2-225
+  pin mgthtxp2-226
+  pin mgthtxp2-228
+  pin mgthtxp3-126
+  pin mgthtxp3-127
+  pin mgthtxp3-128
+  pin mgthtxp3-224
+  pin mgthtxp3-226
+  pin mgthtxp3-227
+  pin mgthtxp3-228
+  pin mgtrefclk0n-126
+  pin mgtrefclk0n-127
+  pin mgtrefclk0n-128
+  pin mgtrefclk0n-224
+  pin mgtrefclk0n-225
+  pin mgtrefclk0n-226
+  pin mgtrefclk0n-228
+  pin mgtrefclk0p-126
+  pin mgtrefclk0p-127
+  pin mgtrefclk0p-128
+  pin mgtrefclk0p-224
+  pin mgtrefclk0p-225
+  pin mgtrefclk0p-226
+  pin mgtrefclk0p-228
+  pin mgtrefclk1n-126
+  pin mgtrefclk1n-127
+  pin mgtrefclk1n-128
+  pin mgtrefclk1n-224
+  pin mgtrefclk1n-225
+  pin mgtrefclk1n-226
+  pin mgtrefclk1n-228
+  pin mgtrefclk1p-126
+  pin mgtrefclk1p-127
+  pin mgtrefclk1p-128
+  pin mgtrefclk1p-224
+  pin mgtrefclk1p-225
+  pin mgtrefclk1p-226
+  pin mgtrefclk1p-228
+  pin mgtrref-l
+  pin mgtrref-rs
+  pin mgtvccaux-l
+  pin mgtvccaux-rn
+  pin mgtvccaux-rs
+  pin mids-blank-rx
+  pin pcie-rst-n
+  pin por-override
+  pin program-b-0
+  pin pudc-b-0
+  pin radar-xmit-tag-rx
+  pin rdwr-fcs-b-0
+  pin sei-int-n
+  pin spare-lvds-out-8
+  pin spare-lvds-out-9
+  pin spare-lvds-out-10
+  pin spare-lvds-out-11
+  pin sys-clk-m
+  pin sys-clk-p
+  pin tacan-xmit-tag-rx
+  pin tck-0
+  pin tdi-0
+  pin tdo-0
+  pin therm-out-sig
+  pin tms-0
+  pin toa-sync-rx
+  pin toa-sync-tx-0
+  pin toa-sync-tx-1
+  pin toa-sync-tx-2
+  pin toa-sync-tx-3
+  pin toa-sync-tx-4
+  pin toa-sync-tx-5
+  pin ttnt-rcvr-blank
+  pin ttnt-xmt-blank
+  pin ueu-clk-1pps-fpga
+  pin ueu-clock-1pps-cpld
+  pin ueu-clock-2mhz
+  pin ueu-clock-rx-1
+  pin ueu-clock-rx-2
+  pin ueu-clock-rx-3
+  pin ueu-clock-rx-4
+  pin ueu-clock-rx-5
+  pin ueu-clock-test
+  pin ueu-pod-cfg-0
+  pin ueu-pod-cfg-1
+  pin ueu-pod-cfg-2
+  pin ueu-pod-cfg-3
+  pin ueu-pod-cfg-4
+  pin vbatt
+  pin vccadc
+  pin vccaux
+  pin vccaux-io
+  pin vccbram
+  pin vccint
+  pin vccint-io
+  pin vcco-0
+  pin vcco-24
+  pin vcco-25
+  pin vcco-44
+  pin vcco-45
+  pin vcco-46
+  pin vcco-47
+  pin vcco-48
+  pin vcco-64
+  pin vcco-65
+  pin vcco-66
+  pin vcco-67
+  pin vcco-68
+  pin video-in-0
+  pin video-in-1
+  pin video-in-2
+  pin video-in-3
+  pin video-in-4
+  pin video-in-5
+  pin video-in-6
+  pin video-in-7
+  pin video-otr
+  pin video-sel-0
+  pin video-sel-1
+  pin video-sel-en
+  pin vn
+  pin vp
+  pin vref-24
+  pin vref-25
+  pin vref-44
+  pin vref-45
+  pin vref-46
+  pin vref-47
+  pin vref-48
+  pin vref-64
+  pin vref-65
+  pin vref-66
+  pin vref-67
+  pin vref-68
+  pin vrefn
+  pin vrefp
+  pin wra6-alt-blank-rx-n
+  pin wra6-alt-blank-tx-n
+  pin wra6-iff-blank-rx-n
+  pin wra6-iff-blank-tx-n
+  pin wra6-mids-blank-rx-n
+  pin wra6-mids-blank-tx-n
+  pin wra6-radar-blank-rx-n
+  pin wra6-radar-blank-tx-n
+  pin wra6-tacan-blank-rx-n
+  pin wra6-tacan-blank-tx-n
+  pin wra6-ttnt-spare-rx-n
+  pin wra6-ttnt-spare-tx-n
+  pin wra6-ttnt-xmt-tag-rx-n
+  pin wra6-ttnt-xmt-tag-tx-n
+  pin wra8-cold-temp-n
+  supports dio:
+    dio => alt-xmit-tag-rx
+  supports dio:
+    dio => audio-anlg-mcp-fail
+  supports dio:
+    dio => audio-anlg-rcd-fail
+  supports dio:
+    dio => audio-clr-n
+  supports dio:
+    dio => audio-cs-n
+  supports dio:
+    dio => audio-ldac-n
+  supports dio:
+    dio => audio-out-0
+  supports dio:
+    dio => audio-out-1
+  supports dio:
+    dio => audio-out-2
+  supports dio:
+    dio => audio-out-3
+  supports dio:
+    dio => audio-out-4
+  supports dio:
+    dio => audio-out-5
+  supports dio:
+    dio => audio-out-6
+  supports dio:
+    dio => audio-out-7
+  supports dio:
+    dio => audio-pd-n
+  supports dio:
+    dio => audio-wr-n
+  supports dio:
+    dio => cb-ad-0
+  supports dio:
+    dio => cb-ad-1
+  supports dio:
+    dio => cb-ad-2
+  supports dio:
+    dio => cb-ad-3
+  supports dio:
+    dio => cb-ad-4
+  supports dio:
+    dio => cb-ad-5
+  supports dio:
+    dio => cb-ad-6
+  supports dio:
+    dio => cb-ad-7
+  supports dio:
+    dio => cb-ad-8
+  supports dio:
+    dio => cb-ad-9
+  supports dio:
+    dio => cb-ad-10
+  supports dio:
+    dio => cb-ad-11
+  supports dio:
+    dio => cb-ad-12
+  supports dio:
+    dio => cb-ad-13
+  supports dio:
+    dio => cb-ad-14
+  supports dio:
+    dio => cb-ad-15
+  supports dio:
+    dio => cb-ad-stb-tx-rx-n
+  supports dio:
+    dio => cb-ad-tx-rx-n
+  supports dio:
+    dio => cb-addr-strb
+  supports dio:
+    dio => cb-data-strb
+  supports dio:
+    dio => cb-frq-stb-tx-rx-n
+  supports dio:
+    dio => cb-frq-strb
+  supports dio:
+    dio => cclk-0
+  supports dio:
+    dio => cfgbvs-0
+  supports dio:
+    dio => clk-in-10mhz
+  supports dio:
+    dio => clk-in-25mhz
+  supports dio:
+    dio => config-done
+  supports dio:
+    dio => cpld-spare-io-0
+  supports dio:
+    dio => cpld-spare-io-1
+  supports dio:
+    dio => cpld-spare-io-2
+  supports dio:
+    dio => cpld-spare-io-3
+  supports dio:
+    dio => cpld-spare-io-4
+  supports dio:
+    dio => cpld-spare-io-5
+  supports dio:
+    dio => cpld-spare-io-6
+  supports dio:
+    dio => cpld-spare-io-7
+  supports dio:
+    dio => cpld-spare-io-8
+  supports dio:
+    dio => cpld-spare-io-9
+  supports dio:
+    dio => cpld-spare-io-10
+  supports dio:
+    dio => cpld-spare-io-11
+  supports dio:
+    dio => cpld-spare-io-12
+  supports dio:
+    dio => cpld-spare-io-13
+  supports dio:
+    dio => cpld-spare-io-14
+  supports dio:
+    dio => cpld-spare-io-15
+  supports dio:
+    dio => d00-mosi-0
+  supports dio:
+    dio => d01-din-0
+  supports dio:
+    dio => d02-0
+  supports dio:
+    dio => d03-0
+  supports dio:
+    dio => ddr3-addr-0
+  supports dio:
+    dio => ddr3-addr-1
+  supports dio:
+    dio => ddr3-addr-2
+  supports dio:
+    dio => ddr3-addr-3
+  supports dio:
+    dio => ddr3-addr-4
+  supports dio:
+    dio => ddr3-addr-5
+  supports dio:
+    dio => ddr3-addr-6
+  supports dio:
+    dio => ddr3-addr-7
+  supports dio:
+    dio => ddr3-addr-8
+  supports dio:
+    dio => ddr3-addr-9
+  supports dio:
+    dio => ddr3-addr-10
+  supports dio:
+    dio => ddr3-addr-11
+  supports dio:
+    dio => ddr3-addr-12
+  supports dio:
+    dio => ddr3-addr-13
+  supports dio:
+    dio => ddr3-addr-14
+  supports dio:
+    dio => ddr3-ba-0
+  supports dio:
+    dio => ddr3-ba-1
+  supports dio:
+    dio => ddr3-ba-2
+  supports dio:
+    dio => ddr3-cas-n
+  supports dio:
+    dio => ddr3-clk-en
+  supports dio:
+    dio => ddr3-cs-n
+  supports dio:
+    dio => ddr3-dm-0
+  supports dio:
+    dio => ddr3-dm-1
+  supports dio:
+    dio => ddr3-dm-2
+  supports dio:
+    dio => ddr3-dm-3
+  supports dio:
+    dio => ddr3-dq-0
+  supports dio:
+    dio => ddr3-dq-1
+  supports dio:
+    dio => ddr3-dq-2
+  supports dio:
+    dio => ddr3-dq-3
+  supports dio:
+    dio => ddr3-dq-4
+  supports dio:
+    dio => ddr3-dq-5
+  supports dio:
+    dio => ddr3-dq-6
+  supports dio:
+    dio => ddr3-dq-7
+  supports dio:
+    dio => ddr3-dq-8
+  supports dio:
+    dio => ddr3-dq-9
+  supports dio:
+    dio => ddr3-dq-10
+  supports dio:
+    dio => ddr3-dq-11
+  supports dio:
+    dio => ddr3-dq-12
+  supports dio:
+    dio => ddr3-dq-13
+  supports dio:
+    dio => ddr3-dq-14
+  supports dio:
+    dio => ddr3-dq-15
+  supports dio:
+    dio => ddr3-dq-16
+  supports dio:
+    dio => ddr3-dq-17
+  supports dio:
+    dio => ddr3-dq-18
+  supports dio:
+    dio => ddr3-dq-19
+  supports dio:
+    dio => ddr3-dq-20
+  supports dio:
+    dio => ddr3-dq-21
+  supports dio:
+    dio => ddr3-dq-22
+  supports dio:
+    dio => ddr3-dq-23
+  supports dio:
+    dio => ddr3-dq-24
+  supports dio:
+    dio => ddr3-dq-25
+  supports dio:
+    dio => ddr3-dq-26
+  supports dio:
+    dio => ddr3-dq-27
+  supports dio:
+    dio => ddr3-dq-28
+  supports dio:
+    dio => ddr3-dq-29
+  supports dio:
+    dio => ddr3-dq-30
+  supports dio:
+    dio => ddr3-dq-31
+  supports dio:
+    dio => ddr3-int-n
+  supports dio:
+    dio => ddr3-odt
+  supports dio:
+    dio => ddr3-ras-n
+  supports dio:
+    dio => ddr3-reset-n
+  supports dio:
+    dio => ddr3-we-n
+  supports dio:
+    dio => dmc-int-n
+  supports dio:
+    dio => dmu-alt-blank
+  supports dio:
+    dio => dmu-en-0
+  supports dio:
+    dio => dmu-en-1
+  supports dio:
+    dio => dmu-en-2
+  supports dio:
+    dio => dmu-en-3
+  supports dio:
+    dio => dmu-iff-blank
+  supports dio:
+    dio => dmu-int-n-0
+  supports dio:
+    dio => dmu-int-n-1
+  supports dio:
+    dio => dmu-int-n-2
+  supports dio:
+    dio => dmu-int-n-3
+  supports dio:
+    dio => dmu-mids-blank
+  supports dio:
+    dio => dmu-pdw-dval-p-1
+  supports dio:
+    dio => dmu-pdw-dval-p-2
+  supports dio:
+    dio => dmu-pdw-dval-p-3
+  supports dio:
+    dio => dmu-radar-blank
+  supports dio:
+    dio => dmu-rxa-blank
+  supports dio:
+    dio => dmu-rxb-blank
+  supports dio:
+    dio => dmu-tacan-blank
+  supports dio:
+    dio => dmu0-pdw-data-p-2
+  supports dio:
+    dio => dmu0-pdw-data-p-3
+  supports dio:
+    dio => dmu1-pdw-data-p-0
+  supports dio:
+    dio => dmu1-pdw-data-p-1
+  supports dio:
+    dio => dmu1-pdw-data-p-2
+  supports dio:
+    dio => dmu1-pdw-data-p-3
+  supports dio:
+    dio => dmu2-pdw-data-p-0
+  supports dio:
+    dio => dmu2-pdw-data-p-1
+  supports dio:
+    dio => dmu2-pdw-data-p-2
+  supports dio:
+    dio => dmu2-pdw-data-p-3
+  supports dio:
+    dio => dmu3-pdw-data-p-0
+  supports dio:
+    dio => dmu3-pdw-data-p-1
+  supports dio:
+    dio => dmu3-pdw-data-p-2
+  supports dio:
+    dio => dmu3-pdw-data-p-3
+  supports dio:
+    dio => done-0
+  supports dio:
+    dio => dxn
+  supports dio:
+    dio => dxp
+  supports dio:
+    dio => fpga-reset-n
+  supports dio:
+    dio => fpga-test-dwell-en
+  supports dio:
+    dio => fpga-test-points-0
+  supports dio:
+    dio => fpga-test-points-1
+  supports dio:
+    dio => fpga-test-points-2
+  supports dio:
+    dio => fpga-test-points-3
+  supports dio:
+    dio => fpga-test-points-4
+  supports dio:
+    dio => fpga-test-points-5
+  supports dio:
+    dio => fpga-test-points-6
+  supports dio:
+    dio => fpga-test-points-7
+  supports dio:
+    dio => fpga-test-points-8
+  supports dio:
+    dio => fpga-test-points-9
+  supports dio:
+    dio => fpga-test-points-10
+  supports dio:
+    dio => fpga-test-points-11
+  supports dio:
+    dio => fpga-test-points-12
+  supports dio:
+    dio => fpga-test-points-13
+  supports dio:
+    dio => fpga-test-points-14
+  supports dio:
+    dio => fpga-test-points-15
+  supports dio:
+    dio => gnd
+  supports dio:
+    dio => gndadc
+  supports dio:
+    dio => iff-xmit-tag-rx
+  supports dio:
+    dio => init-b-0
+  supports dio:
+    dio => init-clk-m
+  supports dio:
+    dio => init-clk-p
+  supports dio:
+    dio => io-l10n-t1u-n7-qbc-ad4n-45
+  supports dio:
+    dio => io-l10n-t1u-n7-qbc-ad4n-66
+  supports dio:
+    dio => io-l10n-t1u-n7-qbc-ad4n-67
+  supports dio:
+    dio => io-l10n-t1u-n7-qbc-ad4n-68
+  supports dio:
+    dio => io-l10p-t1u-n6-qbc-ad4p-45
+  supports dio:
+    dio => io-l10p-t1u-n6-qbc-ad4p-66
+  supports dio:
+    dio => io-l10p-t1u-n6-qbc-ad4p-68
+  supports dio:
+    dio => io-l11n-t1u-n9-gc-45
+  supports dio:
+    dio => io-l11n-t1u-n9-gc-66
+  supports dio:
+    dio => io-l11p-t1u-n8-gc-45
+  supports dio:
+    dio => io-l11p-t1u-n8-gc-66
+  supports dio:
+    dio => io-l12n-t1u-n11-gc-45
+  supports dio:
+    dio => io-l12n-t1u-n11-gc-66
+  supports dio:
+    dio => io-l12p-t1u-n10-gc-45
+  supports dio:
+    dio => io-l12p-t1u-n10-gc-66
+  supports dio:
+    dio => io-l13n-t2l-n1-gc-qbc-45
+  supports dio:
+    dio => io-l13n-t2l-n1-gc-qbc-46
+  supports dio:
+    dio => io-l13n-t2l-n1-gc-qbc-66
+  supports dio:
+    dio => io-l13p-t2l-n0-gc-qbc-45
+  supports dio:
+    dio => io-l13p-t2l-n0-gc-qbc-46
+  supports dio:
+    dio => io-l13p-t2l-n0-gc-qbc-66
+  supports dio:
+    dio => io-l14n-t2l-n3-gc-45
+  supports dio:
+    dio => io-l14n-t2l-n3-gc-46
+  supports dio:
+    dio => io-l14n-t2l-n3-gc-66
+  supports dio:
+    dio => io-l14p-t2l-n2-gc-45
+  supports dio:
+    dio => io-l14p-t2l-n2-gc-46
+  supports dio:
+    dio => io-l14p-t2l-n2-gc-66
+  supports dio:
+    dio => io-l15n-t2l-n5-ad11n-25
+  supports dio:
+    dio => io-l15n-t2l-n5-ad11n-45
+  supports dio:
+    dio => io-l15n-t2l-n5-ad11n-46
+  supports dio:
+    dio => io-l15n-t2l-n5-ad11n-66
+  supports dio:
+    dio => io-l15n-t2l-n5-ad11n-67
+  supports dio:
+    dio => io-l15n-t2l-n5-ad11n-68
+  supports dio:
+    dio => io-l15p-t2l-n4-ad11p-25
+  supports dio:
+    dio => io-l15p-t2l-n4-ad11p-44
+  supports dio:
+    dio => io-l15p-t2l-n4-ad11p-45
+  supports dio:
+    dio => io-l15p-t2l-n4-ad11p-46
+  supports dio:
+    dio => io-l15p-t2l-n4-ad11p-66
+  supports dio:
+    dio => io-l15p-t2l-n4-ad11p-68
+  supports dio:
+    dio => io-l16n-t2u-n7-qbc-ad3n-45
+  supports dio:
+    dio => io-l16n-t2u-n7-qbc-ad3n-46
+  supports dio:
+    dio => io-l16n-t2u-n7-qbc-ad3n-66
+  supports dio:
+    dio => io-l16n-t2u-n7-qbc-ad3n-67
+  supports dio:
+    dio => io-l16n-t2u-n7-qbc-ad3n-68
+  supports dio:
+    dio => io-l16p-t2u-n6-qbc-ad3p-45
+  supports dio:
+    dio => io-l16p-t2u-n6-qbc-ad3p-46
+  supports dio:
+    dio => io-l16p-t2u-n6-qbc-ad3p-66
+  supports dio:
+    dio => io-l16p-t2u-n6-qbc-ad3p-68
+  supports dio:
+    dio => io-l17n-t2u-n9-ad10n-24
+  supports dio:
+    dio => io-l17n-t2u-n9-ad10n-45
+  supports dio:
+    dio => io-l17n-t2u-n9-ad10n-46
+  supports dio:
+    dio => io-l17n-t2u-n9-ad10n-66
+  supports dio:
+    dio => io-l17n-t2u-n9-ad10n-67
+  supports dio:
+    dio => io-l17p-t2u-n8-ad10p-45
+  supports dio:
+    dio => io-l17p-t2u-n8-ad10p-46
+  supports dio:
+    dio => io-l17p-t2u-n8-ad10p-66
+  supports dio:
+    dio => io-l18n-t2u-n11-ad2n-24
+  supports dio:
+    dio => io-l18n-t2u-n11-ad2n-45
+  supports dio:
+    dio => io-l18n-t2u-n11-ad2n-46
+  supports dio:
+    dio => io-l18n-t2u-n11-ad2n-67
+  supports dio:
+    dio => io-l18p-t2u-n10-ad2p-24
+  supports dio:
+    dio => io-l18p-t2u-n10-ad2p-45
+  supports dio:
+    dio => io-l18p-t2u-n10-ad2p-46
+  supports dio:
+    dio => io-l19n-t3l-n1-dbc-ad9n-24
+  supports dio:
+    dio => io-l19n-t3l-n1-dbc-ad9n-25
+  supports dio:
+    dio => io-l19n-t3l-n1-dbc-ad9n-45
+  supports dio:
+    dio => io-l19n-t3l-n1-dbc-ad9n-46
+  supports dio:
+    dio => io-l19p-t3l-n0-dbc-ad9p-24
+  supports dio:
+    dio => io-l19p-t3l-n0-dbc-ad9p-45
+  supports dio:
+    dio => io-l19p-t3l-n0-dbc-ad9p-46
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-24
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-44
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-46
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-48
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-66
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-67
+  supports dio:
+    dio => io-l1n-t0l-n1-dbc-68
+  supports dio:
+    dio => io-l1p-t0l-n0-dbc-24
+  supports dio:
+    dio => io-l1p-t0l-n0-dbc-45
+  supports dio:
+    dio => io-l1p-t0l-n0-dbc-48
+  supports dio:
+    dio => io-l1p-t0l-n0-dbc-66
+  supports dio:
+    dio => io-l1p-t0l-n0-dbc-68
+  supports dio:
+    dio => io-l20n-t3l-n3-ad1n-24
+  supports dio:
+    dio => io-l20n-t3l-n3-ad1n-25
+  supports dio:
+    dio => io-l20n-t3l-n3-ad1n-45
+  supports dio:
+    dio => io-l20n-t3l-n3-ad1n-46
+  supports dio:
+    dio => io-l20p-t3l-n2-ad1p-24
+  supports dio:
+    dio => io-l20p-t3l-n2-ad1p-25
+  supports dio:
+    dio => io-l20p-t3l-n2-ad1p-45
+  supports dio:
+    dio => io-l20p-t3l-n2-ad1p-46
+  supports dio:
+    dio => io-l21n-t3l-n5-ad8n-24
+  supports dio:
+    dio => io-l21n-t3l-n5-ad8n-25
+  supports dio:
+    dio => io-l21n-t3l-n5-ad8n-45
+  supports dio:
+    dio => io-l21n-t3l-n5-ad8n-46
+  supports dio:
+    dio => io-l21n-t3l-n5-ad8n-67
+  supports dio:
+    dio => io-l21p-t3l-n4-ad8p-24
+  supports dio:
+    dio => io-l21p-t3l-n4-ad8p-25
+  supports dio:
+    dio => io-l21p-t3l-n4-ad8p-45
+  supports dio:
+    dio => io-l21p-t3l-n4-ad8p-46
+  supports dio:
+    dio => io-l22n-t3u-n7-dbc-ad0n-24
+  supports dio:
+    dio => io-l22n-t3u-n7-dbc-ad0n-45
+  supports dio:
+    dio => io-l22n-t3u-n7-dbc-ad0n-46
+  supports dio:
+    dio => io-l22n-t3u-n7-dbc-ad0n-67
+  supports dio:
+    dio => io-l22p-t3u-n6-dbc-ad0p-24
+  supports dio:
+    dio => io-l22p-t3u-n6-dbc-ad0p-45
+  supports dio:
+    dio => io-l22p-t3u-n6-dbc-ad0p-46
+  supports dio:
+    dio => io-l23n-t3u-n9-24
+  supports dio:
+    dio => io-l23n-t3u-n9-44
+  supports dio:
+    dio => io-l23n-t3u-n9-45
+  supports dio:
+    dio => io-l23n-t3u-n9-46
+  supports dio:
+    dio => io-l23n-t3u-n9-67
+  supports dio:
+    dio => io-l23p-t3u-n8-24
+  supports dio:
+    dio => io-l23p-t3u-n8-45
+  supports dio:
+    dio => io-l23p-t3u-n8-46
+  supports dio:
+    dio => io-l24n-t3u-n11-24
+  supports dio:
+    dio => io-l24n-t3u-n11-44
+  supports dio:
+    dio => io-l24n-t3u-n11-45
+  supports dio:
+    dio => io-l24n-t3u-n11-46
+  supports dio:
+    dio => io-l24n-t3u-n11-dout-cso-b-65
+  supports dio:
+    dio => io-l24p-t3u-n10-24
+  supports dio:
+    dio => io-l24p-t3u-n10-44
+  supports dio:
+    dio => io-l24p-t3u-n10-45
+  supports dio:
+    dio => io-l24p-t3u-n10-46
+  supports dio:
+    dio => io-l24p-t3u-n10-emcclk-65
+  supports dio:
+    dio => io-l2n-t0l-n3-24
+  supports dio:
+    dio => io-l2n-t0l-n3-48
+  supports dio:
+    dio => io-l2n-t0l-n3-66
+  supports dio:
+    dio => io-l2n-t0l-n3-67
+  supports dio:
+    dio => io-l2n-t0l-n3-68
+  supports dio:
+    dio => io-l2p-t0l-n2-24
+  supports dio:
+    dio => io-l2p-t0l-n2-48
+  supports dio:
+    dio => io-l2p-t0l-n2-66
+  supports dio:
+    dio => io-l3n-t0l-n5-ad15n-48
+  supports dio:
+    dio => io-l3n-t0l-n5-ad15n-66
+  supports dio:
+    dio => io-l3n-t0l-n5-ad15n-67
+  supports dio:
+    dio => io-l3n-t0l-n5-ad15n-68
+  supports dio:
+    dio => io-l3p-t0l-n4-ad15p-24
+  supports dio:
+    dio => io-l3p-t0l-n4-ad15p-48
+  supports dio:
+    dio => io-l3p-t0l-n4-ad15p-66
+  supports dio:
+    dio => io-l3p-t0l-n4-ad15p-68
+  supports dio:
+    dio => io-l4n-t0u-n7-dbc-ad7n-48
+  supports dio:
+    dio => io-l4n-t0u-n7-dbc-ad7n-66
+  supports dio:
+    dio => io-l4n-t0u-n7-dbc-ad7n-67
+  supports dio:
+    dio => io-l4n-t0u-n7-dbc-ad7n-68
+  supports dio:
+    dio => io-l4p-t0u-n6-dbc-ad7p-48
+  supports dio:
+    dio => io-l4p-t0u-n6-dbc-ad7p-66
+  supports dio:
+    dio => io-l4p-t0u-n6-dbc-ad7p-68
+  supports dio:
+    dio => io-l5n-t0u-n9-ad14n-48
+  supports dio:
+    dio => io-l5n-t0u-n9-ad14n-66
+  supports dio:
+    dio => io-l5n-t0u-n9-ad14n-67
+  supports dio:
+    dio => io-l5n-t0u-n9-ad14n-68
+  supports dio:
+    dio => io-l5p-t0u-n8-ad14p-48
+  supports dio:
+    dio => io-l5p-t0u-n8-ad14p-66
+  supports dio:
+    dio => io-l5p-t0u-n8-ad14p-68
+  supports dio:
+    dio => io-l6n-t0u-n11-ad6n-48
+  supports dio:
+    dio => io-l6n-t0u-n11-ad6n-66
+  supports dio:
+    dio => io-l6n-t0u-n11-ad6n-67
+  supports dio:
+    dio => io-l6p-t0u-n10-ad6p-48
+  supports dio:
+    dio => io-l6p-t0u-n10-ad6p-66
+  supports dio:
+    dio => io-l7n-t1l-n1-qbc-ad13n-46
+  supports dio:
+    dio => io-l7n-t1l-n1-qbc-ad13n-48
+  supports dio:
+    dio => io-l7n-t1l-n1-qbc-ad13n-66
+  supports dio:
+    dio => io-l7n-t1l-n1-qbc-ad13n-67
+  supports dio:
+    dio => io-l7n-t1l-n1-qbc-ad13n-68
+  supports dio:
+    dio => io-l7p-t1l-n0-qbc-ad13p-48
+  supports dio:
+    dio => io-l7p-t1l-n0-qbc-ad13p-66
+  supports dio:
+    dio => io-l8n-t1l-n3-ad5n-45
+  supports dio:
+    dio => io-l8n-t1l-n3-ad5n-66
+  supports dio:
+    dio => io-l8n-t1l-n3-ad5n-67
+  supports dio:
+    dio => io-l8p-t1l-n2-ad5p-45
+  supports dio:
+    dio => io-l8p-t1l-n2-ad5p-48
+  supports dio:
+    dio => io-l8p-t1l-n2-ad5p-66
+  supports dio:
+    dio => io-l8p-t1l-n2-ad5p-68
+  supports dio:
+    dio => io-l9n-t1l-n5-ad12n-45
+  supports dio:
+    dio => io-l9n-t1l-n5-ad12n-66
+  supports dio:
+    dio => io-l9n-t1l-n5-ad12n-67
+  supports dio:
+    dio => io-l9n-t1l-n5-ad12n-68
+  supports dio:
+    dio => io-l9p-t1l-n4-ad12p-45
+  supports dio:
+    dio => io-l9p-t1l-n4-ad12p-66
+  supports dio:
+    dio => io-l9p-t1l-n4-ad12p-68
+  supports dio:
+    dio => io-t0u-n12-vrp-44
+  supports dio:
+    dio => io-t0u-n12-vrp-46
+  supports dio:
+    dio => io-t0u-n12-vrp-47
+  supports dio:
+    dio => io-t0u-n12-vrp-48
+  supports dio:
+    dio => io-t0u-n12-vrp-66
+  supports dio:
+    dio => io-t0u-n12-vrp-67
+  supports dio:
+    dio => io-t1u-n12-45
+  supports dio:
+    dio => io-t1u-n12-46
+  supports dio:
+    dio => io-t1u-n12-66
+  supports dio:
+    dio => io-t1u-n12-67
+  supports dio:
+    dio => io-t2u-n12-24
+  supports dio:
+    dio => io-t2u-n12-45
+  supports dio:
+    dio => io-t2u-n12-46
+  supports dio:
+    dio => io-t2u-n12-67
+  supports dio:
+    dio => io-t3u-n12-24
+  supports dio:
+    dio => io-t3u-n12-44
+  supports dio:
+    dio => io-t3u-n12-45
+  supports dio:
+    dio => io-t3u-n12-46
+  supports dio:
+    dio => io-t3u-n12-67
+  supports dio:
+    dio => io-t3u-n12-68
+  supports dio:
+    dio => lbdr-ctrl-0
+  supports dio:
+    dio => lbdr-ctrl-1
+  supports dio:
+    dio => lbdr-ctrl-2
+  supports dio:
+    dio => lbdr-ctrl-3
+  supports dio:
+    dio => lbdr-ctrl-4
+  supports dio:
+    dio => lbdr-ctrl-5
+  supports dio:
+    dio => lbdr-ctrl-6
+  supports dio:
+    dio => lbdr-ctrl-7
+  supports dio:
+    dio => lbdr-ctrl-8
+  supports dio:
+    dio => lbdr-ctrl-9
+  supports dio:
+    dio => lbdr-ctrl-10
+  supports dio:
+    dio => lbdr-ctrl-11
+  supports dio:
+    dio => lbdr-ctrl-12
+  supports dio:
+    dio => lbdr-ctrl-13
+  supports dio:
+    dio => lbdr-ctrl-14
+  supports dio:
+    dio => lbdr0-aur-m
+  supports dio:
+    dio => lbdr0-aur-p
+  supports dio:
+    dio => lbdr1-aur-m
+  supports dio:
+    dio => lbdr1-aur-p
+  supports dio:
+    dio => m0-0
+  supports dio:
+    dio => m1-0
+  supports dio:
+    dio => m2-0
+  supports dio:
+    dio => mgtavcc-l
+  supports dio:
+    dio => mgtavcc-rn
+  supports dio:
+    dio => mgtavcc-rs
+  supports dio:
+    dio => mgtavtt-l
+  supports dio:
+    dio => mgtavtt-rn
+  supports dio:
+    dio => mgtavtt-rs
+  supports dio:
+    dio => mgtavttrcal-l
+  supports dio:
+    dio => mgtavttrcal-rs
+  supports dio:
+    dio => mgthrxn0-126
+  supports dio:
+    dio => mgthrxn0-127
+  supports dio:
+    dio => mgthrxn0-128
+  supports dio:
+    dio => mgthrxn0-224
+  supports dio:
+    dio => mgthrxn0-225
+  supports dio:
+    dio => mgthrxn0-226
+  supports dio:
+    dio => mgthrxn0-228
+  supports dio:
+    dio => mgthrxn1-126
+  supports dio:
+    dio => mgthrxn1-127
+  supports dio:
+    dio => mgthrxn1-128
+  supports dio:
+    dio => mgthrxn1-224
+  supports dio:
+    dio => mgthrxn1-225
+  supports dio:
+    dio => mgthrxn1-226
+  supports dio:
+    dio => mgthrxn1-227
+  supports dio:
+    dio => mgthrxn1-228
+  supports dio:
+    dio => mgthrxn2-126
+  supports dio:
+    dio => mgthrxn2-127
+  supports dio:
+    dio => mgthrxn2-128
+  supports dio:
+    dio => mgthrxn2-224
+  supports dio:
+    dio => mgthrxn2-225
+  supports dio:
+    dio => mgthrxn2-226
+  supports dio:
+    dio => mgthrxn2-228
+  supports dio:
+    dio => mgthrxn3-126
+  supports dio:
+    dio => mgthrxn3-127
+  supports dio:
+    dio => mgthrxn3-128
+  supports dio:
+    dio => mgthrxn3-224
+  supports dio:
+    dio => mgthrxn3-226
+  supports dio:
+    dio => mgthrxn3-227
+  supports dio:
+    dio => mgthrxn3-228
+  supports dio:
+    dio => mgthrxp0-126
+  supports dio:
+    dio => mgthrxp0-127
+  supports dio:
+    dio => mgthrxp0-128
+  supports dio:
+    dio => mgthrxp0-224
+  supports dio:
+    dio => mgthrxp0-225
+  supports dio:
+    dio => mgthrxp0-226
+  supports dio:
+    dio => mgthrxp0-228
+  supports dio:
+    dio => mgthrxp1-126
+  supports dio:
+    dio => mgthrxp1-127
+  supports dio:
+    dio => mgthrxp1-128
+  supports dio:
+    dio => mgthrxp1-224
+  supports dio:
+    dio => mgthrxp1-225
+  supports dio:
+    dio => mgthrxp1-226
+  supports dio:
+    dio => mgthrxp1-227
+  supports dio:
+    dio => mgthrxp1-228
+  supports dio:
+    dio => mgthrxp2-126
+  supports dio:
+    dio => mgthrxp2-127
+  supports dio:
+    dio => mgthrxp2-128
+  supports dio:
+    dio => mgthrxp2-224
+  supports dio:
+    dio => mgthrxp2-225
+  supports dio:
+    dio => mgthrxp2-226
+  supports dio:
+    dio => mgthrxp2-228
+  supports dio:
+    dio => mgthrxp3-126
+  supports dio:
+    dio => mgthrxp3-127
+  supports dio:
+    dio => mgthrxp3-128
+  supports dio:
+    dio => mgthrxp3-224
+  supports dio:
+    dio => mgthrxp3-226
+  supports dio:
+    dio => mgthrxp3-227
+  supports dio:
+    dio => mgthrxp3-228
+  supports dio:
+    dio => mgthtxn0-126
+  supports dio:
+    dio => mgthtxn0-127
+  supports dio:
+    dio => mgthtxn0-128
+  supports dio:
+    dio => mgthtxn0-224
+  supports dio:
+    dio => mgthtxn0-225
+  supports dio:
+    dio => mgthtxn0-226
+  supports dio:
+    dio => mgthtxn0-228
+  supports dio:
+    dio => mgthtxn1-126
+  supports dio:
+    dio => mgthtxn1-127
+  supports dio:
+    dio => mgthtxn1-128
+  supports dio:
+    dio => mgthtxn1-224
+  supports dio:
+    dio => mgthtxn1-225
+  supports dio:
+    dio => mgthtxn1-226
+  supports dio:
+    dio => mgthtxn1-227
+  supports dio:
+    dio => mgthtxn1-228
+  supports dio:
+    dio => mgthtxn2-126
+  supports dio:
+    dio => mgthtxn2-127
+  supports dio:
+    dio => mgthtxn2-128
+  supports dio:
+    dio => mgthtxn2-224
+  supports dio:
+    dio => mgthtxn2-225
+  supports dio:
+    dio => mgthtxn2-226
+  supports dio:
+    dio => mgthtxn2-228
+  supports dio:
+    dio => mgthtxn3-126
+  supports dio:
+    dio => mgthtxn3-127
+  supports dio:
+    dio => mgthtxn3-128
+  supports dio:
+    dio => mgthtxn3-224
+  supports dio:
+    dio => mgthtxn3-226
+  supports dio:
+    dio => mgthtxn3-227
+  supports dio:
+    dio => mgthtxn3-228
+  supports dio:
+    dio => mgthtxp0-126
+  supports dio:
+    dio => mgthtxp0-127
+  supports dio:
+    dio => mgthtxp0-128
+  supports dio:
+    dio => mgthtxp0-224
+  supports dio:
+    dio => mgthtxp0-225
+  supports dio:
+    dio => mgthtxp0-226
+  supports dio:
+    dio => mgthtxp0-228
+  supports dio:
+    dio => mgthtxp1-126
+  supports dio:
+    dio => mgthtxp1-127
+  supports dio:
+    dio => mgthtxp1-128
+  supports dio:
+    dio => mgthtxp1-224
+  supports dio:
+    dio => mgthtxp1-225
+  supports dio:
+    dio => mgthtxp1-226
+  supports dio:
+    dio => mgthtxp1-227
+  supports dio:
+    dio => mgthtxp1-228
+  supports dio:
+    dio => mgthtxp2-126
+  supports dio:
+    dio => mgthtxp2-127
+  supports dio:
+    dio => mgthtxp2-128
+  supports dio:
+    dio => mgthtxp2-224
+  supports dio:
+    dio => mgthtxp2-225
+  supports dio:
+    dio => mgthtxp2-226
+  supports dio:
+    dio => mgthtxp2-228
+  supports dio:
+    dio => mgthtxp3-126
+  supports dio:
+    dio => mgthtxp3-127
+  supports dio:
+    dio => mgthtxp3-128
+  supports dio:
+    dio => mgthtxp3-224
+  supports dio:
+    dio => mgthtxp3-226
+  supports dio:
+    dio => mgthtxp3-227
+  supports dio:
+    dio => mgthtxp3-228
+  supports dio:
+    dio => mgtrefclk0n-126
+  supports dio:
+    dio => mgtrefclk0n-127
+  supports dio:
+    dio => mgtrefclk0n-128
+  supports dio:
+    dio => mgtrefclk0n-224
+  supports dio:
+    dio => mgtrefclk0n-225
+  supports dio:
+    dio => mgtrefclk0n-226
+  supports dio:
+    dio => mgtrefclk0n-228
+  supports dio:
+    dio => mgtrefclk0p-126
+  supports dio:
+    dio => mgtrefclk0p-127
+  supports dio:
+    dio => mgtrefclk0p-128
+  supports dio:
+    dio => mgtrefclk0p-224
+  supports dio:
+    dio => mgtrefclk0p-225
+  supports dio:
+    dio => mgtrefclk0p-226
+  supports dio:
+    dio => mgtrefclk0p-228
+  supports dio:
+    dio => mgtrefclk1n-126
+  supports dio:
+    dio => mgtrefclk1n-127
+  supports dio:
+    dio => mgtrefclk1n-128
+  supports dio:
+    dio => mgtrefclk1n-224
+  supports dio:
+    dio => mgtrefclk1n-225
+  supports dio:
+    dio => mgtrefclk1n-226
+  supports dio:
+    dio => mgtrefclk1n-228
+  supports dio:
+    dio => mgtrefclk1p-126
+  supports dio:
+    dio => mgtrefclk1p-127
+  supports dio:
+    dio => mgtrefclk1p-128
+  supports dio:
+    dio => mgtrefclk1p-224
+  supports dio:
+    dio => mgtrefclk1p-225
+  supports dio:
+    dio => mgtrefclk1p-226
+  supports dio:
+    dio => mgtrefclk1p-228
+  supports dio:
+    dio => mgtrref-l
+  supports dio:
+    dio => mgtrref-rs
+  supports dio:
+    dio => mgtvccaux-l
+  supports dio:
+    dio => mgtvccaux-rn
+  supports dio:
+    dio => mgtvccaux-rs
+  supports dio:
+    dio => mids-blank-rx
+  supports dio:
+    dio => pcie-rst-n
+  supports dio:
+    dio => por-override
+  supports dio:
+    dio => program-b-0
+  supports dio:
+    dio => pudc-b-0
+  supports dio:
+    dio => radar-xmit-tag-rx
+  supports dio:
+    dio => rdwr-fcs-b-0
+  supports dio:
+    dio => sei-int-n
+  supports dio:
+    dio => spare-lvds-out-8
+  supports dio:
+    dio => spare-lvds-out-9
+  supports dio:
+    dio => spare-lvds-out-10
+  supports dio:
+    dio => spare-lvds-out-11
+  supports dio:
+    dio => sys-clk-m
+  supports dio:
+    dio => sys-clk-p
+  supports dio:
+    dio => tacan-xmit-tag-rx
+  supports dio:
+    dio => tck-0
+  supports dio:
+    dio => tdi-0
+  supports dio:
+    dio => tdo-0
+  supports dio:
+    dio => therm-out-sig
+  supports dio:
+    dio => tms-0
+  supports dio:
+    dio => toa-sync-rx
+  supports dio:
+    dio => toa-sync-tx-0
+  supports dio:
+    dio => toa-sync-tx-1
+  supports dio:
+    dio => toa-sync-tx-2
+  supports dio:
+    dio => toa-sync-tx-3
+  supports dio:
+    dio => toa-sync-tx-4
+  supports dio:
+    dio => toa-sync-tx-5
+  supports dio:
+    dio => ttnt-rcvr-blank
+  supports dio:
+    dio => ttnt-xmt-blank
+  supports dio:
+    dio => ueu-clk-1pps-fpga
+  supports dio:
+    dio => ueu-clock-1pps-cpld
+  supports dio:
+    dio => ueu-clock-2mhz
+  supports dio:
+    dio => ueu-clock-rx-1
+  supports dio:
+    dio => ueu-clock-rx-2
+  supports dio:
+    dio => ueu-clock-rx-3
+  supports dio:
+    dio => ueu-clock-rx-4
+  supports dio:
+    dio => ueu-clock-rx-5
+  supports dio:
+    dio => ueu-clock-test
+  supports dio:
+    dio => ueu-pod-cfg-0
+  supports dio:
+    dio => ueu-pod-cfg-1
+  supports dio:
+    dio => ueu-pod-cfg-2
+  supports dio:
+    dio => ueu-pod-cfg-3
+  supports dio:
+    dio => ueu-pod-cfg-4
+  supports dio:
+    dio => vbatt
+  supports dio:
+    dio => vccadc
+  supports dio:
+    dio => vccaux
+  supports dio:
+    dio => vccaux-io
+  supports dio:
+    dio => vccbram
+  supports dio:
+    dio => vccint
+  supports dio:
+    dio => vccint-io
+  supports dio:
+    dio => vcco-0
+  supports dio:
+    dio => vcco-24
+  supports dio:
+    dio => vcco-25
+  supports dio:
+    dio => vcco-44
+  supports dio:
+    dio => vcco-45
+  supports dio:
+    dio => vcco-46
+  supports dio:
+    dio => vcco-47
+  supports dio:
+    dio => vcco-48
+  supports dio:
+    dio => vcco-64
+  supports dio:
+    dio => vcco-65
+  supports dio:
+    dio => vcco-66
+  supports dio:
+    dio => vcco-67
+  supports dio:
+    dio => vcco-68
+  supports dio:
+    dio => video-in-0
+  supports dio:
+    dio => video-in-1
+  supports dio:
+    dio => video-in-2
+  supports dio:
+    dio => video-in-3
+  supports dio:
+    dio => video-in-4
+  supports dio:
+    dio => video-in-5
+  supports dio:
+    dio => video-in-6
+  supports dio:
+    dio => video-in-7
+  supports dio:
+    dio => video-otr
+  supports dio:
+    dio => video-sel-0
+  supports dio:
+    dio => video-sel-1
+  supports dio:
+    dio => video-sel-en
+  supports dio:
+    dio => vn
+  supports dio:
+    dio => vp
+  supports dio:
+    dio => vref-24
+  supports dio:
+    dio => vref-25
+  supports dio:
+    dio => vref-44
+  supports dio:
+    dio => vref-45
+  supports dio:
+    dio => vref-46
+  supports dio:
+    dio => vref-47
+  supports dio:
+    dio => vref-48
+  supports dio:
+    dio => vref-64
+  supports dio:
+    dio => vref-65
+  supports dio:
+    dio => vref-66
+  supports dio:
+    dio => vref-67
+  supports dio:
+    dio => vref-68
+  supports dio:
+    dio => vrefn
+  supports dio:
+    dio => vrefp
+  supports dio:
+    dio => wra6-alt-blank-rx-n
+  supports dio:
+    dio => wra6-alt-blank-tx-n
+  supports dio:
+    dio => wra6-iff-blank-rx-n
+  supports dio:
+    dio => wra6-iff-blank-tx-n
+  supports dio:
+    dio => wra6-mids-blank-rx-n
+  supports dio:
+    dio => wra6-mids-blank-tx-n
+  supports dio:
+    dio => wra6-radar-blank-rx-n
+  supports dio:
+    dio => wra6-radar-blank-tx-n
+  supports dio:
+    dio => wra6-tacan-blank-rx-n
+  supports dio:
+    dio => wra6-tacan-blank-tx-n
+  supports dio:
+    dio => wra6-ttnt-spare-rx-n
+  supports dio:
+    dio => wra6-ttnt-spare-tx-n
+  supports dio:
+    dio => wra6-ttnt-xmt-tag-rx-n
+  supports dio:
+    dio => wra6-ttnt-xmt-tag-tx-n
+  supports dio:
+    dio => wra8-cold-temp-n
+  supports lvds:
+    lvds.D_N => fpga-aurora-rx1.D_N
+    lvds.D_P => fpga-aurora-rx1.D_P
+  supports lvds:
+    lvds.D_P => ddr3-dqs-0.D_P
+    lvds.D_N => ddr3-dqs-0.D_N
+  supports lvds:
+    lvds.D_P => lbdr-bus-1-0.D_P
+    lvds.D_N => lbdr-bus-1-0.D_N
+  supports lvds:
+    lvds.D_N => lvds-fpga-cpld-3.D_N
+    lvds.D_P => lvds-fpga-cpld-3.D_P
+  supports lvds:
+    lvds.D_N => dmu0-pdw-data-0.D_N
+    lvds.D_P => dmu0-pdw-data-0.D_P
+  supports lvds:
+    lvds.D_N => fpga-aurora-rx0.D_N
+    lvds.D_P => fpga-aurora-rx0.D_P
+  supports lvds:
+    lvds.D_P => lvds-cpld-fpga-0.D_P
+    lvds.D_N => lvds-cpld-fpga-0.D_N
+  supports lvds:
+    lvds.D_P => lbdr-bus-1-2.D_P
+    lvds.D_N => lbdr-bus-1-2.D_N
+  supports lvds:
+    lvds.D_N => dmu-pdw-clk-2.D_N
+    lvds.D_P => dmu-pdw-clk-2.D_P
+  supports lvds:
+    lvds.D_P => lvds-fpga-cpld-0.D_P
+    lvds.D_N => lvds-fpga-cpld-0.D_N
+  supports lvds:
+    lvds.D_P => ddr3-dqs-1.D_P
+    lvds.D_N => ddr3-dqs-1.D_N
+  supports lvds:
+    lvds.D_N => dmu-pdw-clk-0.D_N
+    lvds.D_P => dmu-pdw-clk-0.D_P
+  supports lvds:
+    lvds.D_P => lbdr-bus-0-0.D_P
+    lvds.D_N => lbdr-bus-0-0.D_N
+  supports lvds:
+    lvds.D_N => lbdr-bus-1-1.D_N
+    lvds.D_P => lbdr-bus-1-1.D_P
+  supports lvds:
+    lvds.D_N => lvds-cpld-fpga-3.D_N
+    lvds.D_P => lvds-cpld-fpga-3.D_P
+  supports lvds:
+    lvds.D_N => dmu-pdw-clk-1.D_N
+    lvds.D_P => dmu-pdw-clk-1.D_P
+  supports lvds:
+    lvds.D_P => aurora-1-clk.D_P
+    lvds.D_N => aurora-1-clk.D_N
+  supports lvds:
+    lvds.D_N => dmu-pdw-dval-0.D_N
+    lvds.D_P => dmu-pdw-dval-0.D_P
+  supports lvds:
+    lvds.D_N => lbdr-bus-0-1.D_N
+    lvds.D_P => lbdr-bus-0-1.D_P
+  supports lvds:
+    lvds.D_N => ddr3-dqs-2.D_N
+    lvds.D_P => ddr3-dqs-2.D_P
+  supports lvds:
+    lvds.D_P => ddr3-clk.D_P
+    lvds.D_N => ddr3-clk.D_N
+  supports lvds:
+    lvds.D_N => aurora-0-clk.D_N
+    lvds.D_P => aurora-0-clk.D_P
+  supports lvds:
+    lvds.D_P => lvds-fpga-cpld-2.D_P
+    lvds.D_N => lvds-fpga-cpld-2.D_N
+  supports lvds:
+    lvds.D_N => lvds-cpld-fpga-2.D_N
+    lvds.D_P => lvds-cpld-fpga-2.D_P
+  supports lvds:
+    lvds.D_P => ddr3-dqs-3.D_P
+    lvds.D_N => ddr3-dqs-3.D_N
+  supports lvds:
+    lvds.D_N => pci-exp-rx.D_N
+    lvds.D_P => pci-exp-rx.D_P
+  supports lvds:
+    lvds.D_P => lbdr-bus-0-2.D_P
+    lvds.D_N => lbdr-bus-0-2.D_N
+  supports lvds:
+    lvds.D_N => dmu0-pdw-data-1.D_N
+    lvds.D_P => dmu0-pdw-data-1.D_P
+  supports lvds:
+    lvds.D_P => pci-exp-tx.D_P
+    lvds.D_N => pci-exp-tx.D_N
+  supports lvds:
+    lvds.D_N => lvds-cpld-fpga-1.D_N
+    lvds.D_P => lvds-cpld-fpga-1.D_P
+  supports lvds:
+    lvds.D_P => dmu-pdw-clk-3.D_P
+    lvds.D_N => dmu-pdw-clk-3.D_N
+  supports lvds:
+    lvds.D_P => lvds-fpga-cpld-1.D_P
+    lvds.D_N => lvds-fpga-cpld-1.D_N
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-blank-b.rx
+    fullduplex-uart-w-enable.tx => pod-blank-b.tx
+    fullduplex-uart-w-enable.en => pod-blank-b.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-aft-2.en
+    fullduplex-uart-w-enable.tx => pod-ab-aft-2.tx
+    fullduplex-uart-w-enable.rx => pod-ab-aft-2.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-fwd-4.en
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-4.rx
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-4.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-a-blank-5.tx
+    fullduplex-uart-w-enable.rx => pod-a-blank-5.rx
+    fullduplex-uart-w-enable.en => pod-a-blank-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-f-blank-1.tx
+    fullduplex-uart-w-enable.rx => pod-f-blank-1.rx
+    fullduplex-uart-w-enable.en => pod-f-blank-1.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-2.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-2.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-2.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => xcvr-spare-7.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-7.rx
+    fullduplex-uart-w-enable.tx => xcvr-spare-7.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-5.rx
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-5.tx
+    fullduplex-uart-w-enable.en => pod-exciter-sync-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-a-blank-1.tx
+    fullduplex-uart-w-enable.rx => pod-a-blank-1.rx
+    fullduplex-uart-w-enable.en => pod-a-blank-1.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-f-blank-5.tx
+    fullduplex-uart-w-enable.rx => pod-f-blank-5.rx
+    fullduplex-uart-w-enable.en => pod-f-blank-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-3.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-3.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-3.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-aft-1.en
+    fullduplex-uart-w-enable.rx => pod-ab-aft-1.rx
+    fullduplex-uart-w-enable.tx => pod-ab-aft-1.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-10.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-10.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-10.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-fwd-5.en
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-5.tx
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-5.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-aft-5.rx
+    fullduplex-uart-w-enable.tx => pod-ab-aft-5.tx
+    fullduplex-uart-w-enable.en => pod-ab-aft-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-1.tx
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-1.rx
+    fullduplex-uart-w-enable.en => pod-ab-fwd-1.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-4.tx
+    fullduplex-uart-w-enable.rx => xcvr-spare-4.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-4.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-exciter-sync-4.en
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-4.tx
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-4.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-12.tx
+    fullduplex-uart-w-enable.rx => xcvr-spare-12.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-12.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-11.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-11.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-11.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-a-blank-2.en
+    fullduplex-uart-w-enable.tx => pod-a-blank-2.tx
+    fullduplex-uart-w-enable.rx => pod-a-blank-2.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-f-blank-3.en
+    fullduplex-uart-w-enable.tx => pod-f-blank-3.tx
+    fullduplex-uart-w-enable.rx => pod-f-blank-3.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-ab-aft-4.tx
+    fullduplex-uart-w-enable.en => pod-ab-aft-4.en
+    fullduplex-uart-w-enable.rx => pod-ab-aft-4.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-2.rx
+    fullduplex-uart-w-enable.en => pod-ab-fwd-2.en
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-2.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-5.rx
+    fullduplex-uart-w-enable.tx => xcvr-spare-5.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-f-blank-4.en
+    fullduplex-uart-w-enable.tx => pod-f-blank-4.tx
+    fullduplex-uart-w-enable.rx => pod-f-blank-4.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-1.tx
+    fullduplex-uart-w-enable.en => pod-exciter-sync-1.en
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-1.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => xcvr-spare-8.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-8.tx
+    fullduplex-uart-w-enable.rx => xcvr-spare-8.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-1.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-1.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-1.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-exciter-sync-3.en
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-3.rx
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-3.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-a-blank-3.en
+    fullduplex-uart-w-enable.rx => pod-a-blank-3.rx
+    fullduplex-uart-w-enable.tx => pod-a-blank-3.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-f-blank-2.rx
+    fullduplex-uart-w-enable.en => pod-f-blank-2.en
+    fullduplex-uart-w-enable.tx => pod-f-blank-2.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-aft-3.en
+    fullduplex-uart-w-enable.tx => pod-ab-aft-3.tx
+    fullduplex-uart-w-enable.rx => pod-ab-aft-3.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-3.tx
+    fullduplex-uart-w-enable.en => pod-ab-fwd-3.en
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-3.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-blank-a.tx
+    fullduplex-uart-w-enable.rx => pod-blank-a.rx
+    fullduplex-uart-w-enable.en => pod-blank-a.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-a-blank-4.rx
+    fullduplex-uart-w-enable.en => pod-a-blank-4.en
+    fullduplex-uart-w-enable.tx => pod-a-blank-4.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-9.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-9.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-9.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-6.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-6.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-6.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => mids-int.rx
+    fullduplex-uart-w-enable.en => mids-int.en
+    fullduplex-uart-w-enable.tx => mids-int.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-2.rx
+    fullduplex-uart-w-enable.en => pod-exciter-sync-2.en
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-2.tx
+  supports i2c:
+    i2c.sda => fpga-i2c.sda
+    i2c.scl => fpga-i2c.scl
+  val xcku-060-cmp-pins = [
+    [#R(aurora-0-clk.D_N), `AE7, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(aurora-0-clk.D_P), `AE8, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(aurora-1-clk.D_P), `AC8, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(aurora-1-clk.D_N), `AC7, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(ddr3-clk.D_P), `P29, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-clk.D_N), `N29, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-0.D_P), `E31, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-0.D_N), `D31, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-1.D_P), `B32, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-1.D_N), `A32, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-2.D_N), `K38, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-2.D_P), `L38, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-3.D_P), `H37, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(ddr3-dqs-3.D_N), `H38, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(dmu-pdw-clk-0.D_N), `J18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-0.D_P), `K18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-1.D_N), `J19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-1.D_P), `J20, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-2.D_N), `G19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-2.D_P), `H19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-3.D_P), `H18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-clk-3.D_N), `H17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-dval-0.D_N), `A17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-dval-0.D_P), `A18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu0-pdw-data-0.D_N), `C18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu0-pdw-data-0.D_P), `D18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu0-pdw-data-1.D_N), `C19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu0-pdw-data-1.D_P), `D19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(fpga-aurora-rx0.D_N), `AG3, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(fpga-aurora-rx0.D_P), `AG4, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(fpga-aurora-rx1.D_N), `AD1, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(fpga-aurora-rx1.D_P), `AD2, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(lbdr-bus-0-0.D_P), `AU21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-0-0.D_N), `AV22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-0-1.D_N), `AW23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-0-1.D_P), `AV23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-0-2.D_P), `AV21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-0-2.D_N), `AW21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-1-0.D_P), `AN24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-1-0.D_N), `AP24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-1-1.D_N), `AU22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-1-1.D_P), `AT22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-1-2.D_P), `AT23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lbdr-bus-1-2.D_N), `AT24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-0.D_P), `D21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-0.D_N), `C21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-1.D_N), `B22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-1.D_P), `C22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-2.D_N), `A22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-2.D_P), `B21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-3.D_N), `A24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-cpld-fpga-3.D_P), `B24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-0.D_P), `E21, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-0.D_N), `E22, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-1.D_P), `F23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-1.D_N), `E23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-2.D_P), `D24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-2.D_N), `C24, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-3.D_N), `C23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(lvds-fpga-cpld-3.D_P), `D23, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(pci-exp-rx.D_N), `AM1, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(pci-exp-rx.D_P), `AM2, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(pci-exp-tx.D_P), `AM6, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(pci-exp-tx.D_N), `AM5, [`voltage => 1.8 `family => `SERDES ]]
+    [#R(mids-int.rx), `AP23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(mids-int.en), `AP21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(mids-int.tx), `AN23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-1.tx), `AR36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-1.rx), `AP35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-1.en), `AP36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-2.en), `AP39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-2.tx), `AN37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-2.rx), `AN36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-3.en), `AW36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-3.rx), `AV38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-3.tx), `AW38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-4.rx), `AM35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-4.en), `AM36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-4.tx), `AN39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-5.tx), `AU34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-5.rx), `AW35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-a-blank-5.en), `AT33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-1.en), `AT34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-1.rx), `AR33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-1.tx), `AM34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-2.en), `AJ39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-2.tx), `AK37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-2.rx), `AK36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-3.en), `AT39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-3.tx), `AT37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-3.rx), `AR38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-4.tx), `AM39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-4.en), `AN38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-4.rx), `AP38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-5.rx), `AR37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-5.tx), `AU35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-aft-5.en), `AV36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-1.tx), `AV34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-1.rx), `AW33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-1.en), `AW34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-2.rx), `AU37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-2.en), `AU39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-2.tx), `AT38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-3.tx), `AV39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-3.en), `AU36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-3.rx), `AV37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-4.en), `AL39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-4.rx), `AK35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-4.tx), `AK38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-5.en), `AT35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-5.tx), `AR35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-ab-fwd-5.rx), `AV33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-blank-a.tx), `AM22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-blank-a.rx), `AR21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-blank-a.en), `AN22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-blank-b.rx), `AJ20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-blank-b.tx), `AM20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-blank-b.en), `AP20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-1.tx), `AP29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-1.en), `AT29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-1.rx), `AT30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-2.rx), `AU30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-2.en), `AU29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-2.tx), `AR31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-3.en), `AT32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-3.rx), `AP33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-3.tx), `AW31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-4.en), `AR32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-4.tx), `AU31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-4.rx), `AV31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-5.rx), `AP30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-5.tx), `AN33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-exciter-sync-5.en), `AP31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-1.tx), `AN31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-1.rx), `AM30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-1.en), `AN32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-2.rx), `AM29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-2.en), `AR30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-2.tx), `AN29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-3.en), `AK30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-3.tx), `AJ31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-3.rx), `AJ30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-4.en), `AM32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-4.tx), `AL30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-4.rx), `AM31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-5.tx), `AK32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-5.rx), `AL32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pod-f-blank-5.en), `AL29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-1.tx), `J26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-1.en), `M24, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-1.rx), `C28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-2.rx), `E25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-2.en), `M27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-2.tx), `H26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-3.tx), `F27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-3.en), `L27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-3.rx), `E26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-4.tx), `E27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-4.rx), `C26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-4.en), `L25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-5.rx), `C27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-5.tx), `G25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-5.en), `K25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-6.rx), `D25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-6.en), `K28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-6.tx), `F25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-7.en), `J28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-7.rx), `D26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-7.tx), `F28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-8.en), `K26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-8.tx), `E28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-8.rx), `B26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-9.tx), `G26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-9.en), `K27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-9.rx), `B27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-10.rx), `B25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-10.en), `L28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-10.tx), `G27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-11.tx), `J25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-11.en), `H27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-11.rx), `A27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-12.tx), `D28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-12.rx), `A25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(xcvr-spare-12.en), `H28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(fpga-i2c.sda), `AN16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-i2c.scl), `AU20, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(alt-xmit-tag-rx), `AR23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(audio-anlg-mcp-fail), `AT19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-anlg-rcd-fail), `AU19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-clr-n), `AL17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-cs-n), `AT17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-ldac-n), `AM17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-0), `AR17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-1), `AP19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-2), `AN17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-3), `AN18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-4), `AL18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-5), `AM19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-6), `AL19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-out-7), `AP18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-pd-n), `AN19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(audio-wr-n), `AR16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-0), `AV12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-1), `AT14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-2), `AT13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-3), `AV13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-4), `AW16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-5), `AU14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-6), `AW15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-7), `AU12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-8), `AR13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-9), `AR15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-10), `AT12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-11), `AU15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-12), `AT15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-13), `AJ13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-14), `AK12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-15), `AR12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-stb-tx-rx-n), `AK13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-ad-tx-rx-n), `AW13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-addr-strb), `AH14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-data-strb), `AH13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-frq-stb-tx-rx-n), `AP15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cb-frq-strb), `AJ14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(cclk-0), `AC11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(cfgbvs-0), `W9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(clk-in-10mhz), `AL13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(clk-in-25mhz), `AL14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(config-done), `K21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-0), `E13, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-1), `E12, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-2), `G12, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-3), `A13, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-4), `A12, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-5), `C16, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-6), `B14, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-7), `C14, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-8), `B15, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-9), `B16, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-10), `B12, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-11), `C12, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-12), `A14, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-13), `A15, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-14), `C13, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(cpld-spare-io-15), `D13, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(d00-mosi-0), `AE11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(d01-din-0), `AD10, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(d02-0), `AC9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(d03-0), `AD9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(ddr3-addr-0), `M31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-1), `M32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-2), `R30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-3), `P30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-4), `L32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-5), `L33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-6), `M29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-7), `L29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-8), `M30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-9), `L30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-10), `J30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-11), `J31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-12), `J33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-13), `H33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-addr-14), `J29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-ba-0), `H29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-ba-1), `K31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-ba-2), `K32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-cas-n), `A30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-clk-en), `G32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-cs-n), `H32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dm-0), `F33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dm-1), `B30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dm-2), `K36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dm-3), `G35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-0), `F32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-1), `E30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-2), `G30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-3), `F30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-4), `D30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-5), `F29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-6), `G29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-7), `E32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-8), `A29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-9), `B31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-10), `A28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-11), `C33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-12), `D29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-13), `C32, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-14), `C29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-15), `C31, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-16), `K37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-17), `J39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-18), `K35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-19), `J35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-20), `L37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-21), `J34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-22), `L35, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-23), `J38, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-24), `F37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-25), `G37, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-26), `H34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-27), `H39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-28), `G36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-29), `G39, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-30), `G34, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-dq-31), `H36, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-int-n), `AF14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(ddr3-odt), `K30, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-ras-n), `D33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-reset-n), `E33, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ddr3-we-n), `B29, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(dmc-int-n), `AF12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-alt-blank), `AJ15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-en-0), `AH12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-en-1), `AP13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-en-2), `AE13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-en-3), `AN12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-iff-blank), `AL15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-int-n-0), `AK16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-int-n-1), `AJ16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-int-n-2), `AK17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-int-n-3), `AK18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-mids-blank), `AG12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-pdw-dval-p-1), `B20, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-dval-p-2), `C17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-pdw-dval-p-3), `B19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu-radar-blank), `AG15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-rxa-blank), `AF13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-rxb-blank), `AF15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu-tacan-blank), `AM15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(dmu0-pdw-data-p-2), `F18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu0-pdw-data-p-3), `F20, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu1-pdw-data-p-0), `F17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu1-pdw-data-p-1), `G20, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu1-pdw-data-p-2), `K16, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu1-pdw-data-p-3), `L19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu2-pdw-data-p-0), `M17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu2-pdw-data-p-1), `L17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu2-pdw-data-p-2), `R18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu2-pdw-data-p-3), `N19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu3-pdw-data-p-0), `T18, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu3-pdw-data-p-1), `R16, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu3-pdw-data-p-2), `P19, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(dmu3-pdw-data-p-3), `N17, [`voltage => 1.5 `family => `LVDS ]]
+    [#R(done-0), `AF11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(dxn), `AB15, []]
+    [#R(dxp), `AB16, []]
+    [#R(fpga-reset-n), `L24, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(fpga-test-dwell-en), `AG14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-0), `AF19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-1), `AG19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-2), `AE17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-3), `AF17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-4), `AE18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-5), `AF18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-6), `AD16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-7), `AE16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-8), `AH19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-9), `AH18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-10), `AH16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-11), `AH17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-12), `AG16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-13), `AJ18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-14), `AG17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(fpga-test-points-15), `AJ19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(gnd), [`A10, `AB7, `AA29, `D3, `AC33, `N11, `AG9, `AB28, `AA1, `AR10, `AP22, `V20, `M7, `AV3, `R5, `AE37, `AT11, `W23, `AU33, `W19, `AU10, `AK24, `Y7, `L5, `N33, `U13, `Y8, `AK11, `V39, `AC29, `AU1, `AG1, `AR1, `C11, `T7, `AC13, `J11, `V35, `AP12, `AL1, `U17, `AC5, `J27, `M38, `AL11, `AC37, `AB26, `R33, `F7, `F16, `AB10, `F36, `AD22, `AM11, `AH3, `V16, `K34, `W25, `A11, `AC1, `P12, `AM3, `AB30, `N5, `V30, `T35, `V10, `M18, `AD30, `D11, `G13, `AJ1, `AV11, `AJ10, `AA27, `Y35, `Y22, `K3, `C15, `AN10, `AC19, `Y24, `Y39, `AP32, `D32, `AC23, `AJ11, `AH34, `B18, `A31, `AH33, `K7, `J1, `P39, `AW10, `U21, `AC15, `M34, `AJ37, `AV30, `Y20, `AA19, `AU13, `AA13, `Y31, `AR39, `P31, `N32, `G33, `AD31, `AB3, `R9, `M3, `M33, `AA33, `N9, `T12, `V12, `AD3, `AE19, `A9, `Y30, `AB31, `AW5, `AB14, `H3, `AH30, `AA31, `AG5, `V7, `AG13, `AU11, `W21, `V28, `AF3, `AP3, `Y26, `AG33, `AN15, `T26, `AF39, `U37, `AF16, `U25, `F26, `AE10, `W27, `AM18, `AF26, `W29, `T3, `V14, `M28, `B7, `AV20, `G5, `D7, `AM38, `AW2, `W13, `AJ35, `AH38, `AH7, `G11, `AD12, `U33, `W37, `Y14, `F11, `AA23, `U5, `R31, `J9, `AM7, `E1, `AR9, `N1, `AN35, `G9, `Y28, `T14, `AE31, `C5, `AK7, `AG32, `A2, `V3, `V31, `Y18, `AH20, `AJ38, `AG37, `AU5, `T16, `AG23, `N10, `AN11, `AU9, `AU23, `U15, `E5, `H7, `R29, `AC27, `AF35, `F3, `AW11, `AJ5, `P35, `B28, `AT36, `AB12, `AB18, `N37, `AF7, `H30, `AA37, `E11, `V26, `N31, `K14, `C10, `U29, `G1, `AA21, `AE5, `AM28, `AD39, `AB24, `P7, `AW6, `AG10, `AK34, `AB22, `E9, `AD35, `AT3, `G23, `AW27, `B11, `AA17, `J37, `D12, `N25, `Y10, `W33, `AV7, `B3, `AR11, `K24, `AL5, `J5, `L9, `AC17, `AC31, `M37, `U1, `AE33, `AL9, `T39, `L31, `AL10, `H20, `AH39, `P3, `AE29, `H11, `V22, `V18, `AJ36, `AW17, `M11, `W31, `AE9, `A6, `AN25, `M35, `AR19, `V24, `AK14, `B38, `AJ27, `U31, `AR5, `AW37, `R37, `E29, `L21, `E39, `AH11, `AN1, `L1, `W5, `A21, `AC25, `R19, `L11, `T31, `G10, `R10, `AT7, `AJ17, `AP11, `Y38, `J10, `U27, `M39, `W17, `C9, `AD7, `C35, `U19, `A5, `L10, `AB20, `AW9, `K11, `N15, `AT26, `U23, `AP7, `AB39, `AJ9, `AH35, `J17, `C1, `AL31, `AE1, `P22, `AL21, `R1, `AA5, `AA25, `E10, `AN9, `AG31, `AB35, `M36, `AK3, `D22, `Y3, `AR29, `AN5, `AT16, `E19, `W1, `Y12, `AF31, `AC21, `C25], []]
+    [#R(gndadc), `W15, []]
+    [#R(iff-xmit-tag-rx), `AK23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(init-b-0), `R11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(init-clk-m), `AN21, [`voltage => 1.8 `family => `HSTL ]]
+    [#R(init-clk-p), `AM21, [`voltage => 1.8 `family => `HSTL ]]
+    [#R(io-l10n-t1u-n7-qbc-ad4n-45), `AR25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-l10n-t1u-n7-qbc-ad4n-66), `K12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-l10n-t1u-n7-qbc-ad4n-67), `J16, [`i/o-type => `HP `bank => "67" `memory-byte-group => "1U" ]]
+    [#R(io-l10n-t1u-n7-qbc-ad4n-68), `M21, [`i/o-type => `HP `bank => "68" `memory-byte-group => "1U" ]]
+    [#R(io-l10p-t1u-n6-qbc-ad4p-45), `AP25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-l10p-t1u-n6-qbc-ad4p-66), `K13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-l10p-t1u-n6-qbc-ad4p-68), `M20, [`i/o-type => `HP `bank => "68" `memory-byte-group => "1U" ]]
+    [#R(io-l11n-t1u-n9-gc-45), `AN27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-l11n-t1u-n9-gc-66), `G15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-l11p-t1u-n8-gc-45), `AM27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-l11p-t1u-n8-gc-66), `G16, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-l12n-t1u-n11-gc-45), `AN26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-l12n-t1u-n11-gc-66), `H14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-l12p-t1u-n10-gc-45), `AM26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-l12p-t1u-n10-gc-66), `J14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-l13n-t2l-n1-gc-qbc-45), `AK28, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2L" ]]
+    [#R(io-l13n-t2l-n1-gc-qbc-46), `E38, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2L" ]]
+    [#R(io-l13n-t2l-n1-gc-qbc-66), `E15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2L" ]]
+    [#R(io-l13p-t2l-n0-gc-qbc-45), `AK27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2L" ]]
+    [#R(io-l13p-t2l-n0-gc-qbc-46), `F38, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2L" ]]
+    [#R(io-l13p-t2l-n0-gc-qbc-66), `F15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2L" ]]
+    [#R(io-l14n-t2l-n3-gc-45), `AL28, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2L" ]]
+    [#R(io-l14n-t2l-n3-gc-46), `D38, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2L" ]]
+    [#R(io-l14n-t2l-n3-gc-66), `F14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2L" ]]
+    [#R(io-l14p-t2l-n2-gc-45), `AL27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2L" ]]
+    [#R(io-l14p-t2l-n2-gc-46), `E37, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2L" ]]
+    [#R(io-l14p-t2l-n2-gc-66), `G14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2L" ]]
+    [#R(io-l15n-t2l-n5-ad11n-25), `AP34, [`i/o-type => `HP `bank => "25" `memory-byte-group => "2L" ]]
+    [#R(io-l15n-t2l-n5-ad11n-45), `AK25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2L" ]]
+    [#R(io-l15n-t2l-n5-ad11n-46), `C39, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2L" ]]
+    [#R(io-l15n-t2l-n5-ad11n-66), `D14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2L" ]]
+    [#R(io-l15n-t2l-n5-ad11n-67), `F19, [`i/o-type => `HP `bank => "67" `memory-byte-group => "2L" ]]
+    [#R(io-l15n-t2l-n5-ad11n-68), `G22, [`i/o-type => `HP `bank => "68" `memory-byte-group => "2L" ]]
+    [#R(io-l15p-t2l-n4-ad11p-25), `AN34, [`i/o-type => `HP `bank => "25" `memory-byte-group => "2L" ]]
+    [#R(io-l15p-t2l-n4-ad11p-44), `AL20, [`i/o-type => `HP `bank => "44" `memory-byte-group => "2L" ]]
+    [#R(io-l15p-t2l-n4-ad11p-45), `AJ25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2L" ]]
+    [#R(io-l15p-t2l-n4-ad11p-46), `D39, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2L" ]]
+    [#R(io-l15p-t2l-n4-ad11p-66), `D15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2L" ]]
+    [#R(io-l15p-t2l-n4-ad11p-68), `G21, [`i/o-type => `HP `bank => "68" `memory-byte-group => "2L" ]]
+    [#R(io-l16n-t2u-n7-qbc-ad3n-45), `AL25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-l16n-t2u-n7-qbc-ad3n-46), `B39, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-l16n-t2u-n7-qbc-ad3n-66), `F12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2U" ]]
+    [#R(io-l16n-t2u-n7-qbc-ad3n-67), `E17, [`i/o-type => `HP `bank => "67" `memory-byte-group => "2U" ]]
+    [#R(io-l16n-t2u-n7-qbc-ad3n-68), `F24, [`i/o-type => `HP `bank => "68" `memory-byte-group => "2U" ]]
+    [#R(io-l16p-t2u-n6-qbc-ad3p-45), `AL24, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-l16p-t2u-n6-qbc-ad3p-46), `C38, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-l16p-t2u-n6-qbc-ad3p-66), `F13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2U" ]]
+    [#R(io-l16p-t2u-n6-qbc-ad3p-68), `G24, [`i/o-type => `HP `bank => "68" `memory-byte-group => "2U" ]]
+    [#R(io-l17n-t2u-n9-ad10n-24), `AK31, [`i/o-type => `HP `bank => "24" `memory-byte-group => "2U" ]]
+    [#R(io-l17n-t2u-n9-ad10n-45), `AJ26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-l17n-t2u-n9-ad10n-46), `A38, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-l17n-t2u-n9-ad10n-66), `D16, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2U" ]]
+    [#R(io-l17n-t2u-n9-ad10n-67), `E20, [`i/o-type => `HP `bank => "67" `memory-byte-group => "2U" ]]
+    [#R(io-l17p-t2u-n8-ad10p-45), `AH26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-l17p-t2u-n8-ad10p-46), `A37, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-l17p-t2u-n8-ad10p-66), `E16, [`i/o-type => `HP `bank => "66" `memory-byte-group => "2U" ]]
+    [#R(io-l18n-t2u-n11-ad2n-24), `AK33, [`i/o-type => `HP `bank => "24" `memory-byte-group => "2U" ]]
+    [#R(io-l18n-t2u-n11-ad2n-45), `AJ24, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-l18n-t2u-n11-ad2n-46), `B37, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-l18n-t2u-n11-ad2n-67), `E18, [`i/o-type => `HP `bank => "67" `memory-byte-group => "2U" ]]
+    [#R(io-l18p-t2u-n10-ad2p-24), `AJ33, [`i/o-type => `HP `bank => "24" `memory-byte-group => "2U" ]]
+    [#R(io-l18p-t2u-n10-ad2p-45), `AH24, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-l18p-t2u-n10-ad2p-46), `C37, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-l19n-t3l-n1-dbc-ad9n-24), `AJ29, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3L" ]]
+    [#R(io-l19n-t3l-n1-dbc-ad9n-25), `AM37, [`i/o-type => `HP `bank => "25" `memory-byte-group => "3L" ]]
+    [#R(io-l19n-t3l-n1-dbc-ad9n-45), `AE25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3L" ]]
+    [#R(io-l19n-t3l-n1-dbc-ad9n-46), `D36, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3L" ]]
+    [#R(io-l19p-t3l-n0-dbc-ad9p-24), `AH29, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3L" ]]
+    [#R(io-l19p-t3l-n0-dbc-ad9p-45), `AD25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3L" ]]
+    [#R(io-l19p-t3l-n0-dbc-ad9p-46), `E36, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3L" ]]
+    [#R(io-l1n-t0l-n1-dbc-24), `AV32, [`i/o-type => `HP `bank => "24" `memory-byte-group => "0L" ]]
+    [#R(io-l1n-t0l-n1-dbc-44), `AW24, [`i/o-type => `HP `bank => "44" `memory-byte-group => "0L" ]]
+    [#R(io-l1n-t0l-n1-dbc-46), `J36, [`i/o-type => `HP `bank => "46" `memory-byte-group => "0L" ]]
+    [#R(io-l1n-t0l-n1-dbc-48), `N28, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0L" ]]
+    [#R(io-l1n-t0l-n1-dbc-66), `N13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0L" ]]
+    [#R(io-l1n-t0l-n1-dbc-67), `P18, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0L" ]]
+    [#R(io-l1n-t0l-n1-dbc-68), `R23, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0L" ]]
+    [#R(io-l1p-t0l-n0-dbc-24), `AU32, [`i/o-type => `HP `bank => "24" `memory-byte-group => "0L" ]]
+    [#R(io-l1p-t0l-n0-dbc-45), `AV28, [`i/o-type => `HP `bank => "45" `memory-byte-group => "0L" ]]
+    [#R(io-l1p-t0l-n0-dbc-48), `P28, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0L" ]]
+    [#R(io-l1p-t0l-n0-dbc-66), `P13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0L" ]]
+    [#R(io-l1p-t0l-n0-dbc-68), `T23, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0L" ]]
+    [#R(io-l20n-t3l-n3-ad1n-24), `AH32, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3L" ]]
+    [#R(io-l20n-t3l-n3-ad1n-25), `AL38, [`i/o-type => `HP `bank => "25" `memory-byte-group => "3L" ]]
+    [#R(io-l20n-t3l-n3-ad1n-45), `AG25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3L" ]]
+    [#R(io-l20n-t3l-n3-ad1n-46), `B36, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3L" ]]
+    [#R(io-l20p-t3l-n2-ad1p-24), `AH31, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3L" ]]
+    [#R(io-l20p-t3l-n2-ad1p-25), `AL37, [`i/o-type => `HP `bank => "25" `memory-byte-group => "3L" ]]
+    [#R(io-l20p-t3l-n2-ad1p-45), `AF25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3L" ]]
+    [#R(io-l20p-t3l-n2-ad1p-46), `C36, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3L" ]]
+    [#R(io-l21n-t3l-n5-ad8n-24), `AF30, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3L" ]]
+    [#R(io-l21n-t3l-n5-ad8n-25), `AL35, [`i/o-type => `HP `bank => "25" `memory-byte-group => "3L" ]]
+    [#R(io-l21n-t3l-n5-ad8n-45), `AE26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3L" ]]
+    [#R(io-l21n-t3l-n5-ad8n-46), `D35, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3L" ]]
+    [#R(io-l21n-t3l-n5-ad8n-67), `A19, [`i/o-type => `HP `bank => "67" `memory-byte-group => "3L" ]]
+    [#R(io-l21p-t3l-n4-ad8p-24), `AE30, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3L" ]]
+    [#R(io-l21p-t3l-n4-ad8p-25), `AL34, [`i/o-type => `HP `bank => "25" `memory-byte-group => "3L" ]]
+    [#R(io-l21p-t3l-n4-ad8p-45), `AD26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3L" ]]
+    [#R(io-l21p-t3l-n4-ad8p-46), `E35, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3L" ]]
+    [#R(io-l22n-t3u-n7-dbc-ad0n-24), `AJ28, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-l22n-t3u-n7-dbc-ad0n-45), `AG24, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-l22n-t3u-n7-dbc-ad0n-46), `A35, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-l22n-t3u-n7-dbc-ad0n-67), `B17, [`i/o-type => `HP `bank => "67" `memory-byte-group => "3U" ]]
+    [#R(io-l22p-t3u-n6-dbc-ad0p-24), `AH28, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-l22p-t3u-n6-dbc-ad0p-45), `AF24, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-l22p-t3u-n6-dbc-ad0p-46), `B35, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-l23n-t3u-n9-24), `AG29, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-l23n-t3u-n9-44), `AF23, [`i/o-type => `HP `bank => "44" `memory-byte-group => "3U" ]]
+    [#R(io-l23n-t3u-n9-45), `AF27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-l23n-t3u-n9-46), `C34, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-l23n-t3u-n9-67), `A20, [`i/o-type => `HP `bank => "67" `memory-byte-group => "3U" ]]
+    [#R(io-l23p-t3u-n8-24), `AF29, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-l23p-t3u-n8-45), `AE27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-l23p-t3u-n8-46), `D34, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-l24n-t3u-n11-24), `AF28, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-l24n-t3u-n11-44), `AD21, [`i/o-type => `HP `bank => "44" `memory-byte-group => "3U" ]]
+    [#R(io-l24n-t3u-n11-45), `AG27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-l24n-t3u-n11-46), `A34, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-l24n-t3u-n11-dout-cso-b-65), `AD13, [`i/o-type => `HR `bank => "65" `memory-byte-group => "3U" ]]
+    [#R(io-l24p-t3u-n10-24), `AE28, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-l24p-t3u-n10-44), `AD20, [`i/o-type => `HP `bank => "44" `memory-byte-group => "3U" ]]
+    [#R(io-l24p-t3u-n10-45), `AG26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-l24p-t3u-n10-46), `B34, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-l24p-t3u-n10-emcclk-65), `AD14, [`i/o-type => `HR `bank => "65" `memory-byte-group => "3U" ]]
+    [#R(io-l2n-t0l-n3-24), `AW29, [`i/o-type => `HP `bank => "24" `memory-byte-group => "0L" ]]
+    [#R(io-l2n-t0l-n3-48), `R25, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0L" ]]
+    [#R(io-l2n-t0l-n3-66), `R12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0L" ]]
+    [#R(io-l2n-t0l-n3-67), `P16, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0L" ]]
+    [#R(io-l2n-t0l-n3-68), `N23, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0L" ]]
+    [#R(io-l2p-t0l-n2-24), `AV29, [`i/o-type => `HP `bank => "24" `memory-byte-group => "0L" ]]
+    [#R(io-l2p-t0l-n2-48), `T25, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0L" ]]
+    [#R(io-l2p-t0l-n2-66), `R13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0L" ]]
+    [#R(io-l3n-t0l-n5-ad15n-48), `R27, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0L" ]]
+    [#R(io-l3n-t0l-n5-ad15n-66), `M14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0L" ]]
+    [#R(io-l3n-t0l-n5-ad15n-67), `N16, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0L" ]]
+    [#R(io-l3n-t0l-n5-ad15n-68), `R22, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0L" ]]
+    [#R(io-l3p-t0l-n4-ad15p-24), `AW30, [`i/o-type => `HP `bank => "24" `memory-byte-group => "0L" ]]
+    [#R(io-l3p-t0l-n4-ad15p-48), `R26, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0L" ]]
+    [#R(io-l3p-t0l-n4-ad15p-66), `N14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0L" ]]
+    [#R(io-l3p-t0l-n4-ad15p-68), `T22, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0L" ]]
+    [#R(io-l4n-t0u-n7-dbc-ad7n-48), `P25, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-l4n-t0u-n7-dbc-ad7n-66), `M12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-l4n-t0u-n7-dbc-ad7n-67), `T17, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0U" ]]
+    [#R(io-l4n-t0u-n7-dbc-ad7n-68), `N22, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0U" ]]
+    [#R(io-l4p-t0u-n6-dbc-ad7p-48), `P24, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-l4p-t0u-n6-dbc-ad7p-66), `N12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-l4p-t0u-n6-dbc-ad7p-68), `N21, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0U" ]]
+    [#R(io-l5n-t0u-n9-ad14n-48), `R28, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-l5n-t0u-n9-ad14n-66), `L15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-l5n-t0u-n9-ad14n-67), `N18, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0U" ]]
+    [#R(io-l5n-t0u-n9-ad14n-68), `P21, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0U" ]]
+    [#R(io-l5p-t0u-n8-ad14p-48), `T28, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-l5p-t0u-n8-ad14p-66), `M15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-l5p-t0u-n8-ad14p-68), `R21, [`i/o-type => `HP `bank => "68" `memory-byte-group => "0U" ]]
+    [#R(io-l6n-t0u-n11-ad6n-48), `N26, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-l6n-t0u-n11-ad6n-66), `P14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-l6n-t0u-n11-ad6n-67), `R17, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0U" ]]
+    [#R(io-l6p-t0u-n10-ad6p-48), `P26, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-l6p-t0u-n10-ad6p-66), `P15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-l7n-t1l-n1-qbc-ad13n-46), `F35, [`i/o-type => `HP `bank => "46" `memory-byte-group => "1L" ]]
+    [#R(io-l7n-t1l-n1-qbc-ad13n-48), `M26, [`i/o-type => `HP `bank => "48" `memory-byte-group => "1L" ]]
+    [#R(io-l7n-t1l-n1-qbc-ad13n-66), `H13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1L" ]]
+    [#R(io-l7n-t1l-n1-qbc-ad13n-67), `K17, [`i/o-type => `HP `bank => "67" `memory-byte-group => "1L" ]]
+    [#R(io-l7n-t1l-n1-qbc-ad13n-68), `J21, [`i/o-type => `HP `bank => "68" `memory-byte-group => "1L" ]]
+    [#R(io-l7p-t1l-n0-qbc-ad13p-48), `M25, [`i/o-type => `HP `bank => "48" `memory-byte-group => "1L" ]]
+    [#R(io-l7p-t1l-n0-qbc-ad13p-66), `J13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1L" ]]
+    [#R(io-l8n-t1l-n3-ad5n-45), `AM25, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1L" ]]
+    [#R(io-l8n-t1l-n3-ad5n-66), `L12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1L" ]]
+    [#R(io-l8n-t1l-n3-ad5n-67), `M16, [`i/o-type => `HP `bank => "67" `memory-byte-group => "1L" ]]
+    [#R(io-l8p-t1l-n2-ad5p-45), `AM24, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1L" ]]
+    [#R(io-l8p-t1l-n2-ad5p-48), `N24, [`i/o-type => `HP `bank => "48" `memory-byte-group => "1L" ]]
+    [#R(io-l8p-t1l-n2-ad5p-66), `L13, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1L" ]]
+    [#R(io-l8p-t1l-n2-ad5p-68), `L23, [`i/o-type => `HP `bank => "68" `memory-byte-group => "1L" ]]
+    [#R(io-l9n-t1l-n5-ad12n-45), `AP28, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1L" ]]
+    [#R(io-l9n-t1l-n5-ad12n-66), `J15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1L" ]]
+    [#R(io-l9n-t1l-n5-ad12n-67), `L18, [`i/o-type => `HP `bank => "67" `memory-byte-group => "1L" ]]
+    [#R(io-l9n-t1l-n5-ad12n-68), `K20, [`i/o-type => `HP `bank => "68" `memory-byte-group => "1L" ]]
+    [#R(io-l9p-t1l-n4-ad12p-45), `AN28, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1L" ]]
+    [#R(io-l9p-t1l-n4-ad12p-66), `K15, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1L" ]]
+    [#R(io-l9p-t1l-n4-ad12p-68), `L20, [`i/o-type => `HP `bank => "68" `memory-byte-group => "1L" ]]
+    [#R(io-t0u-n12-vrp-44), `AU24, [`i/o-type => `HP `bank => "44" `memory-byte-group => "0U" ]]
+    [#R(io-t0u-n12-vrp-46), `L39, [`i/o-type => `HP `bank => "46" `memory-byte-group => "0U" ]]
+    [#R(io-t0u-n12-vrp-47), `K33, [`i/o-type => `HP `bank => "47" `memory-byte-group => "0U" ]]
+    [#R(io-t0u-n12-vrp-48), `N27, [`i/o-type => `HP `bank => "48" `memory-byte-group => "0U" ]]
+    [#R(io-t0u-n12-vrp-66), `L14, [`i/o-type => `HP `bank => "66" `memory-byte-group => "0U" ]]
+    [#R(io-t0u-n12-vrp-67), `M19, [`i/o-type => `HP `bank => "67" `memory-byte-group => "0U" ]]
+    [#R(io-t1u-n12-45), `AP26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "1U" ]]
+    [#R(io-t1u-n12-46), `F34, [`i/o-type => `HP `bank => "46" `memory-byte-group => "1U" ]]
+    [#R(io-t1u-n12-66), `H12, [`i/o-type => `HP `bank => "66" `memory-byte-group => "1U" ]]
+    [#R(io-t1u-n12-67), `H16, [`i/o-type => `HP `bank => "67" `memory-byte-group => "1U" ]]
+    [#R(io-t2u-n12-24), `AL33, [`i/o-type => `HP `bank => "24" `memory-byte-group => "2U" ]]
+    [#R(io-t2u-n12-45), `AK26, [`i/o-type => `HP `bank => "45" `memory-byte-group => "2U" ]]
+    [#R(io-t2u-n12-46), `F39, [`i/o-type => `HP `bank => "46" `memory-byte-group => "2U" ]]
+    [#R(io-t2u-n12-67), `G17, [`i/o-type => `HP `bank => "67" `memory-byte-group => "2U" ]]
+    [#R(io-t3u-n12-24), `AG30, [`i/o-type => `HP `bank => "24" `memory-byte-group => "3U" ]]
+    [#R(io-t3u-n12-44), `AH21, [`i/o-type => `HP `bank => "44" `memory-byte-group => "3U" ]]
+    [#R(io-t3u-n12-45), `AH27, [`i/o-type => `HP `bank => "45" `memory-byte-group => "3U" ]]
+    [#R(io-t3u-n12-46), `A33, [`i/o-type => `HP `bank => "46" `memory-byte-group => "3U" ]]
+    [#R(io-t3u-n12-67), `D20, [`i/o-type => `HP `bank => "67" `memory-byte-group => "3U" ]]
+    [#R(io-t3u-n12-68), `A23, [`i/o-type => `HP `bank => "68" `memory-byte-group => "3U" ]]
+    [#R(lbdr-ctrl-0), `AJ21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-1), `AF22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-2), `AG21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-3), `AG20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-4), `AF20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-5), `AE22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-6), `AE20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-7), `AE21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-8), `AK20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-9), `AE23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-10), `AH23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-11), `AG22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-12), `AJ23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-13), `AH22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr-ctrl-14), `AK21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr0-aur-m), `AG7, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr0-aur-p), `AG8, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr1-aur-m), `AE3, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(lbdr1-aur-p), `AE4, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(m0-0), `T9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(m1-0), `U9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(m2-0), `V9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(mgtavcc-l), [`P34, `AC32, `AE32, `U32, `AF34, `AD34, `AB34, `V34, `Y34, `R32, `T34], []]
+    [#R(mgtavcc-rn), [`E6, `P8, `U6, `M8, `K8, `H8, `C6, `J6, `B8, `F8, `G6, `R6, `L6, `N6, `D8], []]
+    [#R(mgtavcc-rs), [`AA6, `AV8, `AR6, `AC6, `AN6, `AT8, `AF8, `AL6, `AG6, `AP8, `AK8, `AH8, `AM8, `AJ6, `AU6, `AE6, `W6], []]
+    [#R(mgtavtt-l), [`AF38, `W36, `V38, `AG36, `P38, `AD38, `AE36, `AB38, `AC36, `R36, `N36, `AA36, `U36, `T38], []]
+    [#R(mgtavtt-rn), [`L2, `M4, `K4, `J2, `E2, `F4, `R2, `D4, `G2, `T4, `P4, `C2, `N2, `H4, `U2, `B4], []]
+    [#R(mgtavtt-rs), [`AE2, `W2, `AP4, `AG2, `AM4, `AB4, `AJ2, `AK4, `AR2, `Y4, `V4, `AD4, `AN2, `AV4, `AL2, `AH4, `AF4, `AT4, `AC2, `AU2, `AA2], []]
+    [#R(mgtavttrcal-l), `AF32, []]
+    [#R(mgtavttrcal-rs), `AV10, []]
+    [#R(mgthrxn0-126), `AG39, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxn0-127), `AB37, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxn0-128), `U39, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxn0-224), `AW3, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxn0-225), `AR3, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthrxn0-226), `AL3, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxn0-228), `AB1, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxn1-126), `AF37, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxn1-127), `AA39, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxn1-128), `R39, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxn1-224), `AV1, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxn1-225), `AP1, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthrxn1-226), `AK1, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxn1-227), `AF1, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthrxn1-228), `Y1, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxn2-126), `AE39, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxn2-127), `W39, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxn2-128), `P37, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxn2-224), `AU3, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxn2-225), `AN3, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthrxn2-226), `AJ3, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxn2-228), `W3, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxn3-126), `AC39, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxn3-127), `V37, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxn3-128), `N39, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxn3-224), `AT1, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxn3-226), `AH1, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxn3-227), `AC3, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthrxn3-228), `V1, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxp0-126), `AG38, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxp0-127), `AB36, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxp0-128), `U38, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxp0-224), `AW4, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxp0-225), `AR4, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthrxp0-226), `AL4, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxp0-228), `AB2, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxp1-126), `AF36, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxp1-127), `AA38, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxp1-128), `R38, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxp1-224), `AV2, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxp1-225), `AP2, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthrxp1-226), `AK2, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxp1-227), `AF2, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthrxp1-228), `Y2, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxp2-126), `AE38, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxp2-127), `W38, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxp2-128), `P36, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxp2-224), `AU4, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxp2-225), `AN4, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthrxp2-226), `AJ4, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxp2-228), `W4, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthrxp3-126), `AC38, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthrxp3-127), `V36, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthrxp3-128), `N38, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthrxp3-224), `AT2, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthrxp3-226), `AH2, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthrxp3-227), `AC4, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthrxp3-228), `V2, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxn0-126), `AH37, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxn0-127), `AC35, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxn0-128), `U35, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxn0-224), `AW7, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxn0-225), `AR7, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthtxn0-226), `AL7, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxn0-228), `AB5, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxn1-126), `AG35, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxn1-127), `AA35, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxn1-128), `T37, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxn1-224), `AV5, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxn1-225), `AP5, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthtxn1-226), `AK5, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxn1-227), `AF5, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthtxn1-228), `AA3, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxn2-126), `AE35, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxn2-127), `Y37, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxn2-128), `R35, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxn2-224), `AU7, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxn2-225), `AN7, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthtxn2-226), `AJ7, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxn2-228), `Y5, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxn3-126), `AD37, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxn3-127), `W35, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxn3-128), `N35, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxn3-224), `AT5, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxn3-226), `AH5, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxn3-227), `AD5, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthtxn3-228), `V5, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxp0-126), `AH36, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxp0-127), `AC34, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxp0-128), `U34, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxp0-224), `AW8, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxp0-225), `AR8, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthtxp0-226), `AL8, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxp0-228), `AB6, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxp1-126), `AG34, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxp1-127), `AA34, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxp1-128), `T36, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxp1-224), `AV6, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxp1-225), `AP6, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthtxp1-226), `AK6, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxp1-227), `AF6, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthtxp1-228), `AA4, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxp2-126), `AE34, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxp2-127), `Y36, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxp2-128), `R34, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxp2-224), `AU8, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxp2-225), `AN8, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgthtxp2-226), `AJ8, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxp2-228), `Y6, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgthtxp3-126), `AD36, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgthtxp3-127), `W34, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgthtxp3-128), `N34, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgthtxp3-224), `AT6, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgthtxp3-226), `AH6, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgthtxp3-227), `AD6, [`i/o-type => `GTH `bank => "227" ]]
+    [#R(mgthtxp3-228), `V6, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgtrefclk0n-126), `AD33, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgtrefclk0n-127), `Y33, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgtrefclk0n-128), `T33, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgtrefclk0n-224), `AT9, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgtrefclk0n-225), `AM9, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgtrefclk0n-226), `AH9, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgtrefclk0n-228), `AA7, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgtrefclk0p-126), `AD32, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgtrefclk0p-127), `Y32, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgtrefclk0p-128), `T32, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgtrefclk0p-224), `AT10, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgtrefclk0p-225), `AM10, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgtrefclk0p-226), `AH10, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgtrefclk0p-228), `AA8, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgtrefclk1n-126), `AB33, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgtrefclk1n-127), `V33, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgtrefclk1n-128), `P33, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgtrefclk1n-224), `AP9, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgtrefclk1n-225), `AK9, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgtrefclk1n-226), `AF9, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgtrefclk1n-228), `W7, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgtrefclk1p-126), `AB32, [`i/o-type => `GTH `bank => "126" ]]
+    [#R(mgtrefclk1p-127), `V32, [`i/o-type => `GTH `bank => "127" ]]
+    [#R(mgtrefclk1p-128), `P32, [`i/o-type => `GTH `bank => "128" ]]
+    [#R(mgtrefclk1p-224), `AP10, [`i/o-type => `GTH `bank => "224" ]]
+    [#R(mgtrefclk1p-225), `AK10, [`i/o-type => `GTH `bank => "225" ]]
+    [#R(mgtrefclk1p-226), `AF10, [`i/o-type => `GTH `bank => "226" ]]
+    [#R(mgtrefclk1p-228), `W8, [`i/o-type => `GTH `bank => "228" ]]
+    [#R(mgtrref-l), `AF33, []]
+    [#R(mgtrref-rs), `AV9, []]
+    [#R(mgtvccaux-l), [`W32, `AA32], []]
+    [#R(mgtvccaux-rn), [`T8, `V8], []]
+    [#R(mgtvccaux-rs), [`AB8, `AD8], []]
+    [#R(mids-blank-rx), `AR22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(pcie-rst-n), `AE15, [`voltage => 3.3 `PULLUP => `true `family => `LVCMOS ]]
+    [#R(por-override), `Y9, []]
+    [#R(program-b-0), `AA9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(pudc-b-0), `P11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(radar-xmit-tag-rx), `AL22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(rdwr-fcs-b-0), `AB9, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(sei-int-n), `AE12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(spare-lvds-out-8), `AV14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(spare-lvds-out-9), `AP14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(spare-lvds-out-10), `AV16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(spare-lvds-out-11), `AW14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(sys-clk-m), `G31, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(sys-clk-p), `H31, [`voltage => 1.5 `family => `SSTL ]]
+    [#R(tacan-xmit-tag-rx), `AV24, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(tck-0), `AA11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(tdi-0), `U11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(tdo-0), `T10, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(therm-out-sig), `AM16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(tms-0), `W11, [`i/o-type => `CONFIG `bank => "0" ]]
+    [#R(toa-sync-rx), `AP16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(toa-sync-tx-0), `AN14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(toa-sync-tx-1), `AM14, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(toa-sync-tx-2), `AN13, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(toa-sync-tx-3), `AM12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(toa-sync-tx-4), `AK15, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(toa-sync-tx-5), `AL12, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(ttnt-rcvr-blank), `AK22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ttnt-xmt-blank), `AL23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clk-1pps-fpga), `P23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-1pps-cpld), `H24, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-2mhz), `K23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-rx-1), `H22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-rx-2), `H21, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-rx-3), `K22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-rx-4), `J24, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-rx-5), `J23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-clock-test), `H23, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-pod-cfg-0), `F22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-pod-cfg-1), `R20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-pod-cfg-2), `P20, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-pod-cfg-3), `L22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(ueu-pod-cfg-4), `M22, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(vbatt), `AG11, []]
+    [#R(vccadc), `W16, []]
+    [#R(vccaux), [`AC30, `T29, `W30, `AA30, `U30], []]
+    [#R(vccaux-io), [`W28, `AD29, `Y27, `AA28, `AB29, `V29, `AC28, `Y29, `V27, `T27, `AB27, `U28], []]
+    [#R(vccbram), [`W10, `AA10, `AC10, `U10], []]
+    [#R(vccint), [`T15, `V17, `AA24, `AB17, `V25, `AC16, `U22, `AC14, `Y23, `AC22, `V15, `AC12, `W20, `Y17, `W22, `AA12, `Y19, `Y25, `AA20, `W24, `U20, `V13, `T13, `V11, `U24, `AA22, `AB19, `W14, `T11, `Y21, `V23, `AA18, `AB21, `AC24, `W12, `AB23, `Y11, `AC20, `V19, `AB13, `U12, `W18, `Y13, `U18, `V21, `AA14, `AC18, `U16, `U14], []]
+    [#R(vccint-io), [`AC26, `U26, `AB25, `AA26, `W26], []]
+    [#R(vcco-0), [`AB11, `AD11], [`bank => ["0", "0"] ]]
+    [#R(vcco-24), [`AJ32, `AG28, `AW32, `AT31, `AN30, `AK29, `AM33], [`bank => ["24", "24", "24", "24", "24", "24", "24"] ]]
+    [#R(vcco-25), [`AV35, `AU38, `AR34, `AP37, `AK39, `AL36], [`bank => ["25", "25", "25", "25", "25", "25"] ]]
+    [#R(vcco-44), [`AJ22, `AW22, `AM23, `AN20, `AR24, `AF21, `AT21], [`bank => ["44", "44", "44", "44", "44", "44", "44"] ]]
+    [#R(vcco-45), [`AE24, `AH25, `AD27, `AL26, `AU28, `AP27, `AV25], [`bank => ["45", "45", "45", "45", "45", "45", "45"] ]]
+    [#R(vcco-46), [`E34, `L36, `D37, `H35, `G38, `K39, `A36], [`bank => ["46", "46", "46", "46", "46", "46", "46"] ]]
+    [#R(vcco-47), [`B33, `J32, `C30, `N30, `K29, `F31], [`bank => ["47", "47", "47", "47", "47", "47"] ]]
+    [#R(vcco-48), [`L26, `R24, `G28, `P27, `D27, `H25, `A26], [`bank => ["48", "48", "48", "48", "48", "48", "48"] ]]
+    [#R(vcco-64), [`AU18, `AK19, `AL16, `AG18, `AP17, `AD17], [`bank => ["64", "64", "64", "64", "64", "64"] ]]
+    [#R(vcco-65), [`AM13, `AJ12, `AR14, `AW12, `AV15, `AE14, `AH15], [`bank => ["65", "65", "65", "65", "65", "65", "65"] ]]
+    [#R(vcco-66), [`E14, `B13, `M13, `H15, `R14, `J12, `A16], [`bank => ["66", "66", "66", "66", "66", "66", "66"] ]]
+    [#R(vcco-67), [`D17, `G18, `P17, `K19, `C20, `L16], [`bank => ["67", "67", "67", "67", "67", "67"] ]]
+    [#R(vcco-68), [`J22, `M23, `N20, `T21, `F21, `E24, `B23], [`bank => ["68", "68", "68", "68", "68", "68", "68"] ]]
+    [#R(video-in-0), `AU16, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-1), `AV18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-2), `AW20, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-3), `AR20, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-4), `AV17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-5), `AW18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-6), `AW19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-in-7), `AT20, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-otr), `AV19, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-sel-0), `AT18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-sel-1), `AR18, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(video-sel-en), `AU17, [`voltage => 3.3 `family => `LVCMOS ]]
+    [#R(vn), `AA15, []]
+    [#R(vp), `Y16, []]
+    [#R(vref-24), `AD28, [`i/o-type => `HP `bank => "24" ]]
+    [#R(vref-25), `AJ34, [`i/o-type => `HP `bank => "25" ]]
+    [#R(vref-44), `AD23, [`i/o-type => `HP `bank => "44" ]]
+    [#R(vref-45), `AD24, [`i/o-type => `HP `bank => "45" ]]
+    [#R(vref-46), `L34, [`i/o-type => `HP `bank => "46" ]]
+    [#R(vref-47), `T30, [`i/o-type => `HP `bank => "47" ]]
+    [#R(vref-48), `T24, [`i/o-type => `HP `bank => "48" ]]
+    [#R(vref-64), `AD19, [`i/o-type => `HR `bank => "64" ]]
+    [#R(vref-65), `AD15, [`i/o-type => `HR `bank => "65" ]]
+    [#R(vref-66), `R15, [`i/o-type => `HP `bank => "66" ]]
+    [#R(vref-67), `T19, [`i/o-type => `HP `bank => "67" ]]
+    [#R(vref-68), `T20, [`i/o-type => `HP `bank => "68" ]]
+    [#R(vrefn), `Y15, []]
+    [#R(vrefp), `AA16, []]
+    [#R(wra6-alt-blank-rx-n), `AT25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-alt-blank-tx-n), `AR26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-iff-blank-rx-n), `AR27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-iff-blank-tx-n), `AV26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-mids-blank-rx-n), `AV27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-mids-blank-tx-n), `AW28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-radar-blank-rx-n), `AT27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-radar-blank-tx-n), `AU27, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-tacan-blank-rx-n), `AU26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-tacan-blank-tx-n), `AW25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-ttnt-spare-rx-n), `AR28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-ttnt-spare-tx-n), `AT28, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-ttnt-xmt-tag-rx-n), `AW26, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra6-ttnt-xmt-tag-tx-n), `AU25, [`voltage => 1.8 `family => `LVCMOS ]]
+    [#R(wra8-cold-temp-n), `AD18, [`voltage => 3.3 `family => `LVCMOS ]]
+  ]
+  for [ref, lnd, props] in xcku-060-cmp-pins do :
+    properties(ref) :
+      PACKAGE_PIN => lnd
+      for p in props do :
+        {Ref(key(p))} => value(p)
+  val left-mapping = Vector<KeyValue<Ref, ?>>()
+  for [ref, lnd, _] in xcku-060-cmp-pins do :
+    add(left-mapping, ref => lnd)
+  val ps = PinSpec(to-tuple(left-mapping), false)
+  package = BGA1517C100P39X39-4000X4000X351N(cmp-pad-map(ps))
+  part = xilinx-XCKU060-1FFVA1517I-prt

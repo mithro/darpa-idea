@@ -1,0 +1,251 @@
+defpackage key-in-analysis :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir/errors
+  import rtm/utils
+  import rtm/errors
+  import rtm/ir-utils
+
+;============================================================
+;============== Analyzed Board Datastructure ================
+;============================================================
+
+public defstruct Board :
+  knets: Tuple<KNet>
+  parts: Tuple<PartListing>
+with:
+  printer => true
+
+public defstruct KNet :
+  name: String
+  pins: Tuple<KPin>
+with:
+  printer => true
+
+public defstruct PartListing :
+  mpn: String
+  ref-designators: Tuple<String>
+with:
+  printer => true
+
+public defstruct KPin :
+  ref-designator: String
+  pin-name: String
+with:
+  printer => true
+
+;<doc>=======================================================
+;================ Analyze the Board Structure ===============
+;============================================================
+
+Preconditions:
+  - No connect statements
+  - No require statements
+  - All instances need corresponding package and pad mappings.
+  - All instances need corresponding part statements.
+
+First, we need to collect the references corresponding to all pins on
+the board, and determine which of those references are unconnected.
+
+For each reference, we need to compute its KPin structure. Given the
+reference representing its instance, we should look up its reference
+designator.
+
+Given its pin, we need to look up its KYN pin name. Note that a single
+pin can map to multiple pads, because of the pad mappings. Initially,
+use the Ref used to name the pad.
+
+Next, we need to translate the pad names from Refs to Strings using a
+sensible mapping. Here are rules to use:
+
+  Case 1: p[i] maps to i
+  Case 2: sym maps to sym
+  Otherwise maps to flattened version, keeping only alpha-numeric letters
+
+Next, we need to sanitize the net names. Here is the strategy we will use:
+  1) Change all hyphens to underscores. 
+  2) Strip all non-alphanumeric characters.
+  3) Suffix increasing ids if the resulting net name has already been used.
+
+Next, we need to look up the part MPN for the part listings, and then
+group the instances by the part mpn.
+
+;============================================================
+;=======================================================<doc>
+
+public defn analyze (prog:Collection<TStmt>) -> Board :
+  val ir-table = IRTable(prog)
+  val top-modules = to-tuple(top-modules(ir-table))
+  if empty?(top-modules) :
+    throw(NoTopLevel())
+  else if length(top-modules) > 1 :
+    throw(MultipleTopLevel())
+  else :
+    ;Preconditions
+    end-if-errors({_ is NoPoseForInst
+                      | NoSideForInst
+                  })
+    analyze(ir-table, mtable(ir-table, top-modules[0]))
+
+defn analyze (ir-table:IRTable, mtable:MTable) -> Board :
+  ;Ensure part statements for all instances
+  defn ensure-parts () :
+    for inst in insts(mtable) do :
+      if part?(mtable, name(inst)) is False and emodel?(mtable, name(inst)) is False :        
+        report-error(NoAppropriatePart(name(inst), component(inst)))
+    end-if-errors({_ is-not NoAppropriatePart})
+    
+  ;Gather all pads on the board
+  defn gather-all-pads () -> Tuple<Ref> :
+    to-tuple $ for stmt in packages(mtable) seq-cat :
+      val inst = ref(stmt)
+      val [package-name, mapping] = package(stmt) as [Symbol, Mapping]
+      val package = package(ir-table, package-name)
+      val pads = seq(ref, pads(package))
+      for pad in pads seq : dot(inst, pad)
+        
+  ;Get the pad mappings corresponding to each pin
+  defn pin-to-pad-table () :
+    val pad-table = HashTable<Ref,List<Ref>>(List())
+    for stmt in packages(mtable) do :
+      val inst = ref(stmt)
+      val [package-name, pad-mapping] = package(stmt) as [Symbol, Mapping]
+      for [pin, pad] in kvs(mappings(pad-mapping)) do :
+        val inst-pin = dot(inst, pin)
+        update(pad-table, cons{pad, _}, inst-pin)
+    pad-table
+
+  ;Convert pins to pad references in net
+  defn convert-pins-to-pads (stmt:NetStmt, pad-table:HashTable<Ref,List<Ref>>) :
+    val refs* = to-list $
+      for r in refs(stmt) seq-cat :
+        val inst = base(r)
+        fatal("Missing entry for %_." % [r]) when not key?(pad-table,r)
+        for pad in pad-table[r] seq :
+          dot(inst, pad)
+    sub-refs(stmt, refs*)
+
+  ;Gather all nets
+  defn gather-all-nets (pad-table:HashTable<Ref,List<Ref>>) -> Tuple<NetStmt> :
+    to-tuple(seq(convert-pins-to-pads{_, pad-table}, nets(mtable)))
+
+  ;Discover all unconnected pads
+  defn identify-unconnected-pads (nets:Seqable<NetStmt>, all-pads:Seqable<Ref>) :
+    val connected = to-hashset<Ref>(seq-cat(refs, nets))
+    to-tuple(for p in all-pads filter : not connected[p])
+
+  ;Create the reference designator table
+  defn reference-designator-table () :
+    to-hashtable<Ref,String> $ 
+      for s in references(mtable) seq :
+        ref(s) => value(s)
+
+  ;Strip out non-alphanumeric letters
+  val buffer = StringBuffer()
+  defn strip-non-alphanumeric (s:String) :
+    defn alphanumeric? (c:Char) :
+      (c >= 'a' and c <= 'z') or
+      (c >= 'A' and c <= 'Z') or
+      (c >= '0' and c <= '9') or
+      (c == '_')
+    for c in s do :
+      add(buffer,c) when alphanumeric?(c)
+    val s2 = to-string(buffer)
+    clear(buffer)
+    s2
+
+  ;Rename nets to match KYN convention
+  defn rename-nets (nets:Tuple<NetStmt>) -> Tuple<NetStmt> :
+    val name-count = HashTable<Symbol,Int>(0)
+    defn add-suffix (name:Symbol) -> Symbol :
+      val n = update(name-count, {_ + 1}, name)
+      if n == 1 : name
+      else : symbol-join([name, n + 1])
+    defn rename (name:Symbol) :
+      add-suffix $ to-symbol $ strip-non-alphanumeric $ to-string $ name
+    for net in nets map :
+      sub-name(net, rename(name(net) as Symbol))
+
+  ;Convert a pad name from a Ref to a String
+  defn pad-to-string (name:Ref) :
+    ;Case 1: p[i]
+    attempt :
+      val index-ref = name as? IndexRef
+      val base = ref(index-ref) as? VarRef
+      fail() when /name(base) != `p
+      to-string(index(index-ref) + 1)
+    ;Case 2: sym
+    else: attempt :
+      to-string(name as VarRef)
+    ;Otherwise
+    else:
+      val name* = flatten(KicadFlattener(), name)
+      strip-non-alphanumeric(to-string(name*))
+
+  ;Convert a pad reference into a list of KPins
+  defn to-kpin (r:Ref, ref-des-table:HashTable<Ref,String>) :
+    val inst = base(r)
+    KPin(ref-des-table[inst], pad-to-string(tail(r)))
+
+  ;Create KNets
+  defn to-knets (nets:Seqable<NetStmt>, ref-des-table:HashTable<Ref,String>, unconnected:Seqable<Ref>) :
+    val knets = Vector<KNet>()
+    for net in nets do :
+      val pins = to-tuple(seq(to-kpin{_, ref-des-table}, refs(net)))
+      add(knets, KNet(to-string(name(net)), pins))
+    for (r in unconnected, i in 0 to false) do :
+      val name = to-string("NOCONNECT%_" % [i + 1])
+      add(knets, KNet(name, [to-kpin(r, ref-des-table)]))
+    to-tuple(knets)
+
+  ;Convert emodel into string
+  val emodel-string-set = HashSet<String>()
+  defn emodel-string (m:EModel) :
+    defn unique-string (s:String) :
+      let loop (i:Int = 1) :
+        val s* = s when i == 1
+            else string-join([s, '_', i])
+        if add(emodel-string-set, s*) : s*
+        else : loop(i + 1)
+    defn fmt? (fmt:String, v) :
+      if v is False : to-string(fmt % ["XXX"])
+      else : to-string(fmt % [v])
+    unique-string $ match(m) :
+      (m:Resistor) : fmt?("Res_%__ohm", resistance(m))
+      (m:Capacitor) : fmt?("Cap_%__uF", capacitance(m))
+      (m:Inductor) : fmt?("Ind_%__uH", inductance(m))
+      (m:Diode) : "Diode"
+      
+  ;Collect parts
+  defn gather-parts (ref-des-table:HashTable<Ref,String>) :
+    val listings = Vector<PartListing>()
+    ;Accumulate listings for all known parts
+    val part-stmts = group-by(part, parts(mtable))
+    for [part-name, stmts] in kvs(part-stmts) do :
+      val mpn = mpn(part(ir-table, part-name))
+      val insts = to-tuple(seq({ref-des-table[ref(_)]}, stmts))
+      add(listings, PartListing(mpn, insts))
+    ;Accumulate listings for emodel parts
+    val emodel-entries = for inst in insts(mtable) seq? :
+      if part?(mtable, name(inst)) is False :
+        val emodel = model(emodel(mtable, name(inst)))
+        One(emodel => Ref(name(inst)))
+      else : None()
+    for [emodel, insts] in kvs(group-by(key, value, emodel-entries)) do :
+      val inst-strs = to-tuple(seq({ref-des-table[_]}, insts))
+      add(listings, PartListing(emodel-string(emodel), inst-strs))
+    ;Return all listings
+    to-tuple(listings)
+
+  ;Overall algorithm
+  ensure-parts()
+  Board(knets, parts) where :
+    val all-pads = gather-all-pads()
+    val pad-table = pin-to-pad-table()
+    val all-nets = gather-all-nets(pad-table)
+    val all-nets* = rename-nets(all-nets)
+    val unconnected-pads = identify-unconnected-pads(all-nets, all-pads)
+    val ref-des-table = reference-designator-table()
+    val knets = to-knets(all-nets*, ref-des-table, unconnected-pads)
+    val parts = gather-parts(ref-des-table)    

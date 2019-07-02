@@ -1,0 +1,297 @@
+defpackage rtm/ir-prune :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir/errors
+  import rtm/ir-utils
+  import rtm/utils
+  import rtm/errors
+  import rtm/structures
+
+;============================================================
+;===================== Pruning Pass =========================
+;============================================================
+
+deftype ESIRId <: Hashable&Equalable
+defmulti name (id:ESIRId) -> Symbol
+
+defstruct BundleId <: ESIRId :
+  name: Symbol with: (as-method => true)
+defstruct CapabilityId <: ESIRId :
+  name: Symbol with: (as-method => true)
+defstruct PartId <: ESIRId :
+  name: Symbol with: (as-method => true)
+defstruct PackageId <: ESIRId :
+  name: Symbol with: (as-method => true)
+defstruct ModuleId <: ESIRId :
+  name: Symbol with: (as-method => true)
+defstruct AttachId <: ESIRId :
+  name: Symbol with: (as-method => true)
+defstruct PadId <: ESIRId :
+  package: Symbol
+  name: Symbol with: (as-method => true)
+
+defmethod hash (x:BundleId) : 17 * hash(name(x))
+defmethod equal? (x:BundleId, y:BundleId) : name(x) == name(y)
+defmethod hash (x:CapabilityId) : 23 * hash(name(x))
+defmethod equal? (x:CapabilityId, y:CapabilityId) : name(x) == name(y)
+defmethod hash (x:PartId) : 27 * hash(name(x))
+defmethod equal? (x:PartId, y:PartId) : name(x) == name(y)
+defmethod hash (x:PackageId) : 43 * hash(name(x))
+defmethod equal? (x:PackageId, y:PackageId) : name(x) == name(y)
+defmethod hash (x:ModuleId) : 73 * hash(name(x))
+defmethod equal? (x:ModuleId, y:ModuleId) : name(x) == name(y)
+defmethod hash (x:AttachId) : 81 * hash(name(x))
+defmethod equal? (x:AttachId, y:AttachId) : name(x) == name(y)
+defmethod hash (x:PadId) : 79 * hash(package(x)) + 13 * hash(name(x))
+defmethod equal? (x:PadId, y:PadId) : package(x) == package(y) and name(x) == name(y)
+
+defmethod print (o:OutputStream, x:BundleId) :
+  print(o, "BundleId(%_)" % [name(x)])
+defmethod print (o:OutputStream, x:CapabilityId) :
+  print(o, "CapabilityId(%_)" % [name(x)])
+defmethod print (o:OutputStream, x:PartId) :
+  print(o, "PartId(%_)" % [name(x)])
+defmethod print (o:OutputStream, x:PackageId) :
+  print(o, "PackageId(%_)" % [name(x)])
+defmethod print (o:OutputStream, x:ModuleId) :
+  print(o, "ModuleId(%_)" % [name(x)])
+defmethod print (o:OutputStream, x:AttachId) :
+  print(o, "AttachId(%_)" % [name(x)])
+defmethod print (o:OutputStream, x:PadId) :
+  print(o, "PadId(%_/%_)" % [package(x), name(x)])
+
+defn dependencies (return:ESIRId -> ?, s:TStmt|DefPad) :
+  ;## Dynamic Environments ##
+  var scanning-package: Symbol = `default
+  
+  ;## Scanners for substatements ##
+  defn scan (x:False) :
+    false
+  defn* scan (t:PinType) :
+    match(t) :
+      (t:SinglePin) : false
+      (t:PinArray) : scan(type(t))
+      (t:PinBundle) : return(BundleId(name(t)))
+  defn scan (t:ComponentType) :
+    match(t) :
+      (t:SingleComponent) : return(ModuleId(name(t)))
+      (t:ComponentArray) : scan(type(t))
+  defn scan (s:Shape) :
+    match(s) :
+      (s:Union) : do(scan, shapes(s))
+      (s) : false
+  defn scan (p:Pin|RPin) :
+    scan(type(p))
+  defn scan (p:Pad) :
+    return(PadId(scanning-package, pad(p)))
+  defn scan (o:SupportOption) :
+    do(scan, requires(o))
+  defn scan (t:CapabilityType) :
+    name(base(t))
+  defn scan (s:CStmt) :
+    match(s) :
+      (s:DefaultPackageStmt) : return(PackageId(package(s)))
+      (s:DefaultPartStmt) : return(PartId(part(s)))
+      (s:SupportsStmt) : scan(s as MStmt)
+      (s) : false    
+  defn scan (s:MStmt) :
+    match(s) :
+      (s:InstStmt) :
+        scan(type(s))
+      (s:NodeStmt) :
+        scan(type(s))
+      (s:SupportsStmt) :
+        return(CapabilityId(capability(s)))
+        do(scan, options(s))                
+      (s:RequireStmt) :
+        scan(capability(s))
+      (s:InstSupportsStmt) :
+        return(CapabilityId(capability(s)))
+        do(scan, options(s))
+      (s:PackageStmt) :
+        match(package(s)) :
+          ([n,m]:[Symbol,Mapping]) : return(PackageId(n))
+          (f:False) : false        
+      (s:PartStmt) :
+        return(PartId(part(s)))
+      (s:AttachStmt) :
+        return(AttachId(attach(s)))
+      (s) : false
+
+  ;## Dispatch upon the different statements ##
+  match(s) :
+    (s:DefBundle) :
+      do(scan, pins(s))
+    (s:DefCapability) :
+      scan(type(s))
+    (s:DefPart) :
+      return(PackageId(package(s)))
+      attempt: return(ModuleId(component(s) as? Symbol))
+    (s:DefComponent) :
+      do(scan, pins(s))
+      do(scan, stmts(s))
+    (s:DefPackage) :
+      let-var scanning-package = name(s) :
+        do(scan, pads(s))
+    (s:DefModule) :
+      do(scan, pins(s))
+      do(scan, stmts(s))
+    (s:DefAttach) :
+      do(scan, pins(s))
+      do(scan, stmts(s))      
+    (s:MakeSchematic) :
+      return(ModuleId(module(s)))
+    (s:DefPad) :
+      scan(shape(s))
+
+defn get (irtable:IRTable, id:ESIRId) :
+  match(id) :
+    (id:BundleId) : bundle(irtable, name(id))
+    (id:CapabilityId) : capability(irtable, name(id))
+    (id:PartId) : part(irtable, name(id))
+    (id:PackageId) : package(irtable, name(id))
+    (id:ModuleId) : component-or-module(irtable, name(id))
+    (id:AttachId) : attaches(irtable, name(id))
+    (id:PadId) : pad-def(ptable(irtable, package(id)), name(id))    
+
+defn id (s:TStmt) :
+  match(s) :
+    (s:DefBundle) : BundleId(name(s))
+    (s:DefCapability) : CapabilityId(name(s))
+    (s:DefPart) : PartId(name(s))
+    (s:DefPackage) : PackageId(name(s))
+    (s:DefModule) : ModuleId(name(s))
+    (s:DefAttach) : AttachId(name(s))
+    (s:DefComponent) : ModuleId(name(s))
+
+defn reachable-ids (prog:Collection<TStmt>) :
+  val irtable = IRTable(prog)
+
+  ;Keep queue of IDs to visit
+  val queue = Queue<ESIRId>()
+  defn add-dependencies (s:TStmt|DefPad) :
+    dependencies(add{queue, _}, s)
+  defn add-dependencies (ss:Seqable<TStmt>) :
+    do(add-dependencies, ss)
+
+  ;Initialize queue
+  do(add-dependencies, makeschematics(irtable))
+
+  ;Traverse queue
+  val reachable = HashSet<ESIRId>()
+  while not empty?(queue) :
+    val id = pop(queue)
+    if not reachable[id] :
+      add(reachable, id)
+      add-dependencies(irtable[id])
+
+  ;Return reachable set
+  reachable
+
+defn prune-types (prog:Collection<TStmt>,
+                  parts?:True|False,
+                  packages?:True|False,
+                  emodels?:True|False,
+                  references?:True|False,
+                  currents?:True|False,
+                 ) -> Collection<TStmt> :
+
+  ;Return pruned version of top level statement
+  defn prune (s:TStmt) :
+    match(s) :
+      (s:DefPart) :
+        sub-emodel(s, emodel(s) when emodels?)
+      (s:DefComponent) :
+        val stmts* = for s in stmts(s) filter :
+          match(s) :
+            (s:DefaultPackageStmt) : packages?
+            (s:DefaultEModelStmt) : emodels?
+            (s:DefaultPartStmt) : parts?
+            (s:ReferencePrefixStmt) : references?
+            (s:MaxCurrentDrawStmt) : currents?
+            (s) : true
+        sub-stmts(s, to-list(stmts*))
+      (s:DefModule) :
+        val stmts* = for s in stmts(s) filter :
+          match(s) :
+            (s:PackageStmt) : packages?
+            (s:EModelStmt) : emodels?
+            (s:PartStmt) : parts?
+            (s:ReferenceStmt) : references?
+            (s) : true
+        sub-stmts(s, to-list(stmts*))
+      (s) : s
+
+  ;Prune all statements
+  to-tuple $ for s in prog seq? :
+    val keep? = match(s) :
+      (s:DefPart) : parts?
+      (s:DefPackage) : packages?
+      (s:MakeSchematic) : 
+        true
+      (s) : true
+    if keep? : One(prune(s))
+    else : None()
+
+defn prune-unreachable (prog:Collection<TStmt>) -> Collection<TStmt> :
+  ;Compute reachable ids
+  val reachable = reachable-ids(prog)
+
+  ;Return pruned version
+  defn prune (s:TStmt) :
+    match(s) :
+      (s:DefPackage) :
+        val defs* = for def in pad-defs(s) filter :
+          reachable[PadId(name(s), name(def))]
+        sub-pad-defs(s, to-list(defs*))
+      (s) :
+        s
+
+  ;Prune all statements
+  to-tuple $ for s in prog seq? :
+    match(s) :
+      (s:MakeSchematic) :
+        One(s)
+      (s) :
+        if reachable[id(s)] : One(prune(s))
+        else : None()
+
+public defn prune (prog:Collection<TStmt>, option:PruningOption) -> Collection<TStmt> :
+  ;Default Options
+  ;True means to keep it
+  var parts? = true
+  var packages? = true
+  var emodels? = true
+  var references? = true
+  var currents? = true
+
+  ;Select options
+  match(option) :
+    (o:PruneFor) :
+      switch(type(o)) :
+        `schematic :
+          #for option? in [parts? packages? emodels? currents?] :
+            option? = false
+          false
+        else :
+          throw(BadPruneForType(type(o)))
+    (o:PruneAll) :
+      for t in types(o) do :
+        switch(t) :
+          `parts : parts? = false
+          `packages : packages? = false
+          `emodels : emodels? = false
+          `references : references? = false
+          `currents : currents? = false
+          else : throw(BadPruneAllType(t))
+    (o:NoPrune) :
+      false
+
+  ;Call with final options
+  val pruned = prune-types(prog, parts?, packages?, emodels?, 
+                           references?, currents?)
+  prune-unreachable(pruned)
+
+public defn prune (prog:Collection<TStmt>) -> Collection<TStmt> :
+  prune(prog, NoPrune())

@@ -168,6 +168,31 @@ public defn components (a:Anchor) :
   [vertical(a), horizontal(a)]
 
 ;============================================================
+;======================= Directions =========================
+;============================================================
+
+public defn opp (dir:Dir) :
+  match(dir) :
+    (dir:Up) : Down
+    (dir:Down) : Up
+    (dir:Left) : Right
+    (dir:Right) : Left
+
+public defn ccw (dir:Dir) :
+  match(dir) :
+    (dir:Up) : Left
+    (dir:Down) : Right
+    (dir:Left) : Down
+    (dir:Right) : Up
+
+public defn cw (dir:Dir) :
+  match(dir) :
+    (dir:Up) : Right
+    (dir:Down) : Left
+    (dir:Left) : Up
+    (dir:Right) : Down
+
+;============================================================
 ;======================== Sides =============================
 ;============================================================
 
@@ -176,6 +201,7 @@ public defn flip (a:Side, b:Side) :
     (a:Top, b) : b
     (a:Bottom, b:Top) : Bottom
     (a:Bottom, b:Bottom) : Top
+
 
 public defn consistent? (p:Pose, s:Side) :
   match(flip-x?(p), s) :
@@ -287,6 +313,9 @@ public defn bounds (e:Shape) -> Box :
     (s:Line) : reduce(union, seq(fatten{0.5 * width(s), bounds(_)}, points(s)))
     (s:Union) : reduce(union, seq(bounds, shapes(s)))
     (s:Subtraction) : bounds(a(s)) ;Conservative
+    (s:Text) :
+      ;Trivial box
+      Box(center(pose(s)), center(pose(s)))
 
 ;============================================================
 ;==================== Transformations =======================
@@ -341,6 +370,9 @@ public defn transform<?T> (p:Pose, s:Shape&?T) -> T :
       Union(map(transform{p, _}, shapes(s)))
     (s:Subtraction) :
       Subtraction(transform(p,a(s)), transform(p,b(s)))
+    (s:Text) :
+      Text(string(s), font(s), size(s), anchor(s), apply(p, pose(s)))
+
 
 ;============================================================
 ;========================= Shapes ===========================
@@ -372,6 +404,9 @@ public defn outline (r:Rectangle) :
 public defn outline (l:Line) :
   fatal("Not yet implemented.")
 
+public defn outline (t:Text) :
+  fatal("Not yet implemented.")
+
 public defn to-polygon (r:Rectangle) -> Polygon :
   val [w h] = [width(r), height(r)]
   val p = Polygon $ to-list $ [
@@ -396,16 +431,16 @@ public defn sw (r:Rectangle) :
   if not axis-aligned?(r) :
     fatal("Rectangle is not axis aligned.")
   val r* = normalize(r)
-  val c = center(pose(r))
-  val [w h] = [width(r), height(r)]
+  val c = center(pose(r*))
+  val [w h] = [width(r*), height(r*)]
   c - Point(w / 2.0, h / 2.0)
 
 public defn ne (r:Rectangle) :
-  if not angle-mod-90?(pose(r)) :
+  if not axis-aligned?(r) :
     fatal("Rectangle is not axis aligned.")
   val r* = normalize(r)
-  val c = center(pose(r))
-  val [w h] = [width(r), height(r)]
+  val c = center(pose(r*))
+  val [w h] = [width(r*), height(r*)]
   c + Point(w / 2.0, h / 2.0)
 
 ;============================================================
@@ -477,7 +512,7 @@ public defn grid-locs (rows:Int, cols:Int, d:Point) :
   
 public defn row-locs (anchor:Anchor, n:Int, dx:Double, start-anchor:Anchor) :
   fatal("Illegal horizontal anchor: %_." % [anchor]) when anchor is-not E|C|W
-  fatal("Illegal horizontal start anchor: %_." % [start-anchor]) when anchor is-not E|W
+  fatal("Illegal horizontal start anchor: %_." % [start-anchor]) when start-anchor is-not E|W
   val start* = match(start-anchor) :
     (a:E) : NE
     (a:W) : NW
@@ -489,7 +524,7 @@ public defn row-locs (n:Int, dx:Double) :
 
 public defn col-locs (anchor:Anchor, n:Int, dy:Double, start-anchor:Anchor) :
   fatal("Illegal vertical anchor: %_." % [anchor]) when anchor is-not N|C|S
-  fatal("Illegal vertical start anchor: %_." % [start-anchor]) when anchor is-not N|S
+  fatal("Illegal vertical start anchor: %_." % [start-anchor]) when start-anchor is-not N|S
   val start* = match(start-anchor) :
     (a:N) : NW
     (a:S) : SW
@@ -810,6 +845,12 @@ public defn sub-head (r:Ref, h:Ref) :
     (r:FieldRef) : FieldRef(sub-head(ref(r),h), name(r))
     (r:IndexRef) : IndexRef(sub-head(ref(r),h), index(r))
 
+public defn head (r:Ref) :
+  match(r) :
+    (r:VarRef) : fatal("Reference %_ has no head." % [r])
+    (r:FieldRef) : ref(r)
+    (r:IndexRef) : ref(r)
+
 ;Assume that r is some reference with base pointing to an instance/instance array.
 ;Returns the index of that instance.
 public defn inst-index (env:TypeEnv, r:Ref) :
@@ -863,7 +904,7 @@ public defmulti capability? (t:IRTable, name:Symbol) -> DefCapability|False
 public defmulti module? (t:IRTable, name:Symbol) -> DefModule|False
 public defmulti package? (t:IRTable, name:Symbol) -> DefPackage|False
 public defmulti part? (t:IRTable, name:Symbol) -> DefPart|False
-public defmulti makeboards (t:IRTable) -> Vector<MakeBoard>
+public defmulti makeschematics (t:IRTable) -> Vector<MakeSchematic>
 public defmulti mtable (t:IRTable, name:Symbol) -> MTable
 public defmulti ctable (t:IRTable, name:Symbol) -> CTable
 public defmulti btable (t:IRTable, name:Symbol) -> BTable
@@ -886,7 +927,7 @@ public defn IRTable () :
   val packages = HashTable<Symbol, DefPackage>()
   val parts = HashTable<Symbol, DefPart>()
   val attaches = HashTable<Symbol, List<DefAttach>>(List())
-  val makeboards = Vector<MakeBoard>()
+  val makeschematics = Vector<MakeSchematic>()
 
   defn add-stmt (s:TStmt) :
     add(stmts, s)
@@ -898,7 +939,7 @@ public defn IRTable () :
       (s:DefPackage) : packages[name(s)] = s
       (s:DefPart) : parts[name(s)] = s
       (s:DefAttach) : update(attaches, cons{s, _}, name(s))
-      (s:MakeBoard) : add(makeboards, s)
+      (s:MakeSchematic) : add(makeschematics, s)
     false
 
   ;Memoized tables
@@ -934,7 +975,7 @@ public defn IRTable () :
     defmethod package? (this, name:Symbol) : get?(packages,name)
     defmethod part? (this, name:Symbol) : get?(parts,name)
 
-    defmethod makeboards (this) : makeboards
+    defmethod makeschematics (this) : makeschematics
 
     defmethod mtable (this, name:Symbol) : mtables[name]
     defmethod ctable (this, name:Symbol) : ctables[name]
@@ -957,15 +998,20 @@ public defn cmtable (t:IRTable, name:Symbol) :
 ;                    ===================
 
 public defn expand (ir-table:IRTable, r:Ref, t:PinType) :
+  expand(ir-table, r, t, false)
+
+public defn expand (ir-table:IRTable, r:Ref, t:PinType, keep-intermediate?:True|False) :
   to-list $ generate<Ref> :
     defn exp (suffix: Ref -> Ref, t:PinType) :
       match(t) :
         (t:SinglePin) :
           yield(suffix(r))
         (t:PinArray) :
+          yield(suffix(r)) when keep-intermediate?
           for i in 0 to length(t) do :
             exp(IndexRef{suffix(_), i}, type(t))
         (t:PinBundle) :
+          yield(suffix(r)) when keep-intermediate?
           for pin in pins(bundle(ir-table,name(t))) do :
             exp(FieldRef{suffix(_), name(pin)}, type(pin))
     exp({_}, t)  
@@ -1028,25 +1074,33 @@ public defmulti packages (t:MTable) -> Seqable<PackageStmt>
 public defmulti emodels (t:MTable) -> Seqable<EModelStmt>
 public defmulti parts (t:MTable) -> Seqable<PartStmt>
 public defmulti references (t:MTable) -> Seqable<ReferenceStmt>
+public defmulti schematic-groups (t:MTable) -> Seqable<SchematicGroupStmt>
+public defmulti estates (t:MTable) -> Seqable<EStateStmt>
 public defmulti nodes (t:MTable) -> Seqable<NodeStmt>
 public defmulti inst-supports (t:MTable) -> Seqable<InstSupportsStmt>
+public defmulti pin-properties (t:MTable) -> Seqable<PinPropertiesStmt>
+public defmulti connections (t:MTable) -> Seqable<ConnectionStmt>
+public defmulti supported-bys (t:MTable) -> Seqable<SupportedByStmt>
 
-public defmulti net (t:MTable, name:Symbol) -> NetStmt
+public defmulti nets (t:MTable, name:Symbol) -> List<NetStmt>
 public defmulti inst (t:MTable, name:Symbol) -> InstStmt
 public defmulti requires (t:MTable, name:Symbol) -> List<RequireStmt>
 public defmulti package (t:MTable, name:Symbol) -> PackageStmt
 public defmulti emodel (t:MTable, name:Symbol) -> EModelStmt
 public defmulti part (t:MTable, name:Symbol) -> PartStmt
 public defmulti reference (t:MTable, name:Symbol) -> ReferenceStmt
+public defmulti schematic-group (t:MTable, name:Symbol, unit:Int|False) -> SchematicGroupStmt
+public defmulti estate (t:MTable, name:Symbol) -> EStateStmt
 public defmulti node (t:MTable name:Symbol) -> NodeStmt
 public defmulti inst-supports (t:MTable, name:Symbol) -> List<InstSupportsStmt>
 
-public defmulti net? (t:MTable, name:Symbol) -> NetStmt|False
 public defmulti inst? (t:MTable, name:Symbol) -> InstStmt|False
 public defmulti package? (t:MTable, name:Symbol) -> PackageStmt|False
 public defmulti emodel? (t:MTable, name:Symbol) -> EModelStmt|False
 public defmulti part? (t:MTable, name:Symbol) -> PartStmt|False
 public defmulti reference? (t:MTable, name:Symbol) -> ReferenceStmt|False
+public defmulti schematic-group? (t:MTable, name:Symbol, unit:Int|False) -> SchematicGroupStmt|False
+public defmulti estate? (t:MTable, name:Symbol) -> EStateStmt|False
 public defmulti node? (t:MTable, name:Symbol) -> NodeStmt|False
 
 public defmulti requires (t:MTable, ref:Ref) -> List<RequireStmt>
@@ -1054,8 +1108,12 @@ public defmulti package? (t:MTable, ref:Ref) -> PackageStmt|False
 public defmulti emodel? (t:MTable, ref:Ref) -> EModelStmt|False
 public defmulti part? (t:MTable, ref:Ref) -> PartStmt|False
 public defmulti reference? (t:MTable, ref:Ref) -> ReferenceStmt|False
+public defmulti schematic-group? (t:MTable, ref:Ref, i:Int|False) -> SchematicGroupStmt|False
+public defmulti estate? (t:MTable, ref:Ref) -> EStateStmt|False
 public defmulti inst-supports (t:MTable, ref:Ref) -> List<InstSupportsStmt>
+public defmulti pin-properties? (t:MTable, ref:Ref) -> PinPropertiesStmt|False
 
+public defmulti max-current-draws (c:MTable) -> Collection<MaxCurrentDrawStmt>
 public defmulti attaches (c:MTable) -> Collection<AttachStmt>
 
 public defn MTable (m:DefModule) :
@@ -1063,7 +1121,7 @@ public defn MTable (m:DefModule) :
 
 public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
   val pin-table = HashTable<Symbol,Pin>()
-  val net-table = HashTable<Symbol, NetStmt>()
+  val net-table = HashTable<Symbol, List<NetStmt>>(List())
   val nodes = HashTable<Symbol, NodeStmt>()
   val insts = HashTable<Symbol, InstStmt>()
   val requires = HashTable<Ref, List<RequireStmt>>(List())
@@ -1071,10 +1129,16 @@ public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
   val packages = HashTable<Ref, PackageStmt>()
   val emodels = HashTable<Ref, EModelStmt>()
   val parts = HashTable<Ref, PartStmt>()
-  val references = HashTable<Ref, ReferenceStmt>()  
+  val references = HashTable<Ref, ReferenceStmt>()
+  val schematic-groups = HashTable<[Ref,Int|False], SchematicGroupStmt>()
+  val estates = HashTable<Ref, EStateStmt>()
+  val pinprops = HashTable<Ref, PinPropertiesStmt>()
+  val max-current-draws = Vector<MaxCurrentDrawStmt>()
   val nets = Vector<NetStmt>()
   val attaches = Vector<AttachStmt>()
   val supports = Vector<SupportsStmt>()
+  val connections = Vector<ConnectionStmt>()
+  val supported-bys = Vector<SupportedByStmt>()
 
   for p in pins do :
     pin-table[name(p)] = p
@@ -1082,17 +1146,23 @@ public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
     match(s) :
       (s:NetStmt) :
         add(nets, s)
-        attempt: net-table[name(s) as? Symbol] = s        
+        attempt: update(net-table, cons{s, _}, name(s) as? Symbol)
       (s:InstStmt) : insts[name(s)] = s
       (s:RequireStmt) : update(requires, cons{s, _}, inst(s))
       (s:PackageStmt) : packages[ref(s)] = s
       (s:EModelStmt) : emodels[ref(s)] = s
       (s:PartStmt) : parts[ref(s)] = s
       (s:ReferenceStmt) : references[ref(s)] = s
+      (s:SchematicGroupStmt) : schematic-groups[[ref(s), unit(s)]] = s
+      (s:EStateStmt) : estates[ref(s)] = s
       (s:AttachStmt) : add(attaches, s)
+      (s:MaxCurrentDrawStmt) : add(max-current-draws, s)
       (s:SupportsStmt) : add(supports, s)
       (s:NodeStmt) : nodes[name(s)] = s
       (s:InstSupportsStmt) : update(inst-supports, cons{s, _}, inst(s))
+      (s:PinPropertiesStmt) : pinprops[ref(s)] = s
+      (s:ConnectionStmt) : add(connections, s)
+      (s:SupportedByStmt) : add(supported-bys, s)
 
   new MTable :
     defmethod module (this) : ctxt-name
@@ -1105,26 +1175,34 @@ public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
     defmethod emodels (this) : values(emodels)
     defmethod parts (this) : values(parts)
     defmethod references (this) : values(references)
+    defmethod schematic-groups (this) : values(schematic-groups)
+    defmethod estates (this) : values(estates)
     defmethod supports (this) : supports
     defmethod nodes (this) : values(nodes)
     defmethod inst-supports (this) : cat-all(values(inst-supports))
+    defmethod pin-properties (this) : values(pinprops)
+    defmethod connections (this) : connections
+    defmethod supported-bys (this) : supported-bys
     
-    defmethod net (this, name:Symbol) : net-table[name]
+    defmethod nets (this, name:Symbol) : net-table[name]
     defmethod inst (this, name:Symbol) : insts[name]
     defmethod requires (this, name:Symbol) : requires[Ref(name)]
     defmethod package (this, name:Symbol) : packages[Ref(name)]
     defmethod emodel (this, name:Symbol) : emodels[Ref(name)]
     defmethod part (this, name:Symbol) : parts[Ref(name)]
     defmethod reference (this, name:Symbol) : references[Ref(name)]
+    defmethod schematic-group (this, name:Symbol, i:Int|False) : schematic-groups[[Ref(name),i]]
+    defmethod estate (this, name:Symbol) : estates[Ref(name)]
     defmethod node (this, name:Symbol) : nodes[name]
     defmethod inst-supports (this, name:Symbol) : inst-supports[Ref(name)]
 
-    defmethod net? (this, name:Symbol) : get?(net-table,name)
     defmethod inst? (this, name:Symbol) : get?(insts,name)
     defmethod package? (this, name:Symbol) : get?(packages,Ref(name))
     defmethod emodel? (this, name:Symbol) : get?(emodels,Ref(name))
     defmethod part? (this, name:Symbol) : get?(parts,Ref(name))
     defmethod reference? (this, name:Symbol) : get?(references,Ref(name))
+    defmethod schematic-group? (this, name:Symbol, i:Int|False) : get?(schematic-groups,[Ref(name), i])
+    defmethod estate? (this, name:Symbol) : get?(estates,Ref(name))
     defmethod node? (this, name:Symbol) : get?(nodes, name)
 
     defmethod requires (this, ref:Ref) : requires[ref]
@@ -1132,8 +1210,12 @@ public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
     defmethod emodel? (this, ref:Ref) : get?(emodels,ref)
     defmethod part? (this, ref:Ref) : get?(parts,ref)
     defmethod reference? (this, ref:Ref) : get?(references,ref)
+    defmethod schematic-group? (this, ref:Ref, i:Int|False) : get?(schematic-groups, [ref,i])
+    defmethod estate? (this, ref:Ref) : get?(estates,ref)
     defmethod inst-supports (this, ref:Ref) : inst-supports[ref]
+    defmethod pin-properties? (this, ref:Ref) : get?(pinprops,ref)
 
+    defmethod max-current-draws (this) : max-current-draws
     defmethod attaches (this) : attaches
 
 ;============================================================
@@ -1141,7 +1223,13 @@ public defn MTable (ctxt-name:Symbol, pins:List<Pin>, stmts:List<MStmt>) :
 ;============================================================
 
 public deftype CTable <: HasPins<Symbol,Pin>
+public defmulti grounds (c:CTable) -> Collection<GroundStmt>
+public defmulti powers (c:CTable) -> Collection<PowerStmt>
+public defmulti diffpairs (c:CTable) -> Collection<DiffPairStmt>
 public defmulti supports (c:CTable) -> Collection<SupportsStmt>
+public defmulti max-current-draws (c:CTable) -> Collection<MaxCurrentDrawStmt>
+public defmulti estates (c:CTable) -> Collection<EStateStmt>
+public defmulti pin-properties (c:CTable) -> Collection<PinPropertiesStmt>
 public defmulti default-package (c:CTable) -> DefaultPackageStmt|False
 public defmulti default-emodel (c:CTable) -> DefaultEModelStmt|False
 public defmulti default-part (c:CTable) -> DefaultPartStmt|False
@@ -1149,7 +1237,13 @@ public defmulti reference-prefix (c:CTable) -> ReferencePrefixStmt|False
 
 public defn CTable (c:DefComponent) :
   val pin-table = HashTable<Symbol,Pin>()
+  val grounds = Vector<GroundStmt>()
+  val powers = Vector<PowerStmt>()
+  val diffpairs = Vector<DiffPairStmt>()
   val supports = Vector<SupportsStmt>()
+  val max-current-draws = Vector<MaxCurrentDrawStmt>()
+  val estates = Vector<EStateStmt>()
+  val pinprops = Vector<PinPropertiesStmt>()
   var default-package = false
   var default-emodel = false
   var default-part = false
@@ -1159,19 +1253,31 @@ public defn CTable (c:DefComponent) :
     pin-table[name(p)] = p
   for s in stmts(c) do :
     match(s) :
+      (s:GroundStmt) : add(grounds, s)
+      (s:PowerStmt) : add(powers, s)
+      (s:DiffPairStmt) : add(diffpairs, s)
       (s:SupportsStmt) : add(supports, s)
+      (s:MaxCurrentDrawStmt) : add(max-current-draws, s)
+      (s:EStateStmt) : add(estates, s)
       (s:DefaultPackageStmt) : (default-package = s) when default-package is False
       (s:DefaultEModelStmt) : (default-emodel = s) when default-emodel is False
       (s:DefaultPartStmt) : (default-part = s) when default-part is False
       (s:ReferencePrefixStmt) : (reference-prefix = s) when reference-prefix is False
+      (s:PinPropertiesStmt) : add(pinprops, s)
 
   new CTable :
     defmethod pin-table (this) : pin-table
+    defmethod grounds (this) : grounds
+    defmethod powers (this) : powers
+    defmethod diffpairs (this) : diffpairs
     defmethod supports (this) : supports
+    defmethod max-current-draws (this) : max-current-draws
+    defmethod estates (this) : estates
     defmethod default-package (this) : default-package
     defmethod default-emodel (this) : default-emodel
     defmethod default-part (this) : default-part
     defmethod reference-prefix (this) : reference-prefix
+    defmethod pin-properties (this) : pinprops
 
 ;============================================================
 ;======================= BTable =============================
@@ -1186,6 +1292,7 @@ public defn BTable (c:DefBundle) :
 
   new BTable :
     defmethod pin-table (this) : pin-table
+
 
 ;============================================================
 ;======================= PTable =============================
@@ -1272,14 +1379,17 @@ public defn ModuleEnv (ir-table:IRTable, mtable:MTable) :
       match(get?(require-table, r)) :
         (rt:PinType) : return(rt)
         (rt:False) : false
+      ;Check whether inst-supports
+      if not empty?(inst-supports(mtable, r)) :
+        return(InstSupportsType())
       match(r:VarRef) :
         ;Check if net
-        match(net?(mtable, name(r))) :
-          (net:NetStmt) :
-            match(ref-type(env, head(refs(net)), safe?)) :
-              (rt:PinType) : return(NetType(rt))
-              (rt:RefType) : throw(BadNetRef(name(net), head(refs(net)), rt))
-          (net:False) : false
+        val nets = nets(mtable, name(r))
+        if not empty?(nets) :
+          val net = head(nets)
+          match(ref-type(env, head(refs(net)), safe?)) :
+            (rt:PinType) : return(NetType(rt))
+            (rt:RefType) : throw(BadNetRef(name(net), head(refs(net)), rt))
         ;Check if inst
         match(inst?(mtable, name(r))) :
           (inst:InstStmt) : return(inst-type(name(r), type(inst)))
@@ -1342,6 +1452,7 @@ public defstruct InstArray <: RefType :
   length: Int
 public defstruct NetType <: RefType :
   type: PinType
+public defstruct InstSupportsType <: RefType
 
 register-struct-serializers (o:OutputStream, i:InputStream) :
   rtm/ir-utils/InstType :
@@ -1352,6 +1463,7 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
     length: Int
   rtm/ir-utils/NetType :
     type: PinType
+  rtm/ir-utils/InstSupportsType : ()
 
 defmethod print (o:OutputStream, t:InstType) :
   print(o, "inst(%_)" % [component(t)])
@@ -1359,10 +1471,31 @@ defmethod print (o:OutputStream, t:InstArray) :
   print(o, "inst-array(%_, %_)" % [type(t), length(t)])
 defmethod print (o:OutputStream, t:NetType) :
   print(o, "net(%_)" % [type(t)])
+defmethod print (o:OutputStream, t:InstSupportsType) :
+  print(o, "inst-supports")
 
-;============================================================
+;<doc>=======================================================
 ;============= Generalized TypeEnv Datastructure ============
 ;============================================================
+
+A type environment is constructed from:
+  - An IRTable: which is needed for looking up type definitions, and
+    capability definitions, and for dotted references into other
+    modules and components.
+  - A 'root-type' callback with type:  
+    root-type: (ref:Ref, env:TypeEnv, safe?:True|False) -> RefType|False
+  - The purpose of 'root-type' is to represent the local environment.
+    - Return the type associated with 'ref'.
+    - safe? is true if we should throw an Exception for
+      non-well-formed references. Otherwise safe? is false assumes
+      that references are well-formed.    
+    - The given 'env' is equivalent to the type environment being
+      created. This is needed by some classes of references, e.g.
+      nets, whose types depend upon the types of other references.  
+
+;============================================================
+;=======================================================<doc>
+
 public deftype TypeEnv
 public defmulti ref-type (e:TypeEnv, r:Ref, safe?:True|False) -> RefType
 public defmulti root-type (e:TypeEnv) -> (Ref, TypeEnv, True|False) -> RefType|False
@@ -1371,11 +1504,17 @@ public defmulti ir-table (e:TypeEnv) -> IRTable
 public defn get (e:TypeEnv, r:Ref) : ref-type(e, r, false)  
 public defn ensure-wellformed (e:TypeEnv, r:Ref) : ref-type(e, r, true)
   
+public defn expand (env:TypeEnv, r:Ref, t:PinType, keep-intermediate?:True|False) :
+  expand(ir-table(env), r, t, keep-intermediate?)  
+
 public defn expand (env:TypeEnv, r:Ref, t:PinType) :
-  expand(ir-table(env), r, t)
-  
+  expand(env, r, t, false)
+
+public defn expand (env:TypeEnv, r:Ref, keep-intermediate?:True|False) :
+  expand(env, r, env[r] as PinType, keep-intermediate?)
+
 public defn expand (env:TypeEnv, r:Ref) :
-  expand(env, r, env[r] as PinType)
+  expand(env, r, false)
 
 defn TypeEnv (ir-table:IRTable, root-type:(Ref, TypeEnv, True|False) -> RefType|False) :
   ;Retrieve the reference type of a ref
@@ -1537,9 +1676,9 @@ public defn MappingTable (env:TypeEnv, one-to-many?:True|False, entries:Seqable<
 ;=================== Pass Utilities =========================
 ;============================================================
 
-defn top-modules (ir-table:IRTable) :
+public defn top-modules (ir-table:IRTable) :
   val module-set = HashSet<Symbol>()
-  add-all(module-set, seq(module, makeboards(ir-table)))
+  add-all(module-set, seq(module, makeschematics(ir-table)))
   module-set
 
 public defn map-top-modules (f:DefModule -> DefModule, ir-table:IRTable, prog:Collection<TStmt>) :
@@ -1573,18 +1712,30 @@ public defn map-scope-refs (func:Ref -> Ref, s:MStmt) :
   defn f (r:False) : r
   defn f (r:Ref) : func(r)
   defn f (r:List<Ref>) : map(func,r)
+  defn f (r:Tuple<Ref>) : map(func,r)
   defn f (o:SupportOption) :
     val mapping* = f-rhs(mapping(o))
     val requires* = map(f, requires(o))
-    sub-requires(sub-mapping(o, mapping*), requires*)
+    val properties* = map(f, properties(o))
+    sub-properties{_, properties*} $
+    sub-mapping{_, mapping*} $
+    sub-requires{_, requires*} $
+    o
   defn f (os:List<SupportOption>) : map(f, os)
   defn f (r:RequireStmt) :
     val inst* = f(inst(r))
     val mapping* = f-rhs(mapping(r))
     sub-mapping(sub-inst(r, inst*), mapping*)
+  defn f (s:PinPropertiesStmt) :
+    sub-ref(s, f(ref(s)))
   defn f-rhs (m:Mapping) :
     Mapping $ for e in mappings(m) map :
       key(e) => f(value(e))
+  defn f (s:SupportedByStmt) :
+    val nested* = map(f, nested-supports(s))
+    val ref* = if port?(s) : f(ref(s))
+               else : dot(f(head(ref(s))), tail(ref(s)))
+    sub-ref(sub-nested-supports(s, nested*), ref*)
   
   match(s) :
     (s:NetStmt) : sub-refs(s, f(refs(s)))
@@ -1593,11 +1744,17 @@ public defn map-scope-refs (func:Ref -> Ref, s:MStmt) :
     (s:RequireStmt) : f(s)
     (s:SupportsStmt) : sub-options(s, f(options(s)))
     (s:InstSupportsStmt) : sub-options(sub-inst(s, f(inst(s))), f(options(s)))
-    (s:PackageStmt) : sub-ref(s, f(ref(s)))
+    (s:PackageStmt) : sub-anchor(sub-ref(s, f(ref(s))), f(anchor(s)))
     (s:EModelStmt) : sub-ref(s, f(ref(s)))
     (s:PartStmt) : sub-ref(s, f(ref(s)))
     (s:ReferenceStmt) : sub-ref(s, f(ref(s)))
-    (s:AttachStmt) : sub-args(s, f(args(s)))   
+    (s:SchematicGroupStmt) : sub-ref(s, f(ref(s)))
+    (s:AttachStmt) : sub-args(s, f(args(s)))
+    (s:MaxCurrentDrawStmt) : sub-refs(s, f(refs(s)))
+    (s:EStateStmt) : sub-ref(s, f(ref(s)))    
+    (s:PinPropertiesStmt) : f(s)
+    (s:ConnectionStmt) : sub-args(s, map(f, args(s)))
+    (s:SupportedByStmt) : f(s)
 
 ;============================================================
 ;=============== PartRequest and Matching ===================

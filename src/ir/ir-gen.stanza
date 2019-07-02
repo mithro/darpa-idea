@@ -5,7 +5,6 @@ defpackage rtm/ir-gen :
   import rtm/ir
   import rtm/ir-utils
   import rtm/ir-reader
-  import rtm/ir-gen-macros
 
 ;============================================================
 ;======================= Namespaces =========================
@@ -94,9 +93,8 @@ val BUFFER-DECLS = [
   BufferDecl(`pcb-package, "pcb package", [
     BufferField(`pad, "pad", ListField())
     BufferField(`pad-def, "pad definition", ListField())
-    BufferField(`layer, "layer", ListField())
-    BufferField(`gstmt, "geometry statement", ListField())    
-    BufferField(`external-names, "external names", OptionalField(List()))])
+    BufferField(`external-names, "external names", OptionalField(List()))
+  ])
   BufferDecl(`pcb-pad, "pcb pad", [
     BufferField(`type, "type", RequiredField())
     BufferField(`shape, "shape", RequiredField())
@@ -113,16 +111,19 @@ val BUFFER-DECLS = [
     BufferField(`package, "package", RequiredField())
     BufferField(`component, "component", OptionalField(false))
     BufferField(`emodel, "electrical model", OptionalField(false))])
-  BufferDecl(`make-board, "make board", [])
   BufferDecl(`mapping, "mapping", [
     BufferField(`entry, "mapping entry", ListField())])
+  BufferDecl(`properties, "pin properties", [
+    BufferField(`entry, "pin property", ListField())])
   BufferDecl(`option, "support option", [
     BufferField(`entry, "support entry", ListField())
-    BufferField(`require, "require statement", ListField())])
+    BufferField(`require, "require statement", ListField())
+    BufferField(`property, "pin properties", ListField())])
   BufferDecl(`options, "support options", [
     BufferField(`option, "support option", ListField()),
     BufferField(`entry, "support entry", ListField())
-    BufferField(`require, "require statement", ListField())])]
+    BufferField(`require, "require statement", ListField())
+    BufferField(`property, "pin properties", ListField())])]
 
 defn buffer-decl (type:Symbol) :
   val decl = 
@@ -203,27 +204,42 @@ protected defn make-mapping (f:Buffer -> ?) :
   Mapping(b[`entry])
 
 ;============================================================
+;====================== Pin Properties ======================
+;============================================================
+
+protected defn make-pin-properties (ref:Ref, f:Buffer -> ?) :
+  val b = buffer(f, `properties, `properties)
+  val entries = b[`entry]
+  PinPropertiesStmt(ref, 0, to-tuple(entries))
+
+;============================================================
 ;===================== SupportOptions =======================
 ;============================================================
 
-protected defn make-option (f:Buffer -> ?) :
+protected defn make-option (id:Ref|False, f:Buffer -> ?) :
   val b = buffer(f, `option, `option)
   val entries = b[`entry]
   val requires = b[`require]
-  SupportOption(requires, Mapping(entries))
+  val properties = b[`property]
+  SupportOption(id, requires, properties, Mapping(entries))
 
-protected defn make-options (f:Buffer -> ?) :
+protected defn make-options (id:Ref|False, f:Buffer -> ?) :
   val b = buffer(f, `options, `options)
   val options = b[`option]
   val entries = b[`entry]
   val requires = b[`require]
+  val properties = b[`property]
   if empty?(options) :
-    List(SupportOption(requires, Mapping(entries)))
+    List(SupportOption(id, requires, properties, Mapping(entries)))
   else :
+    if id is-not False :
+      fatal("Cannot give explicit name %_ to supports statement containing multiple options." % [id])
     if not empty?(entries) :
       fatal("The mappings %, are not contained in an option group." % [entries])
     if not empty?(requires) :
       fatal("The requirements %, are not contained in an option group." % [requires])
+    if not empty?(properties) :
+      fatal("The properties %, are not contained in an option group." % [properties])
     options
 
 ;============================================================
@@ -243,13 +259,18 @@ defn pcb-component (f:Buffer -> ?, name:Symbol) :
   val b = buffer(f, name, `pcb-component)
   add-tstmt(DefComponent(name, b[`pin], b[`stmt]))
 
+
 defn pcb-package (f:Buffer -> ?, name:Symbol) :
   val b = buffer(f, name, `pcb-package)
   add-tstmt(DefPackage(name, b[`pad], b[`pad-def]))
 
+
+
+
 defn pcb-module (f:Buffer -> ?, name:Symbol) :
   val b = buffer(f, name, `pcb-module)
   add-tstmt(DefModule(name, b[`pin], b[`stmt]))
+
 
 defn pcb-part (f:Buffer -> ?, name:Symbol) :
   val b = buffer(f, name, `pcb-part)
@@ -262,9 +283,9 @@ defn pcb-pad (f:Buffer -> ?, scope:Buffer, name:Symbol) :
   val b = buffer(f, name, `pcb-pad)
   add-entry(scope, `pad-def, DefPad(name, b[`shape], b[`type]))
 
-protected defn make-board (f:Buffer -> ?, name:Symbol) :
-  val b = buffer(f, name, `make-board)
-  add-tstmt(MakeBoard(name))
+
+protected defn make-schematic (name:Symbol) :
+  add-tstmt(MakeSchematic(name))
 
 protected defn pcb-attach (f:Buffer -> ?, name:Symbol, args:List<Symbol>) :
   val b = buffer(f, name, `pcb-attach)
@@ -299,7 +320,7 @@ defn NameSpace (m:DefModule) :
     val [x*, id] = split-id(x, '$')
     update(name-table, max{_, id + 1}, x*)
   do(register-name{name(_)}, pins(m))
-  for s in filter-by<NetStmt|InstStmt>(stmts(m)) do :
+  for s in filter-by<InstStmt|NodeStmt>(stmts(m)) do :
     if name(s) is Symbol :
       register-name(name(s) as Symbol)
   ;Create namespace from occurrences
@@ -309,15 +330,20 @@ defn NameSpace (m:DefModule) :
   ;Return namespace
   ns
 
-public defn reopen-module (f:Buffer -> ?, module:DefModule) -> DefModule :
+public defn reopen-module (f:Buffer -> ?,
+                           module:DefModule,
+                           keep-pins?:True|False,
+                           keep-stmts?:True|False) -> DefModule :
   ;Recreate namespace
   val ns = NameSpace(module)
   ;Reopen and collect new statements
   val b = buffer(f, Buffer(name(module), `pcb-module, ns))
   ;Merge with old module
-  DefModule(name(module),
-            append(pins(module), b[`pin]),
-            append(stmts(module), b[`stmt]))
+  defn append?<?T> (xs:Seqable<?T>, ys:List<?T>, keep-xs?:True|False) :
+    append(xs, ys) when keep-xs? else ys
+  val pins* = append?(pins(module), b[`pin], keep-pins?)
+  val stmts* = append?(stmts(module), b[`stmt], keep-stmts?)
+  DefModule(name(module), pins*, stmts*)
 
 ;============================================================
 ;======================= Current Path =======================
@@ -404,6 +430,48 @@ protected defn ref-name (r:Ref) :
     (r:VarRef) : name(r)
     (r) : fatal("Cannot retrieve name from non-var reference %_." % [r])
 
+protected defn flatten-refs (rs:Seqable<Ref|Seqable>) -> List<Ref> :
+  val accum = Vector<Ref>()
+  defn not-ref! (x) :
+    fatal("Argument %~ is not a Ref." % [x])
+  let loop (r = rs) :
+    match(r) :
+      (r:Ref) : add(accum,r)
+      (r:String|Symbol) : not-ref!(r)
+      (r:Seqable) : do(loop, r)
+      (r) : not-ref!(r)
+  to-list(accum)
+
+;============================================================
+;================= Interpreting References ==================
+;============================================================
+
+protected defn ref-to-capability-type (r0:Ref) -> CapabilityType :
+  defn convert (r:Ref) :
+    match(r) :
+      (r:VarRef) : Capability(name(r))
+      (r:IndexRef) : CapabilityArray(convert(ref(r)), index(r))
+      (r:FieldRef) : fatal("%_ is not a valid capability type." % [r0])
+  inside-out(convert(r0))
+
+protected defn ref-to-pin-type (r0:Ref) -> PinType :
+  defn convert (r:Ref) :
+    match(r) :
+      (r:VarRef) :
+        if name(r) == `pin : SinglePin()
+        else : PinBundle(name(r))
+      (r:IndexRef) : PinArray(convert(ref(r)), index(r))
+      (r:FieldRef) : fatal("%_ is not a valid pin type." % [r0])
+  inside-out(convert(r0))  
+
+protected defn ref-to-component-type (r0:Ref) -> ComponentType :
+  defn convert (r:Ref) :
+    match(r) :
+      (r:VarRef) : SingleComponent(name(r))
+      (r:IndexRef) : ComponentArray(convert(ref(r)), index(r))
+      (r:FieldRef) : fatal("%_ is not a valid component type." % [r0])
+  inside-out(convert(r0))
+
 ;============================================================
 ;======================= Includes ===========================
 ;============================================================
@@ -451,13 +519,17 @@ public defn rectangle (anchor:Anchor, w:Double, h:Double) :
     (vt:N) : h / -2.0
   rectangle(w, h, loc(dx, dy))
 
+public defn text (string:String, font:Symbol, size:Double, anchor:Anchor, p:Pose) :
+  Text(string, font, size, anchor, p)
+public defn text (string:String, font:Symbol, size:Double, anchor:Anchor) :
+  Text(string, font, size, anchor, loc(0.0,0.0))    
+
 ;============================================================
-;=================== Error Serializer =======================
+;=================== Electrical States ======================
 ;============================================================
-register-struct-serializers (o:OutputStream, i:InputStream) :
-  rtm/ir-gen-macros/IRGException :
-    info: False|FileInfo
-    msg: String    
+
+public defn drives (voltage:Double) : Driver(voltage)
+public defn highz (min:Double, max:Double) : HighZ(min,max)
 
 ;============================================================
 ;======================== Driver ============================

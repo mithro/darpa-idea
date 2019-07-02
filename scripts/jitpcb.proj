@@ -1,36 +1,91 @@
-macro-files :
-  "src/utils/serialize-macros.stanza"
-  "src/utils/rtm-utils.stanza"
-  "src/ir/ir-gen-macros.stanza"
+;The following files are needed by JitPCB, so copy them over.
+copy-files :
+  "License.txt"
+  "jitpcb.params"
+  "runtime/rtm-utils.c"
 
+;All the files needed to build the bootstrap compiler.
+bootstrap :
+  stanza-files :
+    "src/utils/serialize-macros.stanza"
+    "src/utils/rtm-utils.stanza"
+    "src/ir/ir-gen-macros.stanza"
+    "src/repl-bindings.vmbindings"
+  external-files :
+    "runtime/rtm-utils.c"
+  linker-flags :
+    linux : ("-ldl" "-fPIC")
+
+;These files are used commonly by all passes.
+;So include them for the core plugin, and each individual pass.
 stanza-files :
-  "src/ir/ir-gen-macros.stanza"
-  "src/utils/serialize-macros.stanza"
-  "src/ir/rtm-ir.stanza"
-  "src/ir/ir-gen.stanza"
-  "src/ir/ir-printer.stanza"
-  "src/ir/ir-serializer.stanza"
-  "src/ir/ir-reader.stanza"
-  "src/ir/ir-errors.stanza"
-  "src/ir/ir-utils.stanza"
-  "src/utils/errors.stanza"
   "src/utils/plugins.stanza"
-  "src/utils/plugins-master.stanza"
   "src/utils/plugins-slave.stanza"
-  "src/utils/serialize.stanza"
   "src/utils/dlopen.stanza"
   "src/utils/rtm-utils.stanza"
-  "src/utils/structures.stanza"
+  "src/utils/errors.stanza"
+  "src/utils/serialize.stanza"
   "src/utils/keyed-set.stanza"
-  "src/main/config.stanza"
+  "src/utils/structures.stanza"
+  "src/ir/rtm-ir.stanza"
+  "src/ir/ir-utils.stanza"
+  "src/ir/ir-printer.stanza"
+  "src/ir/ir-reader.stanza"
+  "src/ir/ir-serializer.stanza"
+  "src/ir/ir-errors.stanza"
   "src/main/param-manager.stanza"
+  "src/main/config.stanza"
   "src/main/errors.stanza"
 
+;These files are used by all passes.
+;So include them for the core plugin, and each individual pass.
 external-files :
   "runtime/rtm-utils.c"
 
+;These files are used only by compiled generators,
+;so compile them to pkgs. 
+pkg-files :
+  "src/main/core-interface.stanza"
+  "src/utils/plugins-master.stanza"
+  "src/ir/ir-gen.stanza"
+  "src/ir/ir-lower.stanza"
+  "src/ir/property-merge.stanza"
+  "src/ir/ir-connections.stanza"
+  "src/main/flags.stanza"
+  "src/main/driver.stanza"
+  "src/main/pass-manager-io.stanza"
+  "src/main/launcher.stanza"
+  "src/powergen/csolver.stanza"
+  "src/powergen/modulegen.stanza"
+  "src/powergen/power-system-gen.stanza"
+  "src/powergen/powergen-tester.stanza"
+  "src/powergen/powergen.stanza"
+  "src/powergen/result-seq.stanza"
+  "src/powergen/treegen.stanza"
+  "src/main/repl-driver.stanza"
+  "src/main/repl-lib.stanza"
+  "src/clock/clock-check.stanza"
+  "src/clock/clock-esir-gen.stanza"
+  "src/clock/clock-gen.stanza"
+  "src/clock/clock-ir.stanza"
+  "src/clock/syntax-utils.stanza"
+
+;These files are used by generators, so compile them to pkgs.
+lib-files :
+  "lib/interfaces.stanza"
+  "lib/connections.stanza"
+  "lib/components.stanza"
+  "lib/modules.stanza"
+  "lib/stackups.stanza"
+  "lib/fonts.stanza"
+  "lib/rules.stanza"
+  "lib/peripherals.stanza"
+  "lib/footprints.stanza"
+  "lib/symbols.stanza"
+  "lib/parts.stanza"
+
 linker-flags :
-  linux : "-ldl -fPIC"
+  linux : ("-ldl" "-fPIC")
 
 compiling :
   linux :
@@ -40,22 +95,53 @@ compiling :
     *.cpp : "g++ -c -O3 -fPIC {INPUT} -o {OUTPUT}"
     ("stanza-geode/geode-circle-arcs.cpp"): "g++ -c -O3 -fPIC -std=c++11 {INPUT} -o {OUTPUT}"
 
-jitpcb core :
+jitpcb driver :
   package: jitpcb
   stanza-files :
-    "src/inputspec/input-ir.stanza"
-    "src/inputspec/test-ir.stanza"    
+    "src/main/config.stanza"
+    "src/utils/rtm-utils.stanza"
+    "src/ir/rtm-ir.stanza"
+    "src/ir/ir-errors.stanza"
+    "src/ir/ir-printer.stanza"
+    "src/ir/ir-reader.stanza"
+    "src/ir/ir-utils.stanza"
+    "src/ir/ir-serializer.stanza"
+    "src/main/core-interface.stanza"
+    "src/main/pass-manager-io.stanza"
+    "src/main/errors.stanza"
+    "src/utils/plugins.stanza"
+    "src/utils/plugins-master.stanza"
+    "src/utils/dlopen.stanza"
+    "src/utils/errors.stanza"
+    "src/utils/serialize.stanza"
     "src/ir/ir-lower.stanza"
+    "src/ir/ir-connections.stanza"
+    "src/ir/ir-gen.stanza"
+    "src/ir/property-merge.stanza"
+    "src/main/jitpcb.stanza"
+  external-files :
+    "runtime/rtm-utils.c"
+
+jitpcb plugin core :
+  package: jitpcb/core
+  stanza-files :
+    "src/utils/plugins-master.stanza"
+    "src/ir/ir-gen.stanza"
+    "src/ir/ir-lower.stanza"
+    "src/ir/ir-connections.stanza"
+    "src/ir/property-merge.stanza"
+    "src/ir/ir-prune.stanza"
+    "src/ir/ir-passes.stanza"
     "src/ir/pin-solver.stanza"
     "src/ir/pin-state.stanza"
-    "src/main/flags.stanza"
-    "src/main/driver.stanza"
-    "src/main/launcher.stanza"    
+    "src/ir/system-topology.stanza"
+    "src/main/pass-manager-io.stanza"
     "src/main/pass-manager.stanza"
-    "src/main/passes.stanza"
-    "src/main/jitpcb.stanza"
+    "src/main/passes.stanza"    
+    "src/main/task-graph.stanza"
+    "src/main/jitpcb-core.stanza"
   
-jitpcb plugin checker :
+jitpcb plugin check :
   package: rtm/ir-check
   stanza-files :
     "src/ir/ir-check.stanza"    
@@ -63,14 +149,14 @@ jitpcb plugin checker :
 jitpcb plugin passes :
   package: rtm/ir-passes
   stanza-files :
+    "src/ir/ir-prune.stanza"
     "src/ir/ir-passes.stanza"
+    
 
-jitpcb plugin parsers :
-  package: rtm/reader-plugin
-  stanza-files :
-    "src/ir/reader-plugin.stanza"    
-
-jitpcb plugin key-in :
+jitpcb plugin keyin :
   package: key-in
   stanza-files :
     "src/ir/key-in.stanza"
+    "src/ir/key-in-analysis.stanza"
+
+

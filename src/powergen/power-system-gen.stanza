@@ -146,6 +146,9 @@ public defn generate-power-system (src-voltage:Double, tamb:Double,
   export-module-graphviz("system-architecture.gv")
   call-generators(s, src-pos, src-neg, REGULATORS, LOADS)
 
+  ;Clear loads
+  clear(LOADS)
+
   ;Return input rail
   lookup(rails(s), 0)
 

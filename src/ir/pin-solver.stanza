@@ -15,61 +15,65 @@ defpackage rtm/pin-solver :
 
 public defn assign-satisfying-pins (prog:Collection<TStmt>) -> Collection<TStmt> :
   within (ir-table, m) = map-top-modules(prog) :
-    ;Solve mappings
-    val [pins, classes, reqs] = construct-input(ir-table, m)
-    val mappings = seq(make-mapping, solve-pins(pins, classes, reqs))
+    ;Construct input to solver
+    val input = construct-input(ir-table, m)
 
-    ;Detect error
-    if empty?(mappings) :
-      throw(UnsatisfiableRequirements(name(m)))      
+    ;Solve for pinmapping
+    val pinmap = solve(ir-table, m, input)
 
-    ;Apply the pinmap to the module
-    apply(ir-table, next(mappings), m)
+    ;Apply the result
+    apply(pinmap, m)
 
 public defn solve-requirements (prog:Collection<TStmt>) -> [Collection<TStmt>, PinMapping] :
   ;Get IRTable
   val ir-table = IRTable(prog)
-  switch(length(makeboards(ir-table))) :
-    0 : throw(NoMakeBoard())
+  val top-ms = to-tuple(top-modules(ir-table))
+  switch(length(top-ms)) :
+    0 : throw(NoTopLevel())
     1 : false
-    else : throw(MultipleMakeBoard())
+    else : throw(MultipleTopLevel())
 
   ;Compute pin mapping
-  val make-board = makeboards(ir-table)[0]
-  val m = module(ir-table, module(make-board))
-
-  ;Solve mappings
-  val [pins, classes, reqs] = construct-input(ir-table, m)
-  val mappings = seq(make-mapping, solve-pins(pins, classes, reqs))
-
-  ;Detect error
-  if empty?(mappings) :
-    throw(UnsatisfiableRequirements(name(m)))
-
-  ;Form PinMapping datastructure
-  val pin-mapping = PinMapping(pad-table, net-graph, mappings, get-mappings) where :
-    val pad-table = PadTable(ir-table, m)
-    val net-graph = DynamicNetGraph(ir-table, m)
-    defn get-mappings () :
-      seq(make-mapping, solve-pins(pins, classes, reqs))
+  val m = module(ir-table, top-ms[0])
+  val input = construct-input(ir-table, m)
+  val pinmap = solve(ir-table, m, input)
 
   ;Return prog and pin-mapping
-  [prog, pin-mapping]
+  [prog, pinmap]
 
-defn make-mapping (map:Tuple<KeyValue<Ref,Ref>>) :
-  Mapping(to-list(map))
+;============================================================
+;============================================================
+;============================================================
+
+defn add-supported-by-stmts (m:DefModule, new-stmts:Seqable<SupportedByStmt>) :
+  val old-stmts = filter({_ is-not SupportedByStmt}, stmts(m))
+  val stmts* = to-list(cat(old-stmts, new-stmts))
+  sub-stmts(m, stmts*)
+
+;============================================================
+;================= Solver ===================================
+;============================================================
+
+defn solve (ir-table:IRTable, m:DefModule, input:PinSolverInput) -> PinMapping :
+  val ps = PinState(length(pins(input)), classes(input))
+  defn compute-solns () -> Seq<Tuple<Soln>> :
+    val solns = solve-requests(ps, classes(input), reqs(input), preassigned(input))
+    throw(UnsatisfiableRequirements(name(m))) when empty?(solns)
+    solns
+  val pad-table = PadTable(ir-table, m)
+  val net-graph = DynamicNetGraph(ir-table, m)
+  PinMapping(input, ps, pad-table, net-graph, cat-all(repeatedly(compute-solns)))  
 
 ;============================================================
 ;=================== Pin Mapping ============================
 ;============================================================
 
 public deftype PinMapping
-public defmulti single? (p:PinMapping) -> True|False
 public defmulti current-mapping (p:PinMapping) -> Mapping
 public defmulti current-nets (p:PinMapping) -> Tuple<NetStmt>
 public defmulti current-pad-nets (p:PinMapping) -> Tuple<PadNet>
-public defmulti current-short-traces (p:PinMapping) -> Tuple<PadNet>
-public defmulti next-mapping (p:PinMapping) -> Mapping
+public defmulti next (p:PinMapping) -> False
+public defmulti apply (p:PinMapping, m:DefModule) -> DefModule
 
 public defstruct PadNet :
   name: False|Symbol
@@ -77,49 +81,34 @@ public defstruct PadNet :
 with:
   printer => true
 
-defn PinMapping (pad-table:PadTable, net-graph:DynamicNetGraph,
-                 mappings0:Seq<Mapping>, get-mappings:()-> Seq<Mapping>) :
+defn PinMapping (input:PinSolverInput,
+                 ps:PinState,
+                 pad-table:PadTable,
+                 net-graph:DynamicNetGraph,
+                 solns:Seq<Tuple<Soln>>) :
   defn to-pad-net (n:NetStmt) :
     PadNet(name(n), to-tuple(seq-cat(pads{pad-table, _}, refs(n))))
-    
-  ;Compute current nets
+
+  ;Compute current nets  
   var current-mapping:Mapping
   var current-nets:Tuple<NetStmt>
   var current-pad-nets:Tuple<PadNet>
-  defn update-current (m:Mapping) :
-    current-mapping = m
-    current-nets = nets(net-graph, m)
+  defn update-current (soln:Tuple<Soln>) :
+    current-mapping = to-pin-mapping(ps, soln, input)
+    current-nets = nets(net-graph, current-mapping)
     current-pad-nets = map(to-pad-net, current-nets)
-    m
-  update-current(next(mappings0))
+  update-current(peek(solns))
 
-  ;Determine if single mapping or not
-  if empty?(mappings0) :
-    new PinMapping :
-      defmethod single? (this) : true
-      defmethod current-mapping (this) : current-mapping
-      defmethod current-nets (this) : current-nets
-      defmethod current-pad-nets (this) : current-pad-nets
-      defmethod next-mapping (this) : fatal("Only a single mapping available.")      
-  else :
-    val mappings =  cat(mappings0, cat-all(repeatedly(get-mappings)))
-    new PinMapping :
-      defmethod single? (this) : false
-      defmethod current-mapping (this) : current-mapping
-      defmethod current-nets (this) : current-nets
-      defmethod current-pad-nets (this) :current-pad-nets
-      defmethod next-mapping (this) : update-current(next(mappings))
-
-public defn apply (ir-table:IRTable, m:Mapping, module:DefModule) :
-  val table = to-hashtable<Ref,Ref>(mappings(m))  
-  val stmts* = for stmt in stmts(module) map :
-    for ref in stmt map-scope-refs :
-      get?(table, ref, ref)
-  post-lower(ir-table, sub-stmts(module, stmts*))
-
-public defn apply (m:Mapping, prog:Collection<TStmt>) :
-  within (ir-table, module) = map-top-modules(prog) :
-    apply(ir-table, m, module)
+  ;Return PinMapping datastructure
+  new PinMapping :
+    defmethod current-mapping (this) : current-mapping
+    defmethod current-nets (this) : current-nets
+    defmethod current-pad-nets (this) : current-pad-nets
+    defmethod next (this) :
+      next(solns)
+      update-current(peek(solns))
+    defmethod apply (this, m:DefModule) :
+      add-supported-by-stmts(m, to-supported-by-stmts(peek(solns), input))
 
 ;============================================================
 ;===================== Pad Table ============================
@@ -237,7 +226,42 @@ defn add (ps:PinSet, name:Symbol|False) :
 ;================== Construct Input =========================
 ;============================================================
 
-public defn construct-input (ir-table:IRTable, m:DefModule) :
+public defstruct ReqPort :
+  parent-option: Ref|False
+  ref:Ref
+  port?:True|False
+with:
+  printer => true
+
+public defstruct PinSolverInput :
+  pins:Tuple<Ref>
+  classes:Tuple<Class>
+  reqs:Tuple<ClassReq>
+  req-ports:Table<Int,ReqPort>
+  options:Vector<KeyValue<Ref,Option>>
+  preassigned:Tuple<KeyValue<Int,Int>>
+
+defmethod print (o:OutputStream, p:PinSolverInput) :
+  val o2 = IndentedStream(o)
+  val o3 = IndentedStream(o2)
+  defn P (x) : print(o, x)
+  defn NP (x) : lnprint(o2, x)
+  defn NP2 (x) : lnprint(o3, x)
+  P("PinSolverInput:")
+  NP("pins:")
+  do(NP2, pins(p))
+  NP("classes:")
+  do(NP2, classes(p))
+  NP("reqs:")
+  do(NP2, reqs(p))
+  NP("req-ports:")
+  do(NP2, req-ports(p))
+  NP("options:")
+  do(NP2, options(p))
+  NP("preassigned:")
+  do(NP2, preassigned(p))  
+
+public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
   ;Retrieve module table
   val mtable = mtable(ir-table, name(m))
   val menv = ModuleEnv(ir-table, name(m))
@@ -266,7 +290,7 @@ public defn construct-input (ir-table:IRTable, m:DefModule) :
   for inst in insts(mtable) do :
     do(record-pin, instance-ports(Ref(name(inst)), component(inst)))
   for node in nodes(mtable) do :
-    record-pin(Ref(name(node)))
+    do(record-pin, expand(menv, Ref(name(node))))
 
   ;List all inst supports
   defn all-inst-supports () :
@@ -290,7 +314,8 @@ public defn construct-input (ir-table:IRTable, m:DefModule) :
     record-class(ref)
 
   ;Build the requests
-  defn form-requests (r:RequireStmt, src-table:HashTable<Ref,PinSource>|False) -> Seqable<ClassReq> :
+  val port-requests = IntTable<ReqPort>()
+  defn form-requests (r:RequireStmt, parent-option:Ref|False, src-table:HashTable<Ref,PinSource>|False) -> Seqable<ClassReq> :
     val class-ref = dot(inst(r), Ref(name(base(capability(r)))))
     val class-index = class-index-table[class-ref]
     val pinmap = to-hashtable<Ref,Ref>(mappings(mapping(r)))
@@ -309,19 +334,25 @@ public defn construct-input (ir-table:IRTable, m:DefModule) :
             match(get?(pinmap, tail(p))) :
               (p:Ref) : pin-index-table[p]
               (p:False) : p
-          ClassReq(class-index, to-tuple(srcs), to-tuple(tgts))
+          val req-id = genid()
+          port-requests[req-id] = ReqPort(parent-option, ref, true)
+          ClassReq(req-id, class-index, to-tuple(srcs), to-tuple(tgts))
       (rname:False) :
-        for i in 0 to total-length(capability(r)) seq :
-          ClassReq(class-index, [], [])
+        val ref = FieldRef(inst(r), name(base(capability(r))))
+        for r in expand(ref, capability(r)) seq :
+          val req-id = genid()
+          port-requests[req-id] = ReqPort(parent-option, r, false)
+          ClassReq(req-id, class-index, [], [])
 
   ;Create class group
   val class-groups = Array<List<Group>>(length(class-index-table), List())
+  val options = Vector<KeyValue<Ref,Option>>()
   for support in all-inst-supports() do :      
     val class-ref = dot(inst(support), Ref(capability(support)))
     val class = class-index-table[class-ref]
     val refs = capability-pins(Ref(capability(support)), capability(support))
     val group = Group $ to-tuple $
-      for option in options(support) seq :
+      for option in /options(support) seq :
         ;Forwarded
         defn forwarded? (r:Ref) :
           for req in requires(option) any? :
@@ -334,28 +365,67 @@ public defn construct-input (ir-table:IRTable, m:DefModule) :
           val tgt = pinmap[r]
           if forwarded?(tgt) : src-table[tgt] = ArgInput(argi)
           else : pin-index-table[tgt]
+        val option-id = dot(inst(support), id(option) as Ref)
         val reqs = to-tuple $ for r in requires(option) seq-cat :
-          form-requests(r, src-table)
-        Option(pins, reqs)
+          form-requests(r, option-id, src-table)
+        val o = Option(pins, reqs)
+        add(options, option-id => o)
+        o
     class-groups[class] = cons(group, class-groups[class])
 
   ;Create classes
   val classes = to-tuple $
     for (groups in class-groups, id in 0 to false) seq :
-      Class(id, to-tuple(groups))
+      Class(id, to-tuple(reverse(groups)))
 
   ;Create class requests
   val class-reqs = to-tuple $
     for r in requires(mtable) seq-cat :
-      form-requests(r, false)
+      form-requests(r, false, false)
+
+  ;Create pre-assigned solution
+  val pre-assigned = Vector<KeyValue<Int,Int>>()
+  val option-index-table = to-hashtable(key{options[_]}, 0 to length(options))
+  val request-req-table = to-hashtable<[Ref|False, Ref],Int> $
+    for entry in port-requests seq :
+      [parent-option(value(entry)), ref(value(entry))] => key(entry)
+
+  for s in supported-bys(mtable) do :
+    let loop (s:SupportedByStmt = s, parent-option:Ref|False = false) :
+      val req-id = request-req-table[[parent-option, ref(s)]]
+      add(pre-assigned, req-id => option-index-table[option-id(s)])
+      do(loop{_, option-id(s)}, nested-supports(s))
       
-  ;Return classes and requests
-  [to-tuple(all-pins), classes, class-reqs]      
-    
+  ;Return constructed input
+  PinSolverInput(to-tuple(all-pins),
+                 classes,
+                 class-reqs,
+                 port-requests,
+                 options,
+                 to-tuple(pre-assigned))
+
 ;============================================================
-;==================== Utilities =============================
+;=================== Output Conversion ======================
 ;============================================================
 
-defn total-length (t:CapabilityType) :
-  match(t:CapabilityArray) : total-length(capability(t)) * length(t)
-  else : 1
+defn to-pin-mapping (ps:PinState, solns:Tuple<Soln>, input:PinSolverInput) -> Mapping :
+  Mapping $ to-list $
+    for soln in solns seq-cat :
+      val srcs = sources(req(soln))
+      val option-pins = option-pins(ps, option(soln))
+      for (s in srcs, p in option-pins) seq? :
+        match(s:PinInput, p:Int) :
+          val abstract-pin = data(s) as Ref
+          val concrete-pin = pins(input)[p]
+          One(abstract-pin => concrete-pin)
+        else : None()  
+    
+defn to-supported-by-stmts (soln:Tuple<Soln>, input:PinSolverInput) -> Tuple<SupportedByStmt> :
+  val soln-table = to-inttable(id{req(_)}, soln)
+  defn supported-by (r:ClassReq) :
+    val soln = soln-table[id(r)]
+    val port = req-ports(input)[id(r)]
+    val option = options(input)[option(soln)]
+    val nested = map(supported-by, /classes(value(option)))
+    SupportedByStmt(ref(port), port?(port), key(option), nested)
+  map(supported-by, reqs(input))

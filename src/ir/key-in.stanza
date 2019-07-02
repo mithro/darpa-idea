@@ -7,15 +7,18 @@ defpackage key-in :
   import rtm/errors
   import rtm/ir-utils
   import plugins/slave
+  import key-in-analysis
 
 ;============================================================
 ;====================== Driver ==============================
 ;============================================================
 defn export-keyin (prog:Collection<TStmt>, dir:String, proj-name:String) :
   val filename = norm-path("%_%_.kyn" % [dir, proj-name])
+  val board = analyze(prog)
   val file = FileOutputStream(filename)
   try :
-    print-keyin(file, prog)
+    print-nets(file, board)
+    print-parts(file, board)
   finally :
     close(file)
 
@@ -67,105 +70,31 @@ defn print-item-line (o:OutputStream, xs0:Seqable) :
     NL()
 
 ;============================================================
-;==================== Analyzed Board ========================
-;============================================================
-
-deftype Board
-defmulti pin-ref (b:Board, r:Ref) -> String
-defmulti insts (b:Board) -> Seqable<KeyValue<String, List<String>>>
-defmulti nets (b:Board) -> Seqable<KeyValue<String, List<String>>>
-defmulti unconnected-pins (b:Board) -> Seqable<String>
-
-defn Board (ir-table:IRTable, mtable:MTable) :
-  ;Assign an index to each pin.
-  ;Pin P for component C is listed under key [C, P].
-  val pin-number-table = HashTable<[Symbol Ref],Int>()
-  for c in components(ir-table) do :
-    val pin-refs = for p in pins(c) seq-cat :
-      expand(ir-table, Ref(name(p)), type(p))
-    for (pin-ref in pin-refs, i in 1 to false) do :
-      pin-number-table[[name(c), pin-ref]] = i
-    name(c)
-
-  ;All unconnected pins
-  defn all-unconnected-pins () :
-    val connected-pins = to-hashset<Ref> $
-      for net in nets(mtable) seq-cat :
-        refs(net)
-    for inst in insts(mtable) seq-cat :
-      val defc = component(ir-table, component(inst))
-      for pin in pins(defc) seq-cat :
-        val inst-pin = dot(Ref(name(inst)), Ref(name(pin)))
-        for epin in expand(ir-table, inst-pin, type(pin)) seq? :
-          if connected-pins[epin] : None()
-          else : One(pin-ref(epin))
-
-  ;Retrieve the reference for a given pin
-  defn pin-ref (r:Ref) :  
-    val inst = inst(mtable, name(base(r)))
-    val ref-des = value(reference(mtable, name(base(r))))
-    val index = pin-number-table[[component(inst), tail(r)]]
-    string-join([ref-des '-' index])
-
-  ;Retrieve all nets
-  defn all-nets () :
-    for net in nets(mtable) seq :
-      to-string(name(net)) => map(pin-ref, refs(net))
-
-  ;Retrieve all instances for each component
-  defn all-insts () :
-    for [part-name, parts] in kvs(group-by(part, parts(mtable))) seq :
-      val mpn = mpn(part(ir-table, part-name))
-      val refs = to-list $ for p in parts seq :
-        value(reference(mtable, name!(ref(p))))
-      mpn => refs
-
-  new Board :
-    defmethod pin-ref (this, r:Ref) : pin-ref(r)
-    defmethod insts (this) : all-insts()
-    defmethod nets (this) : all-nets()
-    defmethod unconnected-pins (this) : all-unconnected-pins()
-
-;============================================================
 ;===================== Formatting ===========================
 ;============================================================
 defn ref-string (r:Ref) :
   flatten(DefaultFlattener(), r)
+
+defn format (p:KPin) :
+  "%_-%_" % [ref-designator(p), pin-name(p)]
   
 defn print-nets (o:OutputStream, b:Board) :
   println(o, NET-INTRO)
-  for [net, refs] in kvs(nets(b)) do :
-    print-item-line(o, cat([net], refs))
+  for net in knets(b) do :
+    print-item-line(o, cat([name(net)], seq(format, pins(net))))
 
 val NET-INTRO =
 \<S>%NET
 %PRIORITY=1
 %PAGE=0<S>
-
-defn print-unconnected-pins (o:OutputStream, b:Board) :
-  for (p in unconnected-pins(b), i in 1 to false) do :
-    println(o, "NOCONNECT%_   %_" % [i, p])
   
-defn print-insts (o:OutputStream, b:Board) :      
+defn print-parts (o:OutputStream, b:Board) :      
   println(o, PART-INTRO)
-  for [mpn, refs] in kvs(insts(b)) do :
-    print-item-line(o, cat([mpn], refs))
+  for part in parts(b) do :
+    print-item-line(o, cat([mpn(part)], ref-designators(part)))
 
 val PART-INTRO = \<S>
 %PART<S>
-
-defn print-keyin (o:OutputStream, prog:Collection<TStmt>) :  
-  val ir-table = IRTable(prog)
-  if empty?(makeboards(ir-table)) :
-    throw(NoMakeBoard())
-  else :
-    end-if-errors()
-    val mb = makeboards(ir-table)[0]
-    val board = Board(ir-table, mtable(ir-table, module(mb)))
-    println(o, KEYIN-INTRO)
-    print-nets(o, board)
-    print-unconnected-pins(o, board)
-    print-insts(o, board)    
 
 val KEYIN-INTRO =
 \<S>;; Keyin Netlist File

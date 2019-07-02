@@ -7,26 +7,10 @@ defpackage rtm/structures :
   import rtm/ir
   import rtm/ir-utils
 
-public defstruct PlaceOptions :
-  margin: Float
-  via-diameter: Float
-  via-drill: Float
-  desired-rate: Float
-  trace?: True|False
-  overlap-fac: Float
-  overlap-offset: Float
-  net-fac: Float
-  short-trace-fac: Float
-  center-fac: Float
-  group-area-fac: Float
-  area-fac: Float
-  iters-fac: Int
-  num-iters: Int
-  max-retries: Int
 
-public defstruct DSNOptions :
-  power-trace-width: Double
-  fast?: True|False
+;============================================================
+;=================== Pruning Options ========================
+;============================================================
 
 public deftype PruningOption
 public defstruct PruneFor <: PruningOption :
@@ -36,25 +20,6 @@ public defstruct PruneAll <: PruningOption :
 public defstruct NoPrune <: PruningOption
 
 register-struct-serializers (o:OutputStream, i:InputStream) :
-  rtm/structures/PlaceOptions :
-    margin: Float
-    via-diameter: Float
-    via-drill: Float
-    desired-rate: Float
-    trace?: True|False
-    overlap-fac: Float
-    overlap-offset: Float
-    net-fac: Float
-    short-trace-fac: Float
-    center-fac: Float
-    group-area-fac: Float
-    area-fac: Float
-    iters-fac: Int
-    num-iters: Int
-    max-retries: Int
-  rtm/structures/DSNOptions :
-    power-trace-width: Double
-    fast?: True|False
   rtm/structures/PruneFor :
     type: Symbol
   rtm/structures/PruneAll :

@@ -5,6 +5,7 @@ defpackage rtm/ir-reader :
   import rtm/utils
   import rtm/ir
   import rtm/ir-utils
+  import rtm/ir/errors
 
 ;============================================================
 ;===================== Interface ============================
@@ -139,6 +140,10 @@ defsyntax rtm-ir :
   defrule option! = (option) : `option
   fail-if option! = () : RTME(closest-info(), "The option keyword is expected here.")
 
+  defproduction supported-by! : Symbol
+  defrule supported-by! = (supported-by) : `supported-by
+  fail-if supported-by! = () : RTME(closest-info(), "The supported-by keyword is expected here.")
+
   defproduction through! : Symbol
   defrule through! = (through) : `through
   fail-if through! = () : RTME(closest-info(), "The through keyword is expected here.")
@@ -187,17 +192,19 @@ defsyntax rtm-ir :
   defrule mstmt! = (?x:#mstmt) : x
   fail-if mstmt! = () : RTME(closest-info(), "Module statement expected here.")
 
+
   defproduction cstmt! : CStmt
   defrule cstmt! = (?x:#cstmt) : x
   fail-if cstmt! = () : RTME(closest-info(), "Component statement expected here.")
 
-  defproduction ref! : Ref
+  public defproduction ref! : Ref
   defrule ref! = (?x:#ref) : x
   fail-if ref! = () : RTME(closest-info(), "Reference expected here.")
 
-  defproduction ref$ : Ref
+  public defproduction ref$ : Ref
   fail-if ref$ = (#ref ?rest) : RTME(closest-info(rest), "Unexpected input here.")
   defrule ref$ = (?x:#ref!) : x
+
 
   public defproduction tstmt! : TStmt
   defrule tstmt! = (?x:#tstmt) : x
@@ -223,7 +230,7 @@ defsyntax rtm-ir :
   public defproduction tstmt : TStmt
 
   ;===== References =====
-  defproduction ref : Ref
+  public defproduction ref : Ref
   defrule ref = (?name:#id) : Ref(name)
   defrule ref = (?r:#ref . ?name:#id!) : FieldRef(r,name)
   defrule ref = (?r:#ref[?i:#non-neg-int$]) : IndexRef(r, i)
@@ -275,6 +282,18 @@ defsyntax rtm-ir :
     DefComponent(name, pins, stmts)
 
   public defproduction cstmt : CStmt
+  defrule cstmt = (ground(?rs:#ref! ...)) : GroundStmt(rs)
+  defrule cstmt = (power(?rs:#ref! ...) #:! (?props:#power-props!)) :
+    PowerStmt(property(props, `voltage), property(props, `current), rs)
+  defrule cstmt = (diffpairs(?ps:#refpair! ...) : (?props:#diffpair-props!)) :
+    DiffPairStmt(property?(props, `line-type),
+                 property?(props, `impedance),
+                 property?(props, `skew),
+                 property?(props, `max-loss),
+                 property?(props, `spacing),
+                 ps)
+  defrule cstmt = (diffpairs(?ps:#refpair! ...)) :
+    DiffPairStmt(false, false, false, false, false, ps)
   defrule cstmt = (package #=! ?p:#id! ?m:#mapping?) :
     DefaultPackageStmt(p, m)
   defrule cstmt = (emodel #=! ?m:#emodel!) :
@@ -285,51 +304,175 @@ defsyntax rtm-ir :
     s
   defrule cstmt = (reference-prefix #=! ?s:#string!) :
     ReferencePrefixStmt(s)
+  defrule cstmt = (max-current-draw(?rs:#ref! ...) #=! ?c:#double!) :
+    MaxCurrentDrawStmt(rs, c)
+  defrule cstmt = (estate(?r:#ref$) #=! [?ss:#estate! ...]) :
+    EStateStmt(r, to-tuple(ss))
+  defrule cstmt = (?s:#pinprop-stmt) :
+    s
 
-  defproduction support-options : List<SupportOption>
-  defrule support-options = ((! (! option))
-                             (#option! #:! (?os:#support-option)) @...) :
-    os
-  defrule support-options = (?o:#support-option) :
-    List(o)
+  ;Different cases for support options:
+  ;Single-option supports with explicit identifier
+  ;
+  ;    supports i2c (i2c-1) :
+  ;      i2c.a => p[0]
+  ;      properties(p[0]) : ...
+  ;
+  ;Single-option supports without explicit identifier
+  ;
+  ;    supports i2c : 
+  ;      i2c.a => p[0]
+  ;      properties(p[0]) : ...
+  ;
+  ;Multi-option supports with explicit identifiers
+  ;
+  ;    supports i2c :
+  ;      option (i2c-1) :
+  ;        i2c.a => p[0]
+  ;        properties(p[0]) : ...
+  ;      option (i2c-2) :
+  ;        i2c.b => p[1]
+  ;        properties(p[1]) : ...
+  ;
+  ;Multi-option supports without explicit identifiers
+  ;
+  ;    supports i2c :
+  ;      option :
+  ;        i2c.a => p[0]
+  ;        properties(p[0]) : ...
+  ;      option :
+  ;        i2c.b => p[1]
+  ;        properties(p[1]) : ...
 
+  ;Parses a support-option (when they have option keywords)
   defproduction support-option : SupportOption
-  defrule support-option = (?rs:#require-stmt ... (?xs:#ref! #=>! ?ys:#ref!) @...) :
-    SupportOption(rs, Mapping(map(KeyValue, xs, ys)))
+  defrule support-option = (option ?id:#option-id #:! (?props:#support-props!)) :
+    SupportOption(id,
+                  properties(props, `require),
+                  properties(props, `properties),
+                  Mapping(properties(props, `mapping)))
+
+  defproduction support-option! : SupportOption
+  defrule support-option! = (?s:#support-option) : s
+  fail-if support-option! = () : RTME(closest-info(), "Invalid syntax for support option.")
+
+  ;Parses an implicit (no option keyword) support-option
+  defproduction implicit-support-option  : SupportOption
+  defrule implicit-support-option = (?id:#option-id : (?props:#support-props!)) :
+    SupportOption(id,
+                  properties(props, `require),
+                  properties(props, `properties),
+                  Mapping(properties(props, `mapping)))
+  defrule implicit-support-option = (?id:#option-id) :
+    SupportOption(id, List(), List(), NoMapping())
+
+  ;Parses an optional
+  defproduction option-id : Ref|False
+  defrule option-id = ((?r:#ref$)) : r
+  defrule option-id = () : false
+
+  ;Parse a support statement
+  defproduction supports-stmt : SupportsStmt
+  defrule supports-stmt = (supports ?c:#id! : ((! (! option)) ?os:#support-option! ...)) :
+    SupportsStmt(c, os)
+  defrule supports-stmt = (supports ?c:#id! ?o:#implicit-support-option) :
+    SupportsStmt(c, List(o))
+
+  defproduction support-props! : PropertyList
+  defrule support-props! = (?props:#support-prop! ...) :
+    RTMPList{closest-info(), _, props} $ [
+      Property(`require, true, false)
+      Property(`properties, true, false)
+      Property(`mapping, true, false)]
+  defproduction support-prop! : KeyValue<Symbol,?>
+  defrule support-prop! = (?s:#require-stmt) : `require => s
+  defrule support-prop! = (?s:#pinprop-stmt) : `properties => s
+  defrule support-prop! = (?x:#ref! #=>! ?y:#ref!) : `mapping => x => y
+
+  defproduction power-props! : PropertyList
+  defrule power-props! = (?props:#power-prop! ...) :
+    RTMPList{closest-info(), _ props} $ [
+      Property(`voltage, false, true)
+      Property(`current, false, true)]
+  defproduction power-prop! : KeyValue<Symbol,?>
+  defrule power-prop! = (voltage #=! ?v:#double!) : `voltage => v
+  defrule power-prop! = (current #=! ?c:#double!) : `current => c
+  fail-if power-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized power property: '%_'." % [k])
+  fail-if power-prop! = () : RTME(closest-info(), "Invalid syntax for power property.")
+
+  defproduction diffpair-props! : PropertyList
+  defrule diffpair-props! = (?props:#diffpair-prop! ...) :
+    RTMPList{closest-info(), _ props} $ [
+      Property(`line-type, true, true)
+      Property(`impedance, true, true)
+      Property(`skew, true, true)
+      Property(`max-loss, true, true)
+      Property(`spacing, true, true)]
+  defproduction diffpair-prop! : KeyValue<Symbol,?>
+  defrule diffpair-prop! = (line-type #=! ?t:#line-type!) : `line-type => t
+  defrule diffpair-prop! = (impedance #=! ?v:#double!) : `impedance => v
+  defrule diffpair-prop! = (skew #=! ?v:#double!) : `skew => v
+  defrule diffpair-prop! = (max-loss #=! ?v:#double!) : `max-loss => v
+  defrule diffpair-prop! = (spacing #=! ?v:#non-neg-double!) : `spacing => v
+  fail-if diffpair-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized diffpair property: '%_'." % [k])
+  fail-if diffpair-prop! = () : RTME(closest-info(), "Invalid syntax for diffpair property.")
+
+  defproduction line-type! : LineType
+  defrule line-type! = (Microstrip) : Microstrip
+  defrule line-type! = (Stripline) : Stripline
+  fail-if line-type! = (?x:#id!) : RTME(closest-info(), "Unrecognized line type: '%_'." % [x])
+
 
   ;===== Package Definitions =====
   defrule tstmt = (pcb-package ?name:#id! #:! (
                      ?paddefs:#paddef ...
-                     ?pads:#pad ...)) :
-    DefPackage(name, pads, paddefs)
+                     ?pads:#pad ...
+                   )) :
+    DefPackage(
+      name,
+      pads,
+      paddefs,
+    )
 
   defproduction pad : Pad
   defrule pad = (pad ?ref:#ref! #:! ?type:#id! #at! ?loc:#pose! ?s:#side?) :
     val s* = Top when s is False else s as Side
     Pad(ref, type, loc, s*)
 
+
   defproduction paddef : DefPad
   defrule paddef = (pcb-pad ?name:#id! #:! (?props:#paddef-props!)) :
     DefPad(name,
            property(props, `shape),
-           property(props, `type))
+           property(props, `type),
+           )
 
   defproduction paddef-props! : PropertyList
   defrule paddef-props! = (?props:#paddef-prop! ...) :
     RTMPList{closest-info(), _ props} $ [
       Property(`type, false, true)
       Property(`shape, false, true)
-      Property(`layers, true, false)]
+    ]
   defproduction paddef-prop! : KeyValue<Symbol,?>
   defrule paddef-prop! = (type #=! ?t:#pad-type!) : `type => t
   defrule paddef-prop! = (shape #=! ?s:#shape!) : `shape => s
   fail-if paddef-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized pad property: '%_'." % [k])
   fail-if paddef-prop! = () : RTME(closest-info(), "Invalid syntax for pad property.")
 
+
+  defproduction bottom? : True|False
+  defrule bottom? = (bottom) : true
+  defrule bottom? = () : false
+
+
   defproduction pad-type! : PadType
   defrule pad-type! = (SMD) : SMD
   defrule pad-type! = (TH) : TH
   fail-if pad-type! = (?x:#id!) : RTME(closest-info(), "Unrecognized pad type: '%_'." % [x])
+
+
+
+
 
   ;===== Parts =====
   defrule tstmt = (pcb-part ?name:#id! #:! (?props:#part-props!)) :
@@ -357,6 +500,7 @@ defsyntax rtm-ir :
   fail-if part-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized part property: '%_'." % [k])
   fail-if part-prop! = () : RTME(closest-info(), "Invalid syntax for part property.")
 
+
   ;===== Attach =====
   defrule tstmt = (pcb-attach ?name:#id! (?args:#id! ...) #:! (?pins:#rpin ... ?ss:#mstmt! ...)) :
     DefAttach(name, args, pins, ss)
@@ -367,7 +511,7 @@ defsyntax rtm-ir :
 
   public defproduction mstmt : MStmt
   defrule mstmt = (inst ?name:#id! ?s:#supports-stmt) :
-    InstSupportsStmt(Ref(name), capability(s), options(s))  
+    InstSupportsStmt(Ref(name), s)  
   defrule mstmt = (inst ?name:#id! #:! ?type:#componenttype!) :
     InstStmt(name, type)
   defrule mstmt = (?s:#supports-stmt) :
@@ -382,23 +526,105 @@ defsyntax rtm-ir :
     NetStmt(name, rs)
   fail-if mstmt = (net ?name:#id!) :
     RTME(closest-info(), "Expected a list of references for net statement.")
-  defrule mstmt = (package(?s:#selector!) ?nm:#name+mapping?) :
+  defrule mstmt = (package(?s:#selector!) ?nm:#name+mapping? ?p:#pose? ?side:#side? ?a:#relative?) :
     val [ref, instance?] = s
-    PackageStmt(ref, instance?, nm)
+    PackageStmt(ref, instance?, nm, p, side, a)
   defrule mstmt = (emodel(?r:#ref$) #=! ?m:#emodel!) :
     EModelStmt(r, m)
   defrule mstmt = (part(?r:#ref$) #=! ?p:#id!) :
     PartStmt(r, p)
   defrule mstmt = (reference-designator(?r:#ref$) = ?value:#string!) :
     ReferenceStmt(r, value)
+  defrule mstmt = (schematic-group(?r:#ref, ?unit:#non-neg-int, #LE) = ?g:#id!) :
+    SchematicGroupStmt(r, unit, g)
+  defrule mstmt = (schematic-group(?r:#ref$) = ?g:#id!) :
+    SchematicGroupStmt(r, false, g)
+  defrule mstmt = (max-current-draw(?rs:#ref! ...) #=! ?c:#double!) :
+    MaxCurrentDrawStmt(rs, c)
+  defrule mstmt = (estate(?r:#ref$) #=! [?ss:#estate! ...]) :
+    EStateStmt(r, to-tuple(ss))
   defrule mstmt = (attach ?a:#id! (?rs:#ref! ...)) :
     AttachStmt(a, rs)
+  defrule mstmt = (?s:#pinprop-stmt) :
+    s
+  defrule mstmt = (connect (?rs:#ref-or-refs! ...)) :
+    ConnectionStmt(to-tuple(rs))
+  defrule mstmt = (?s:#supported-by-stmt) :
+    s
 
-  defproduction supports-stmt : SupportsStmt
-  defrule supports-stmt = (supports ?c:#id! : (?os:#support-options)) :
-    SupportsStmt(c, os)
-  defrule supports-stmt = (supports ?c:#id!) :
-    SupportsStmt(c, List())
+  defproduction supported-by-stmt : SupportedByStmt
+  defrule supported-by-stmt = (required ?port?:#port-or-capability! ?ref:#ref! #supported-by! ?id:#ref! ?ss:#supported-by-stmts) :
+    SupportedByStmt(ref, port?, id, ss)
+
+  defproduction supported-by-stmt! : SupportedByStmt
+  defrule supported-by-stmt! = (?s:#supported-by-stmt) : s
+  fail-if supported-by-stmt! = () : RTME(closest-info(), "Expected a supported-by statement here.")
+
+  defproduction supported-by-stmts : Tuple<SupportedByStmt>
+  defrule supported-by-stmts = (where #:! (?ss:#supported-by-stmt! ...)) : to-tuple(ss)
+  defrule supported-by-stmts = () : []
+
+  defproduction port-or-capability! : True|False
+  defrule port-or-capability! = (port) : true
+  defrule port-or-capability! = (capability) : false
+  fail-if port-or-capability! = () : RTME(closest-info(), "Expected either the port or capability keyword here.")
+
+  defproduction ref-or-refs! : Ref|Tuple<Ref>
+  defrule ref-or-refs! = ([?rs:#ref! ...]) : to-tuple(rs)
+  defrule ref-or-refs! = (?r:#ref!) : r
+
+  defproduction pinprop-stmt : PinPropertiesStmt
+  defrule pinprop-stmt = (properties(?r:#ref$) ?l:#level? #:! (?props:#kvprop! ...)) :
+    PinPropertiesStmt(r, l, to-tuple(props))
+
+  defproduction level? : Int
+  defrule level? = ((level #=! ?l:#int$)) : l
+  defrule level? = () : 0
+
+  defproduction kvprop! : KeyValue<Symbol,?>
+  defrule kvprop! = (?k:#symbol! #=>! ?v:#kvvalue) : k => v
+  fail-if kvprop! = () : RTME(closest-info(), "Expected a key value property here.")
+
+  ;<doc>===================================
+  ;=========== Literal Values =============
+  ;========================================
+  The reading and printing of literal values:
+  All supported value types:
+    - True
+    - False
+    - Char
+    - Byte
+    - Int
+    - Long
+    - Float
+    - Double
+    - String    
+    - Symbol
+    - List
+    - Tuple
+    - Ref
+    
+  Overarching invariant: ESIR should be able to be copied-and-pasted
+  into the generator system and ran.
+
+  Self-evaluating primitives, Char,Byte,Int,Long,Float,Double,String,
+  can be written out using Stanza's formatted write utility. Symbols
+  must be quoted. Lists are written out using the #L(...) generator
+  syntax. Tuples are written out using [...] syntax. Refs are written
+  using the #R(...) generator syntax.
+  ;========================================
+  ;===================================<doc>
+
+  defproduction kvvalue
+  defrule kvvalue = (?x) when unwrap-token(x) is True|False|Char|Byte|Int|Long|Float|Double|String : unwrap-token(x)
+  defrule kvvalue = ((@quote ?x)) : unwrap-all(x)
+  defrule kvvalue = ([?xs:#kvvalue! ...]) : to-tuple(xs)
+  defrule kvvalue = (~ #L(?xs:#kvvalue! ...)) : xs
+  defrule kvvalue = (~ #R(?r:#ref$)) : r
+
+  defproduction kvvalue!
+  defrule kvvalue! = (?x:#kvvalue) : x
+  fail-if kvvalue! = () : RTME(closest-info(), "Invalid property value.")
 
   defproduction require-stmt : RequireStmt
   defrule require-stmt = (require ?name:#id : ?c:#capabilitytype! #from! ?inst:#ref! ?m:#req-mapping?) :
@@ -414,9 +640,43 @@ defsyntax rtm-ir :
   defrule relative? = ((relative-to ?r:#ref$)) : r
   defrule relative? = () : false
 
+  defproduction rail-props! : PropertyList
+  defrule rail-props! = (?props:#rail-prop! ...) :
+    RTMPList{closest-info(), _, props} $ [
+      Property(`voltage-min, false, true)
+      Property(`voltage-max, false, true)
+      Property(`current-min, false, true)
+      Property(`current-max, false, true)]
+  defproduction rail-prop! : KeyValue<Symbol,?>
+  defrule rail-prop! = (voltage-min #=! ?v:#double!) : `voltage-min => v
+  defrule rail-prop! = (voltage-max #=! ?v:#double!) : `voltage-max => v
+  defrule rail-prop! = (current-min #=! ?v:#double!) : `current-min => v
+  defrule rail-prop! = (current-max #=! ?v:#double!) : `current-max => v
+  fail-if rail-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized rail proeprty: '%_'." % [k])
+  fail-if rail-prop! = () : RTME(closest-info(), "Invalid syntax for rail property.")
+
+  defproduction plane-props! : PropertyList
+  defrule plane-props! = (?props:#plane-prop! ...) :
+    RTMPList{closest-info(), _, props} $ [
+      Property(`isolate, false, true)
+      Property(`rank, true, true)
+      Property(`orphans, true, true)]
+  defproduction plane-prop! : KeyValue<Symbol,?>
+  defrule plane-prop! = (isolate #=! ?v:#double!) : `isolate => v
+  defrule plane-prop! = (rank #=! ?v:#non-neg-int!) : `rank => v
+  defrule plane-prop! = (orphans #=! ?v:#bool!) : `orphans => v
+  fail-if plane-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized plane property: '%_'." % [k])
+  fail-if plane-prop! = () : RTME(closest-info(), "Invalid syntax for plane property.")
+
+  defproduction pose? : Pose|False
+  defrule pose? = (at ?p:#pose!) : p
+  defrule pose? = () : false
   defproduction mapping? : Mapping
   defrule mapping? = ((@do (?xs:#ref! #=>! ?ys:#ref!) @...)) : Mapping(map(KeyValue, xs, ys))
   defrule mapping? = () : NoMapping()
+  defproduction side? : Side|False
+  defrule side? = (on ?s:#side!) : s
+  defrule side? = () : false
   defproduction name+mapping? : [Symbol, Mapping]|False
   defrule name+mapping? = (= ?n:#id! ?m:#mapping?) : [n, m]
   defrule name+mapping? = () : false
@@ -424,18 +684,12 @@ defsyntax rtm-ir :
   defrule selector! = (insts-of ?r:#ref$) : [r, false]
   defrule selector! = (?r:#ref$) : [r, true]
 
-  ;===== MakeBoard =====
-  defrule tstmt = (make-board(?module:#id$) #:! (?props:#makeboard-props!)) :
-    MakeBoard(module)
 
-  defproduction makeboard-props! : PropertyList
-  defrule makeboard-props! = (?props:#makeboard-prop! ...) :
-    RTMPList{closest-info(), _, props} $ [
-      Property(`board, false, true)
-      Property(`rules, false, true)]
-  defproduction makeboard-prop! : KeyValue<Symbol,?>
-  fail-if makeboard-prop! = (?k:#id =) : RTME(closest-info(), "Unrecognized diffpair property: '%_'." % [k])
-  fail-if makeboard-prop! = () : RTME(closest-info(), "Invalid syntax for diffpair property.")
+
+
+  ;===== MakeSchematic =====
+  defrule tstmt = (make-schematic(?module:#id$)) :
+    MakeSchematic(module)
 
   ;===== EModels =====
   defproduction emodel! : EModel
@@ -495,6 +749,8 @@ defsyntax rtm-ir :
   defrule shape = (line(?w:#non-neg-double!, ?p0:#point! ?p1:#point! ?ps:#point! ...)) : Line(w, cons(p0, p1, ps))
   defrule shape = (union(?s0:#shape! ?ss:#shape! ...)) : Union(cons(s0,ss))
   defrule shape = (subtraction(?a:#shape!, ?b:#shape!, #LE)) : Subtraction(a, b)
+  defrule shape = (text(?s:#string!, ?f:#id!, ?sz:#non-neg-double!, ?a:#anchor!, ?p:#pose!)) : Text(s,f,sz,a,p)
+  fail-if shape = (text(_ ...)) : RTME(closest-info(), "Text expression expects a string, a font name, a size, an anchor, and a pose.")
 
   ;===== Orientation =====
   defproduction pose : Pose
@@ -509,28 +765,44 @@ defsyntax rtm-ir :
   defrule side! = (Bottom) : Bottom
   fail-if side! = (?x:#id!) : RTME(closest-info(), "Unrecognized side specifier: '%_'." % [x])
 
-  defproduction side? : Side|False
-  defrule side? = (on ?s:#side!) : s
-  defrule side? = () : false
+  ;===== Dir =====
+  defproduction dir! : Dir
+  defrule dir! = (Up) : Up
+  defrule dir! = (Down) : Down
+  defrule dir! = (Left) : Left
+  defrule dir! = (Right) : Right
+  fail-if dir! = (?x:#id!) : RTME(closest-info(), "Unrecognized direction specifier: '%_'." % [x])
+
+  ;===== Anchors =====
+  defproduction anchor! : Anchor
+  defrule anchor! = (N) : N
+  defrule anchor! = (E) : E
+  defrule anchor! = (S) : S
+  defrule anchor! = (W) : W
+  defrule anchor! = (NE) : NE
+  defrule anchor! = (SE) : SE
+  defrule anchor! = (SW) : SW
+  defrule anchor! = (NW) : NW
+  defrule anchor! = (C) : C
+  fail-if anchor! = (?x:#id!) : RTME(closest-info(), "Unrecognized anchor specifier: '%_'." % [x])
 
   ;===== Poses =====
   defproduction point-loc! : Point
   defrule point-loc! = (loc(?x:#double!, ?y:#double$)) : Point(x,y)
   fail-if point-loc! = () : RTME(closest-info(), "Location expected here.")
 
+  ;===== Electrical State =====
+  defproduction estate! : EState
+  defrule estate! = (drives(?v:#double$)) : Driver(v)
+  defrule estate! = (highz(?min:#double!, ?max:#double$)) : HighZ(min,max)
+  fail-if estate! = () : RTME(closest-info(), "Electrical state expected here.")
+
 ;============================================================
 ;====================== Errors ==============================
 ;============================================================
 
-public defstruct RTMReaderException <: Exception :
-  info: False|FileInfo
-  msg
-with :
-  constructor => RTME
-defmethod print (o:OutputStream, e:RTMReaderException) :
-  match(info(e)) :
-    (info:FileInfo) : print(o, "%_: %_" % [info, msg(e)])
-    (info:False) : print(o, msg(e))
+public defn RTME (info: False|FileInfo, msg) :
+  RTMReaderException(info, to-string(msg))
 
 defn RTMPList (info:False|FileInfo, ps:Collection<Property>, vs:List<KeyValue<Symbol,?>>, complete?:True|False) :
   try : PropertyList(ps, vs, complete?)

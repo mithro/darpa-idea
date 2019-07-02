@@ -12,27 +12,42 @@ defpackage plugins/slave :
 
 var PLUGIN-NAME:Symbol
 val PLUGIN-ENTRY-POINTS = HashTable<Symbol,(? -> ?)>()
+val ALL-PLUGIN-ENTRY-POINTS = HashTable<[Symbol, Symbol],(? -> ?)>()
+var DRIVER-MAIN:Long
+
 public defn add-plugin-entry-point (plugin:Symbol, name:Symbol, f: ? -> ?) :
   PLUGIN-NAME = plugin
   PLUGIN-ENTRY-POINTS[name] = f
+  ALL-PLUGIN-ENTRY-POINTS[[plugin, name]] = f
+
+public defn plugin-entry-point (plugin:Symbol, name:Symbol) -> Maybe<(? -> ?)> :
+  match(get?(ALL-PLUGIN-ENTRY-POINTS, [plugin, name])) :
+    (f:? -> ?) : One(f)
+    (_:False) : None()
 
 ;============================================================
-;=================== Initialization =========================
+;=================== Driver Callbacks =======================
 ;============================================================
 
-;Plugin initialization point
+public defn call-driver (entry:Symbol, arg) -> ? :
+  try :
+    serialized-call(DRIVER-MAIN, entry, arg)
+  catch (e:DeserializationError) :
+    fatal("Serialization failure when calling driver.")
+
+;============================================================
+;=================== Initialize Plugin ======================
+;============================================================
+
 extern defn plugin_initialization (data:ptr<ByteInputStream>) -> int :
-  plugin-initialization(to-ref(data))
+  plugin-initialization(deserialize-from-stream(data))
   return 0
 
-defn plugin-initialization (input-stream:ByteInputStream) :
-  val init:PluginInit = deserialize(input-stream)
+defn plugin-initialization (init:PluginInit) :
   if version(init) != jitpcb-version() :
-    fatal("Plugin version mismatch. JitPCB core is at version %_, but %_ plugin is at version %_." % [
+    fatal("Plugin version mismatch. JitPCB is at version %_, but %_ plugin is at version %_." % [
       string-join(version(init), "."), PLUGIN-NAME, string-join(jitpcb-version(), ".")])
-  srand(seed(init))
-  set-current-output-stream(output-stream(init))
-  report-error(errors(init))
+  DRIVER-MAIN = driver-main(init)
 
 ;============================================================
 ;==================== Entry Point ===========================
@@ -40,19 +55,7 @@ defn plugin-initialization (input-stream:ByteInputStream) :
 
 ;Plugin entry point
 extern defn plugin_main (data:ptr<ByteInputStream>) -> ptr<ByteInputStream> :
-  return to-ptr(call-plugin(to-ref(data)))
+  return serialized-receive(fn(plugin-entry-point), data)
 
-;Call plugin with ByteInputStream representing input argument.
-;Returns ByteInputStream representing output argument.
-defn call-plugin (input-stream:ByteInputStream) :
-  to-ByteInputStream $
-    try :
-      val entry = deserialize(input-stream)
-      val arg = deserialize(input-stream)
-      val entry-point = PLUGIN-ENTRY-POINTS[entry]
-      val result = entry-point(arg)
-      val seed = state(current-random())
-      PluginResult(result, seed, error-report())
-    catch (e:Exception) :
-      e
-  
+defn plugin-entry-point (name:Symbol) :
+  PLUGIN-ENTRY-POINTS[name]

@@ -1,0 +1,1036 @@
+defpackage darpa-fpga-generator :
+  import core
+  import collections
+  import math
+  import rtm/ir
+  import rtm/ir-gen
+  import rtm/ir-connections
+  import rtm/ir-utils
+  import interfaces
+  import components
+  import connections
+  import modules
+  import footprints
+  import symbols
+  import parts
+  import power-system-gen
+  import powergen 
+  import modulegen
+  import xcku060-cmp
+
+#use-added-syntax(ir-gen)
+
+jitpcb/repl-lib/clear-user-statements()
+;==== Parts ===================================================================
+pcb-part analog-ltc2977-prt : 
+  manufacturer = "Analog Devices"
+  mpn = "LTC2977IUP#TRPBF"
+  package = PQFN50P900X900X75-64
+; Power controller
+
+pcb-part maxim-max1606x-prt : 
+  manufacturer = "Analog Devices"
+  mpn = "MAX16061ETP+"
+  package = PQFN50P400X400X75-20
+; Voltage monitor
+; TODO: make parametric
+
+pcb-part ti-TPS548D22-prt : 
+  manufacturer = "Texas Instruments"
+  mpn = "TPS548D22RVFT"
+  package = LQFN50P500X700X142-40
+; 1.5V to 16V Input, 40A SWIFT™ Synchronous Step-Down Converter with Differential Remote Sense 40-LQFN-CLIP -40 to 125
+
+pcb-part te-2102771-1-prt : 
+  manufacturer = "TE"
+  mpn = "2102771-1"
+  package = te-2102771-1-pkg
+
+pcb-part te-2102772-1-prt : 
+  manufacturer = "TE"
+  mpn = "2102772-1"
+  package = te-2102772-1-pkg
+
+pcb-part ti-SN74LVC8T245DBQ-prt : 
+  manufacturer = "Texas Instruments"
+  mpn = "SN74LVC8T245DBQ"
+  package = SSOP-24
+
+pcb-part ti-SN65LVDM1676DGG-prt : 
+  manufacturer = "Texas Instruments"
+  mpn = "SN65LVDM1676DGG"
+  package = SOP50P810X120-64N
+
+pcb-part micron-MT41K1G4X-prt :
+  manufacturer = "Micron"
+  mpn = "MT41K256M16TW-107 IT:P"
+  package = BGA96CP80-16X9-1400X800X120B47N
+
+pcb-part xilinx-XCKU060-1FFVA1517I-prt :
+  manufacturer = "Xilinx"
+  mpn = "XCKU060-1FFVA1517I"
+  package = BGA1517C100P39X39-4000X4000X351N
+
+pcb-part ti-TPS51206-prt : 
+  manufacturer = "Texas Instruments"
+  mpn = "TPS51206"
+  package = SON80P400X400X80-11
+
+; 
+;==== Packages ===================================================================
+
+pcb-package SON80P400X400X80-11 :
+  make-dil-son-package(0.4, 10, 2.1, 2.1, 0.5, 0.2)
+  pcb-pad hs-pad :
+    make-smd-pad(0.9, 1.5)
+  pad p[10] : hs-pad at loc(0.0, 0.0)
+
+pcb-package BGA1517C100P39X39-4000X4000X351N :
+  bga-pkg(1.0, 0.5, [39 39], [40.0 40.0], [`A1 `A39 `AW1 `AW39])
+
+pcb-package BGA96CP80-16X9-1400X800X120B47N :
+  val omit = to-tuple $
+  for r in 0 to 16 seq-cat :
+    for c in 3 to 6 seq :
+      name(bga-pin-name(r,c))
+  bga-pkg(0.8, 0.38, [9 16], [8.0 14.0], omit)
+
+pcb-package SOP50P810X120-64N :
+  lga-pkg(0.5, 32, 0, 0.3, 1.5, (- 1.5 / 2.0), 8.0, 14.0) ; TODO:verify
+  ref-label()
+
+pcb-package SSOP-24 :
+  make-sop65-package(24)
+  ref-label()
+
+pcb-package LQFN50P500X700X142-40 :
+  lga-pkg(0.5, 12, 8, 0.25, 0.4 + 0.2, -0.2, 5.0, 7.0)
+  pcb-pad hs-pad :
+    make-smd-pad(3.3, 5.3)
+  pad p[40] : hs-pad at loc(0.0, 0.0)
+  
+pcb-package PQFN50P900X900X75-64 :
+  make-qfn-package(0.5, 9.0, 64, 0.25, 0.4)
+  pcb-pad hs-pad :
+    make-smd-pad(7.15, 7.15)
+  pad p[64] : hs-pad at loc(0.0, 0.0)
+  ref-label()
+
+pcb-package PQFN50P400X400X75-20 :
+  make-qfn-package(0.5, 4.0, 20, 0.25, 0.55)
+  pcb-pad hs-pad :
+    make-smd-pad(2.1, 2.1)
+  pad p[20] : hs-pad at loc(0.0, 0.0)
+  ref-label()
+
+pcb-package te-2102771-1-pkg :
+  pcb-pad pin-pad :
+    make-pth-pad(0.55 / 2.0, 0.92 / 2.0)
+    ;fab-note : "PLATED THROUGH HOLE PER TE 114-13056, FIGURE 4"
+
+  defn make-pad (r:Int, c:Int) :
+    val x = ((to-double(16) - 1.0) / -2.0 + to-double(c)) * -1.8
+    val y = ((to-double(7) - 1.0) / 2.0 - to-double(r)) * -1.35
+    val letter = red-alph-letter(r)
+    val name = Ref(string-join([letter, c + 1]))
+
+    pad {name} : pin-pad at loc(x,y)
+
+  for c in 0 to 16 do :
+    for r in 0 to 7 do :
+      make-pad(r,c)
+
+
+pcb-package te-2102772-1-pkg :
+  pcb-pad pin-pad :
+    make-pth-pad(0.55 / 2.0, 0.92 / 2.0)
+    ;fab-note : "PLATED THROUGH HOLE PER TE 114-13056, FIGURE 4"
+
+  defn make-pad (r:Int, c:Int) :
+    val x = ((to-double(8) - 1.0) / -2.0 + to-double(c)) * -1.8
+    val y = ((to-double(7) - 1.0) / 2.0 - to-double(r)) * -1.35
+    val letter = red-alph-letter(r)
+    val name = Ref(string-join([letter, c + 1]))
+
+    pad {name} : pin-pad at loc(x,y)
+
+  for c in 0 to 8 do :
+    for r in 0 to 7 do :
+      make-pad(r,c)
+
+
+;==== Interfaces ===================================================================
+; DDR3 SDRAM
+pcb-bundle ddr3-dat (dim:Int) :
+  port dm : pin[dim / 8]
+  port dqs : diff-pair[dim / 8]
+  port dq : pin[dim] ; data bits
+
+pcb-bundle ddr3-acc :
+  ; control signals
+  port ck : diff-pair
+  pin cke
+  pin odt
+  pin nCS
+  pin nRAS
+  pin nCAS
+  pin nWE
+  port ba : pin[3] ;Bank address
+  pin nRESET
+  port a : pin[15] ;Address bits
+
+defn acc-names () :
+  flatten-refs([#R(cke) #R(odt) #R(nCS) #R(nRAS) #R(nCAS) #R(nWE) #R(ba)[0 to 3] #R(a)[0 to 15]])
+
+pcb-bundle ddr3-power :
+  pin vddq
+  pin vssq
+  pin vdd
+  pin vss
+  pin vrefdq
+  pin vrefca
+  pin zq
+
+pcb-bundle ddr3 :
+  port dat : {ddr3-dat(32)}
+  port acc : ddr3-acc
+  port pwr : ddr3-power
+
+pcb-capability ddr3 : ddr3
+
+pcb-capability ddr3-x16 : {ddr3-dat(16)}
+pcb-capability ddr3-x32 : {ddr3-dat(32)}
+
+pcb-bundle power-control :
+; Bundle for LTC2977
+  port vdac : diff-pair
+  port vsense : diff-pair
+  pin vout-en
+
+pcb-bundle sgmii :
+  port si : diff-pair
+  port so : diff-pair
+
+pcb-bundle multi-diff-pair-lane (links:Int) :
+  port tx : diff-pair[links]
+  port rx : diff-pair[links]
+
+pcb-capability infiniband (links:Int) : {multi-diff-pair-lane(links)}
+; 1 2 4 8 12 16 or 32 lanes
+pcb-capability pci-e (links:Int) : {multi-diff-pair-lane(links)}
+
+pcb-capability aurora (lanes:Int) : diff-pair[lanes]
+
+pcb-bundle LVD-tranceiver-bank (n:Int, dir:True|False) :
+  port y : pin[n]
+  port z : pin[n]
+  port a : pin[n]
+  if dir : pin dir
+
+;==== Components ===================================================================
+
+pcb-component ti-TPS51206-cmp :
+  val ps = PinSpec(
+    [`S3 => 7 `S5 => 9 `VDDQSNS => 1 `VLDOIN => 2 `VTTSNS => 5]
+    [`VTT => 3 `VTTREF => 6]
+    [`GND => 8 `PAD => 11 `PGND => 4]
+    [`VDD => 10]
+    )
+  make-pins(ps)
+  package = SON80P400X400X80-11(cmp-pad-map(ps))
+  part = ti-TPS51206-prt
+
+pcb-component micron-MT41K1G4X-cmp :
+  port dat : {ddr3-dat(16)}
+  port acc : ddr3-acc
+  port pwr : ddr3-power
+
+  val ps = PinSpec(
+    [acc.ba[0] => `M2
+    acc.ba[1] => `N8
+    acc.ba[2] => `M3
+    acc.a[0] => `N3
+    acc.a[1] => `P7
+    acc.a[2] => `P3
+    acc.a[3] => `N2
+    acc.a[4] => `P8
+    acc.a[5] => `P2
+    acc.a[6] => `R8
+    acc.a[7] => `R2
+    acc.a[8] => `T8
+    acc.a[9] => `R3
+    acc.a[10] => `L7
+    acc.a[11] => `R7
+    acc.a[12] => `N7
+    acc.a[13] => `T3
+    acc.a[14] => `T7
+    acc.ck.D_P => `J7
+    acc.ck.D_N => `K7
+    dat.dm[1] => `D3
+    dat.dm[0] => `E7
+    acc.cke => `K9
+    acc.nCS => `L2
+    acc.nRAS => `J3
+    acc.nCAS => `K3
+    acc.nWE => `L3
+    acc.odt => `K1
+    acc.nRESET => `T2
+    pwr.zq => `L8]
+    [dat.dq[0] => `E3
+    dat.dq[1] => `F7
+    dat.dq[2] => `F2
+    dat.dq[3] => `F8
+    dat.dq[4] => `H3
+    dat.dq[5] => `H8
+    dat.dq[6] => `G2
+    dat.dq[7] => `H7
+    dat.dq[8] => `D7
+    dat.dq[9] => `C3
+    dat.dq[10] => `C8
+    dat.dq[11] => `C2
+    dat.dq[12] => `A7
+    dat.dq[13] => `A2
+    dat.dq[14] => `B8
+    dat.dq[15] => `A3
+    dat.dqs[0].D_P => `F3
+    dat.dqs[0].D_N => `G3
+    dat.dqs[1].D_P => `C7
+    dat.dqs[1].D_N => `B7
+    pwr.vrefca => `M8
+    pwr.vrefdq => `H1]
+    [pwr.vssq => [`B1,`B9,`D1,`D8,`E2,`E8,`F9,`G1,`G9]
+    pwr.vss => [`A9,`B3,`E1,`G8,`J2,`J8,`M1,`M9,`P1,`P9,`T1,`T9]]
+    [pwr.vdd => [`B2,`D9,`G7,`K2,`K8,`N1,`N9,`R1,`R9]
+    pwr.vddq => [`A1,`A8,`C1,`C9,`D2,`E9,`F1,`H2,`H9]]
+    )
+  package = BGA96CP80-16X9-1400X800X120B47N(cmp-pad-map(ps))
+  part = micron-MT41K1G4X-prt
+
+pcb-component ti-SN65LVDM1676DGG-cmp :
+  port t : {LVD-tranceiver-bank(4, true)}[4]
+  pin GND
+  pin VCC
+
+  val ps = PinSpec(
+    [t[0].a[0] => 6
+    t[0].a[1] => 7
+    t[0].a[2] => 8
+    t[0].a[3] => 9
+    t[0].dir => 5
+    t[1].a[0] => 11
+    t[1].a[1] => 12
+    t[1].a[2] => 13
+    t[1].a[3] => 14
+    t[1].dir => 10
+    t[2].a[0] => 19
+    t[2].a[1] => 20
+    t[2].a[2] => 21
+    t[2].a[3] => 22
+    t[2].dir => 23
+    t[3].a[0] => 24
+    t[3].a[1] => 25
+    t[3].a[2] => 26
+    t[3].a[3] => 27
+    t[3].dir => 28]
+    [t[0].y[0] => 64
+    t[0].y[1] => 62
+    t[0].y[2] => 60
+    t[0].y[3] => 58
+    t[0].z[0] => 63
+    t[0].z[1] => 61
+    t[0].z[2] => 59
+    t[0].z[3] => 57
+    t[1].y[0] => 56
+    t[1].y[1] => 54
+    t[1].y[2] => 52
+    t[1].y[3] => 50
+    t[1].z[0] => 55
+    t[1].z[1] => 53
+    t[1].z[2] => 51
+    t[1].z[3] => 49
+    t[2].y[0] => 48
+    t[2].y[1] => 46
+    t[2].y[2] => 44
+    t[2].y[3] => 42
+    t[2].z[0] => 47
+    t[2].z[1] => 45
+    t[2].z[2] => 43
+    t[2].z[3] => 41
+    t[3].y[0] => 40
+    t[3].y[1] => 38
+    t[3].y[2] => 36
+    t[3].y[3] => 34
+    t[3].z[0] => 39
+    t[3].z[1] => 37
+    t[3].z[2] => 35
+    t[3].z[3] => 33]
+    [GND => [1, 15, 18, 29, 32, 4]]
+    [VCC => [16, 17, 2, 3, 30, 31]])
+
+  package = SOP50P810X120-64N(cmp-pad-map(ps))
+  part = ti-SN65LVDM1676DGG-prt
+
+pcb-component ti-SN74LVC8T245DBQ-cmp :
+  port A : pin[8]
+  port B : pin[8]
+  pin DIR
+  pin GND
+  pin nOE
+  pin VCCA
+  pin VCCB
+  val ps = PinSpec(
+    [A[0] => 3 A[1] => 4 A[2] => 5 A[3] => 6 A[4] => 7 A[5] => 8 A[6] => 9 A[7] => 10 DIR => 2 nOE => 22]
+    [B[0] => 21 B[1] => 20 B[2] => 19 B[3] => 18 B[4] => 17 B[5] => 16 B[6] => 15 B[7] => 14]
+    [GND => [11, 12, 13]]
+    [VCCA => 1 VCCB => [23, 24]])
+  package = SSOP-24(cmp-pad-map(ps))
+  part = ti-SN74LVC8T245DBQ-prt
+
+pcb-component analog-ltc2977-cmp:
+  port power-control : power-control[8]
+  pin PAD
+  pin FAULTB00
+  pin FAULTB01
+  pin FAULTB10
+  pin FAULTB11
+  pin SDA
+  pin SCL
+  pin ALERTB
+  pin CONTROL0
+  pin CONTROL1
+  pin ASEL0
+  pin ASEL1
+  pin REFP
+  pin REFM
+  pin DNC
+  pin VIN-SNS
+  pin VPWR
+  port VDD33 : pin[2]
+  pin VDD25
+  pin WP
+  pin PWRGD
+  pin SHARE-CLK
+  pin WDI
+  pin VIN-EN
+
+  val ps = PinSpec(
+    [SDA => 27 SCL => 28 CONTROL0 => 30 CONTROL1 => 31 ASEL0 => 32 ASEL1 => 33 WP => 19 SHARE-CLK => 21 WDI => 22]
+    [FAULTB00 => 23 FAULTB01 => 24 FAULTB10 => 25 FAULTB11 => 26 ALERTB => 29 REFP => 34 REFM => 35 PWRGD => 20 VIN-EN => 12 VIN-SNS => 14
+    power-control[0].vout-en => 4
+    power-control[1].vout-en => 5
+    power-control[2].vout-en => 6
+    power-control[3].vout-en => 7
+    power-control[4].vout-en => 8
+    power-control[5].vout-en => 9
+    power-control[6].vout-en => 10
+    power-control[7].vout-en => 11
+    power-control[0].vdac.D_N => 38
+    power-control[0].vdac.D_P => 39
+    power-control[0].vsense.D_P => 36
+    power-control[0].vsense.D_N => 37
+    power-control[1].vdac.D_P => 40
+    power-control[1].vdac.D_N => 41
+    power-control[1].vsense.D_P => 42
+    power-control[1].vsense.D_N => 43
+    power-control[2].vdac.D_P => 44
+    power-control[2].vdac.D_N => 45
+    power-control[2].vsense.D_P => 46
+    power-control[2].vsense.D_N => 47
+    power-control[3].vdac.D_P => 50
+    power-control[3].vdac.D_N => 51
+    power-control[3].vsense.D_P => 48
+    power-control[3].vsense.D_N => 49
+    power-control[4].vdac.D_N => 54
+    power-control[4].vdac.D_P => 55
+    power-control[4].vsense.D_P => 52
+    power-control[4].vsense.D_N => 53
+    power-control[5].vdac.D_P => 56
+    power-control[5].vdac.D_N => 57
+    power-control[5].vsense.D_P => 62
+    power-control[5].vsense.D_N => 63
+    power-control[6].vdac.D_P => 59
+    power-control[6].vdac.D_N => 58
+    power-control[6].vsense.D_P => 64
+    power-control[6].vsense.D_N => 1
+    power-control[7].vdac.D_P => 60
+    power-control[7].vdac.D_N => 61
+    power-control[7].vsense.D_P => 2
+    power-control[7].vsense.D_N => 3]
+    [PAD => 65  DNC => 13]
+    [VPWR => 15 VDD33[0] => 16 VDD33[1] => 17 VDD25 => 18]
+  )
+
+  package = PQFN50P900X900X75-64(cmp-pad-map(ps))
+  part = analog-ltc2977-prt
+
+pcb-component maxim-max1606x-cmp :
+  port in : pin[6]
+  port out : pin[6]
+  pin WDI
+  pin GND
+  pin VCC
+  pin nMR
+  pin SRT
+  pin nMARGIN
+  pin nRESET
+  pin TOL
+  pin PAD
+
+  val ps = PinSpec(
+    [in[0] => 17
+    in[1] => 18
+    in[2] => 19
+    in[3] => 1
+    in[4] => 2
+    in[5] => 3
+    WDI => 4 nMR => 10 SRT => 11 nMARGIN => 12 TOL => 20]
+    [out[0] => 15
+    out[1] => 14
+    out[2] => 13
+    out[3] => 7
+    out[4] => 8
+    out[5] => 9
+    nRESET => 16]
+    [GND => 5 PAD => 21]
+    [VCC => 6]
+  )
+  package = PQFN50P400X400X75-20(cmp-pad-map(ps))
+  part = maxim-max1606x-prt
+
+pcb-component ti-TPS548D22-cmp :
+  port PVIN : pin[6]
+  port SW : pin[7]
+  port PGND : pin[8]
+  port NU : pin[3]
+  pin VDD
+  pin EN_UVLO
+  pin BP
+  pin PGOOD
+  pin MODE
+  pin FSEL
+
+  pin VSEL
+  pin ILIM
+  pin RESV_TRK
+  pin VOSNS
+  pin BOOT
+  pin RSN
+  pin RSP
+  pin AGND
+  pin DRGND
+  pin PAD
+  pin NC
+
+  val ps = PinSpec(
+    [VDD => 28 PVIN[0] => 21 PVIN[1] => 22 PVIN[2] => 23 PVIN[3] => 24 PVIN[4] => 25 
+    PVIN[5] => 26 EN_UVLO => 4 BP => 31 PGOOD => 35 MODE => 34 FSEL => 32 VSEL => 33 
+    ILIM => 36 RESV_TRK => 37]
+    [VOSNS => 40 BOOT => 5 SW[0] => 6 SW[1] => 7 SW[2] => 8 SW[3] => 9 SW[4] => 10 
+    SW[5] => 11 SW[6] => 12 RSN => 38 RSP => 39]
+    [AGND => 30 DRGND => 29 PGND[0] => 13 PGND[1] => 14 PGND[2] => 15 PGND[3] => 16 
+    PGND[4] => 17 PGND[5] => 18 PGND[6] => 19 PGND[7] => 20 PAD => 41 NU[0] => 1 
+    NU[1] => 2 NU[2] => 3 NC => 27]
+  )
+  package = LQFN50P500X700X142-40(cmp-pad-map(ps))
+  part = ti-TPS548D22-prt
+
+pcb-component te-2102771-1-cmp :
+  defn pin-name (r:Int, c:Int) :
+    val letter = red-alph-letter(r)
+    Ref(string-join([letter, c + 1]))
+
+  val all-pins = Vector<Ref>()
+  for r in 0 to 7 do :
+    for c in 0 to 16 do :
+      add(all-pins, pin-name(r,c))
+
+  for name in all-pins do :
+    pin {name}
+
+  val ps = PinSpec(to-tuple(all-pins), false)
+  package = te-2102771-1-pkg
+  part = te-2102771-1-prt
+  reference-prefix = "P"
+
+
+pcb-component te-2102772-1-cmp :
+  defn pin-name (r:Int, c:Int) :
+    val letter = red-alph-letter(r)
+    Ref(string-join([letter, c + 1]))
+
+  val all-pins = Vector<Ref>()
+  for r in 0 to 7 do :
+    for c in 0 to 8 do :
+      add(all-pins, pin-name(r,c))
+
+  for name in all-pins do :
+    pin {name}
+
+  val ps = PinSpec(to-tuple(all-pins), false)
+  package = te-2102772-1-pkg
+  part = te-2102772-1-prt
+  reference-prefix = "P"
+
+;==== Modules ===================================================================
+public defn bypass-caps (power-pin:Ref|Symbol, gnd-pin:Ref|Symbol, voltage:Double, caps:Tuple<Double>, name:Symbol) :
+  inside pcb-module:
+    val n-caps = length(caps)
+    for i in 0 to n-caps do :
+      val cap-name = Ref("%_-%_" % [name i])
+      inst c : {gen-cap-cmp(caps[i], 20.0, voltage)}
+      match(power-pin) :
+        (r:Ref) :
+          net - (r, c.p[0])
+        (s:Symbol) :
+          net {Ref(s)} (c.p[0])
+      match(gnd-pin) :
+        (r:Ref) :
+          net - (r, c.p[1])
+        (s:Symbol) :
+          net {Ref(s)} (c.p[1])
+
+public defn voltage-divider-strap (strap-pin:Ref|Symbol, pos-pin:Ref|Symbol, neg-pin:Ref|Symbol, r-vals:Tuple<Double>) :
+  inside pcb-module :
+    inst r-h : {gen-res-cmp(r-vals[0])}
+    inst r-l : {gen-res-cmp(r-vals[1])}
+    match(strap-pin) :
+      (r:Ref) :
+        net - (r-h.p[1], r-l.p[0], r)
+      (s:Symbol) :
+        net {Ref(s)} (r-h.p[1], r-l.p[0])
+    match(pos-pin) :
+      (r:Ref) :
+        net - (r, r-h.p[0])
+      (s:Symbol) :
+        net {Ref(s)} (r-h.p[0])
+    match(neg-pin) :
+      (r:Ref) :
+        net - (r, r-l.p[1])
+      (s:Symbol) :
+        net {Ref(s)} (r-l.p[1])
+
+within (input, output) =
+  add-switching-regulator(
+    "ti-TPS548D22",
+    0.8725,                                  ;max duty_cycle
+    SwitchedNoise(1.05e6, 150.0e-9, 1.14e-3),  ;Noise(fs, L, C)
+    0.9,                                   ;efficiency
+    125.0,                                 ;tjmax
+    0.6,                                  ;thetaja
+    1.5, 16.0,                             ;vin
+    0.6, 5.5,                             ;vout
+    0.0, 40.0) :                            ;iout
+  inside pcb-module :        
+    ;Create nets
+    inst ps : {ti-TPS548D22(voltage(output))}
+    schematic-group(ps) = power
+    net - (ps.src.neg, neg(input), neg(output))
+    net pow-vInt (ps.src.pos, pos(input))
+    net - (ps.dst.pos, pos(output))
+    add(REG-INTFS, RegulatorInterface(ps.en, ps.fb, ps.dst.pos))
+
+pcb-module ti-TPS548D22 (v-out:Double) :
+  port src : power
+  port dst : power
+  pin en
+  pin fb
+  inst reg : ti-TPS548D22-cmp
+  net gnd (src.neg, dst.neg, reg.PAD, reg.PGND[0 to 8])
+  net vin (reg.PVIN[0 to 6])
+  bypass-caps(reg.PVIN[0], reg.PGND[0], 35.0, [22.0, 22.0, 2.2, 2.2e-3], `input)
+  voltage-divider-strap(reg.VSEL, reg.BP, `gnd, [100.0e3 4.64e3])
+  voltage-divider-strap(reg.FSEL, reg.BP, `gnd, [100.0e3 22.1e3])
+  voltage-divider-strap(reg.MODE, reg.BP, `gnd, [100.0e3 42.2e3])
+  res-strap(reg.BP, reg.PGOOD, 105.0e3)
+  res-strap(reg.ILIM, `gnd, 133.0e3)
+  bypass-caps(reg.BP, reg.PGND[0], 12.0, [4.7], `bp)
+  cap-strap(reg.RESV_TRK, reg.PGND[0], 1.0e-3)
+  cap-strap(reg.BOOT, reg.SW[0], 100.0e-3)
+  inst L : {gen-ind-cmp(150.0e-3, 10.0, 75.0)}
+  net - (reg.SW[0 to 7] L.p[0])
+  bypass-caps(L.p[1], reg.PGND[0], 6.3, [470.0 470.0 100.0 100.0], `output)
+  voltage-divider-strap(reg.RSP, L.p[1], `gnd, [10.0e3 18.2e3])
+  net - (reg.RSN, fb)
+  net - (reg.EN_UVLO, en)
+
+pcb-module ti-SN74LVC8T245DBQ :
+  port vcca : power
+  port vccb : power
+  inst t : ti-SN74LVC8T245DBQ-cmp
+  inst pd : {power-decouple()}[2]
+  net - (vcca.neg, vccb.neg, t.GND)
+  net - (vcca, pd[0].src)
+  net - (vccb, pd[1].src)
+  net - (t.VCCA, pd[0].dst.pos)
+  net - (t.VCCB, pd[1].dst.pos)
+
+
+pcb-module ti-SN65LVDM1676DGG :
+  port vcc : power
+  inst t : ti-SN65LVDM1676DGG-cmp
+  inst pd : {power-decouple()}
+  net - (vcc.neg, t.GND)
+  net - (vcc, pd.src)
+
+pcb-module ddr-termination :
+  port vdd : power
+  port vtt : power
+  port vttref : power
+  port vddq : power
+
+  inst reg : ti-TPS51206-cmp
+  net gnd (reg.PGND, reg.PAD, reg.GND, vdd.neg, vtt.neg, vttref.neg, vddq.neg)
+  cap-strap(reg.VLDOIN, reg.GND, 10.0)
+  cap-strap(reg.VTT, reg.GND, 10.0)
+  cap-strap(reg.VTTREF, reg.GND, 0.22)
+  cap-strap(reg.VDD, reg.GND, 0.1)
+  net - (reg.VDDQSNS, reg.VLDOIN)
+  net - (reg.VTT, reg.VTTSNS)
+;
+pcb-module sdram (type:Symbol, width:Int, size:Int) :
+  ; 32 width for now
+  port pwr : ddr3-power
+  port acc : ddr3-acc
+  port dat : {ddr3-dat(32)}
+  ; Assuming x16 4Gb chip
+  val chip-width = (width / 16)
+  val banks = size / 4 
+  val n-chips = chip-width * banks
+  inst mem : micron-MT41K1G4X-cmp[n-chips]
+  net - (mem[0 to n-chips].acc)
+  net - (mem[0 to n-chips].pwr)
+
+  for i in 0 to 4 do :
+    net - (mem[i / 2].dat.dq[i % 2], dat.dq[i])
+    net - (mem[i / 2].dat.dqs[i % 2], dat.dqs[i])
+
+  inst t : ddr-termination
+  for (p in acc-names(), i in 0 to false) do :
+    if i % 4 == 0 :
+      cap-strap(t.vtt.pos, t.vtt.neg, 1.0)
+    res-strap(mem[0].acc.{p}, t.vtt.pos, 39.0)
+  res-strap(acc.ck.D_P, acc.ck.D_N, 75.0)
+
+  supports ddr3 :
+    ddr3.dat => dat
+    ddr3.acc => acc
+    ddr3.pwr => pwr
+
+pcb-module vpx-6u :
+  port vpx-power : power[6]
+  port vpx-pairs : diff-pair[6][32]
+  port vpx-sig : pin[6][8]
+  port P0-sig : pin[16]
+  port P0-pairs : diff-pair[4]
+  pin gnd
+  inst P0 : te-2102772-1-cmp
+  inst P : te-2102771-1-cmp[6]
+  package(P0) at loc(0.0, 0.0) on Top
+  for i in 0 to 2 do : package(P[i]) at loc(23.4 + to-double(i) * 28.8, 0.0) on Top
+  for i in 2 to 6 do : package(P[i]) at loc(30.0 + to-double(i) * 28.8, 0.0) on Top
+
+  properties(vpx-pairs) :
+    external => true
+
+  defn vpx-map (r:Int, c:Int, con:Int) :
+    val name = Ref(string-join([red-alph-letter(r), c + 1]))
+    if c % 2 == 1 :
+      if r % 3 == 1 :
+        net - (P[con].{name}, vpx-pairs[con][2 * c + (r / 3)].D_P)
+      else if r % 3 == 2 :
+        net - (P[con].{name}, vpx-pairs[con][2 * c + (r / 3)].D_N)
+      else :
+        net - (P[con].{name}, gnd)
+    else :
+      if r == 6 :
+        if c % 2 == 0 :
+          net - (P[con].{name}, vpx-sig[con][c / 2])
+      else :
+        if r % 3 == 0 :
+          net - (P[con].{name}, vpx-pairs[con][2 * c + (r / 3)].D_P)
+        else if r % 3 == 1 :
+          net - (P[con].{name}, vpx-pairs[con][2 * c + (r / 3)].D_N)
+        else :
+          net - (P[con].{name}, gnd)
+
+  for i in 0 to 6 do :
+    for c in 0 to 16 do :
+      for r in 0 to 7 do :
+        vpx-map(r,c,i)
+
+  val sig-seq = to-seq(0 to 16)
+
+  defn P0-map (r:Int, c:Int) :
+    val name = Ref(string-join([red-alph-letter(r), c + 1]))
+    if c < 3 :
+      if r % 4 == 0 :
+        net - (vpx-power[2 * c + (r / 4)].pos, P0.{name})
+        net - (vpx-power[2 * c + (r / 4)].neg, gnd)
+      if r % 4 == 1 :
+        net - (vpx-power[2 * c + (r / 4)].pos, P0.{name})
+      if r % 4 == 2 :
+        net - (vpx-power[2 * c + (r / 4)].pos, P0.{name})
+    else if c < 6 : 
+      if (r == 2 or r == 4) :
+        net - (P0.{name}, gnd)
+      else :
+        net - (P0.{name}, P0-sig[next(sig-seq)])
+    else if c == 6 :
+      if r == 6 :
+        net - (P0.{name}, P0-sig[next(sig-seq)])
+      else :
+        if r % 3 == 0 :
+          net - (P0.{name}, P0-pairs[0 + (r / 3)].D_P)
+        else if r % 3 == 1 :
+          net - (P0.{name}, P0-pairs[0 + (r / 3)].D_N)
+        else :
+          net - (P0.{name}, gnd) 
+    else if c == 7 :
+      if r % 3 == 1 :
+        net - (P0.{name}, P0-pairs[2 + (r / 3)].D_P)
+      else if r % 3 == 2 :
+        net - (P0.{name}, P0-pairs[2 + (r / 3)].D_N)
+      else :
+        net - (P0.{name}, gnd)
+
+  for c in 0 to 8 do :
+    for r in 0 to 7 do :
+      P0-map(r,c)
+
+  supports lvds :
+    lvds.D_P => P0.A2
+    lvds.D_N => P0.A3
+
+  val c = infiniband(2)
+  supports {c} :
+    c.rx[0] => vpx-pairs[0][1]
+    c.tx[0] => vpx-pairs[0][2]
+    c.rx[1] => vpx-pairs[0][3]
+    c.tx[1] => vpx-pairs[0][4]
+
+pcb-component xcku-060 :
+  val row-names = ["A" "B" "C"]
+  val col-names = 1 through 100
+  for r in row-names do :
+    for c in col-names do :
+      val name = Ref("%_%_" % [r,c])
+      pin {name}
+
+  supports lvds :
+    lvds.D_P => Ref("A8")
+    lvds.D_N => Ref("B7")
+
+  supports i2c :
+    i2c.sda => Ref("A1")
+    i2c.scl => Ref("B2")
+
+  for name in ["A1" "B2" "B3"] do :
+    properties(Ref(name)) :
+      voltage => 1.8
+      family => `LVCMOS 
+      vio-pin => Ref("C5")
+
+  for i in 10 through 60 do :
+    val name = Ref("A%_" % [i])
+    supports dio :
+      dio => name
+    properties(name) :
+      voltage => 1.8
+      family => `LVCMOS 
+      vio-pin => Ref("C5")
+
+  val c = infiniband(2)
+  supports {c} :
+    c.rx[0].D_P => Ref("B20")
+    c.rx[0].D_N => Ref("B21")
+    c.tx[0].D_P => Ref("B22")
+    c.tx[0].D_N => Ref("B23")
+    c.rx[1].D_P => Ref("B24")
+    c.rx[1].D_N => Ref("B25")
+    c.tx[1].D_P => Ref("B26")
+    c.tx[1].D_N => Ref("B27")
+
+defn flatten-refs (x:Ref|Tuple) -> Tuple<Ref> :
+  val rs = Vector<Ref>()
+  let loop (r:Ref|Tuple = x) :
+    match(r:Tuple) : do(loop, r)
+    else : add(rs, r as Ref)
+  to-tuple(rs)
+
+defn dot (rs:Seqable<Ref>, field:Ref) -> Tuple<Ref> :
+  to-tuple(for r in rs seq : r.{field})
+
+pcb-module power-controller (rs:Tuple<RegulatorInterface>) :
+  port src : power
+  pin gnd
+  val n-rails = length(rs)
+  port c : pin[3][n-rails]
+  val n-l = (n-rails + 7) / 8
+  val n-m = (n-rails + 5) / 6
+  inst p : analog-ltc2977-cmp[n-l]
+  inst w : maxim-max1606x-cmp[n-m]
+  for i in 0 to n-rails do :
+    val [l-idx, l-ref, p-idx] = [i / 8, p[i / 8], i % 8]
+    val [m-idx, m-ref, w-idx] = [i / 6, w[i / 6], i % 6]
+    net - (c[0][i], l-ref.power-control[p-idx].vout-en)
+    net - (c[1][i], l-ref.power-control[p-idx].vdac.D_P)
+    net - (c[2][i], l-ref.power-control[p-idx].vsense.D_P, m-ref.in[w-idx])
+    net - (src.neg, gnd, m-ref.GND, l-ref.PAD, l-ref.power-control[p-idx].vdac.D_N, l-ref.power-control[p-idx].vsense.D_N, m-ref.GND, l-ref.PAD)
+    net - (src.pos, l-ref.VDD33[0], l-ref.VDD33[1], m-ref.VCC)
+
+;==== Main Module ===================================================================
+defn bypass-xcku060ffva1517 (cmp:Ref):
+  inside pcb-module:
+    for i in 0 to 6 do: cap-strap(cmp.vccaux,    cmp.gnd, 4.7)
+    for i in 0 to 3 do: cap-strap(cmp.vccaux,    cmp.gnd, 47.0)
+    for i in 0 to 6 do: cap-strap(cmp.vccaux-io, cmp.gnd, 4.7)
+    for i in 0 to 3 do: cap-strap(cmp.vccaux-io, cmp.gnd, 47.0)
+    cap-strap(cmp.vccbram, cmp.gnd, 4.7)
+    cap-strap(cmp.vccbram, cmp.gnd, 47.0)
+    for i in 0 to 4 do: cap-strap(cmp.vccint, cmp.gnd, 4.7)
+    for i in 0 to 2 do: cap-strap(cmp.vccint, cmp.gnd, 100.0)
+    cap-strap(cmp.vccint, cmp.gnd, 680.0)
+    for i in 0 to 4 do: cap-strap(cmp.vccint-io, cmp.gnd, 4.7)
+    for i in 0 to 2 do: cap-strap(cmp.vccint-io, cmp.gnd, 100.0)
+    cap-strap(cmp.vccint-io, cmp.gnd, 680.0)
+    cap-strap(cmp.vcco-0,    cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-24,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-25,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-44,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-45,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-46,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-47,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-48,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-64,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-65,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-66,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-67,   cmp.gnd, 47.0)
+    cap-strap(cmp.vcco-68,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-24,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-25,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-44,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-45,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-46,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-47,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-48,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-64,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-65,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-66,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-67,   cmp.gnd, 47.0)
+    cap-strap(cmp.vref-68,   cmp.gnd, 47.0)
+
+pcb-capability lvds : diff-pair
+
+val brd-outline = rectangle(100.0, 100.0) 
+pcb-module darpa-fpga :
+  inst backplane : vpx-6u
+  net gnd (backplane.gnd)
+
+  add-center-node("xilinx-XCKU060-1FFVA1517I", 0.95, 1.7)
+  within (rail) = make-load("Load 0", 3.3, 1.17, 1.5 * 0.1) :  
+    net gnd (neg(rail))
+    net P3P3V (pos(rail))
+  within (rail) = make-load("Load 1", 1.8, 0.5, 1.5 * 0.1) :  
+    net gnd (neg(rail))
+    net P1P8V (pos(rail))
+  within (rail) = make-load("Load 2", 0.95, 3.0, 1.5 * 0.1) :  
+    net gnd (neg(rail))
+    net P0P95V (pos(rail))
+  within (rail) = make-load("Load 3", 1.0, 0.75, 1.5 * 0.1) :  
+    net gnd (neg(rail))
+    net P1P0V (pos(rail))
+  within (rail) = make-load("Load 4", 1.2, 0.75, 1.5 * 0.1) :  
+    net gnd (neg(rail))
+    net P1P2V (pos(rail))
+  within (rail) = make-load("Load 5", 1.5, 0.75, 1.5 * 0.1) :  
+    net gnd (neg(rail))
+    net P1P5V (pos(rail))
+
+  inst fpga : xilinx-XCKU060-1FFVA1517I-cmp
+  bypass-xcku060ffva1517(fpga)
+  inst ram-0 : {sdram(`ddr3, 32, 4)}
+  inst ram-1 : {sdram(`ddr3, 32, 4)}
+  require ddr3:ddr3 from ram-0
+  require ddr3:ddr3 from ram-1
+  net - (ram-0.ddr3, ram-1.ddr3)
+
+  net P3P3V (fpga.vcco-65, fpga.vcco-64)
+  net P1P8V (fpga.vcco-45, fpga.vcco-44, fpga.vcco-68, , fpga.vccaux, fpga.vccaux-io)
+  net P0P95V (fpga.vccbram, fpga.vccint-io, fpga.vccint)
+  net P1P0V (fpga.mgtavcc-l)
+  net P1P2V (fpga.mgtavtt-l)
+  net P1P5V (fpga.vcco-24)
+  net gnd (fpga.gnd)
+
+  ;Make lvds connection
+  ;require lvds-port : lvds from fpga
+  ;require lvds-port : lvds from backplane
+  ;connect (fpga.lvds-port, backplane.lvds-port)
+
+  ;require internet:{infiniband(2)} from fpga
+  ;require internet:{infiniband(2)} from backplane
+  ;connect (backplane.internet, fpga.internet)
+
+  ;system i2c: 5v 12c + reset bus on backplaneP0-sig
+  for name in ["F6" "G6" "A4"] do :
+    properties(backplane.P0.{Ref(name)}) :
+      voltage => 5.0
+      family => `LVCMOS 
+      vio-pin => #R(E3)
+;
+  ;;require sys-i2c:i2c from fpga
+  ;;require reset:dio from fpga
+  ;;connect ([fpga.sys-i2c.sda, fpga.sys-i2c.scl, fpga.reset],
+  ;;          [backplane.P0.F6, backplane.P0.G6, backplane.P0.A4])
+;
+  ;for i in 0 to 20 do :
+  ;  for j in 0 to 2 do :
+  ;    properties(backplane.vpx-pairs[j][i]) :
+  ;      family => `RS485
+  
+  ;;;POD bus: 40 RS-485 connections on backplane.vpx-pairs[0] and [1]
+  ;require pod:fullduplex-uart-w-enable[40] from fpga
+  ;connect (fpga.pod[0 to 40], flatten-refs([backplane.vpx-pairs[0][0 to 20]
+  ;                                             backplane.vpx-pairs[1][0 to 20]]))
+
+  ;Aux I/O: 12 RS-485 connections on backplane.vpx-pairs[5] 
+  ; Connect to any I/O pins on FPGA
+  ;connect(aux-io, FPGA)
+
+  ; LVDS common bus : 18 LVDS pairs from backplane.vpx-pairs[5] 
+  ; Connect to any I/O pins on FPGA - use transciever to get to single-ended
+  ;connect(lvds-com-bus, FPGA)
+
+  ; LVDS blanking bus : 7 LVDS pairs from backplane.vpx-pairs[5] 
+  ; Connect to any LVDS I/O pins on FPGA, no extra components
+  ;connect(lvds-blank-bus, FPGA)
+
+  ; Aurora bus : 8 diff pairs from backplane.vpx-pairs[5] 
+  ; Connect to any HPIO pins on FPGA with dc blocking caps
+  ;connect(aurora-bus, FPGA)
+
+  generate-power-system(12.0, 30.0, backplane.vpx-power[0].pos, backplane.gnd)
+  inst power-ctrl : {power-controller(to-tuple(REG-INTFS))}
+  net P3P3V (power-ctrl.src.pos)
+  net gnd (power-ctrl.gnd)
+  schematic-group(power-ctrl) = power
+  for i in 0 to length(REG-INTFS) do :
+    net - (power-ctrl.c[0][i], en(to-tuple(REG-INTFS)[i]))
+    net - (power-ctrl.c[1][i], dac(to-tuple(REG-INTFS)[i]))
+    net - (power-ctrl.c[2][i], v-out(to-tuple(REG-INTFS)[i]))
+
+
+;==== Schematic ================================================================
+
+defn make-darpa-fpga-schematic () :
+  make-schematic(darpa-fpga)
+
+;==== Project ==================================================================
+
+defn make-darpa-fpga-project () :
+  make-darpa-fpga-schematic()
+
+make-darpa-fpga-project()
+  
+jitpcb/repl-lib/dump-esir("myproject", [`prune-lower])
+;jitpcb/repl-lib/dump-esir("myproject", [`kicad-notplaced])

@@ -41,6 +41,22 @@ defn min-length! (n0:Int) :
 defn non-empty! (description:String, v:Tuple) :
   fatal("The tuple given to %_ is empty." % [description]) when empty?(v)
 
+defn non-empty-options! (description:String, os:List<SupportOption>) :
+  if empty?(os) :
+    fatal("The list of options for %_ must be non-empty." % [description])
+
+
+defn supported-values! (description:String, entries:Tuple<KeyValue<Symbol,?>>) :
+  defn supported? (v) :
+    match(v) :
+      (v:True|False|Char|Byte|Int|Long|Float|Double|String|Symbol|Ref) : true
+      (v:Tuple) : all?(supported?,v)
+      (v:List) : all?(supported?,v)
+      (v) : false
+  for e in entries do :
+    if not supported?(value(e)) :
+      fatal("In %_, value %_ given to property %_ is not a supported value." % [description, value(e), key(e)])
+
 ;============================================================
 ;==================== IR Specification ======================
 ;============================================================
@@ -103,6 +119,19 @@ public defstruct DefComponent <: TStmt :
   stmts: List<CStmt> with: (updater => sub-stmts)
 
 public deftype CStmt
+public defstruct GroundStmt <: CStmt :
+  refs: List<Ref>
+public defstruct PowerStmt <: CStmt :
+  voltage: Double
+  current: Double
+  refs: List<Ref>
+public defstruct DiffPairStmt <: CStmt :
+  line-type: LineType|False
+  impedance: Double|False
+  skew: Double|False
+  max-loss: Double|False
+  spacing: Double|False with: (ensure => non-negative!)
+  pairs: List<[Ref Ref]>
 public defstruct DefaultPackageStmt <: CStmt :
   package: Symbol with: (updater => sub-package)
   mapping: Mapping with: (updater => sub-mapping)
@@ -112,9 +141,38 @@ public defstruct DefaultPartStmt <: CStmt :
   part: Symbol
 public defstruct SupportsStmt <: CStmt&MStmt :
   capability: Symbol with: (updater => sub-capability)
-  options: List<SupportOption> with: (updater => sub-options)
+  options: List<SupportOption> with: (updater => sub-options, ensure => non-empty-options!)
 public defstruct ReferencePrefixStmt <: CStmt :
   prefix: String
+public defstruct MaxCurrentDrawStmt <: CStmt&MStmt :
+  refs: List<Ref> with: (updater => sub-refs)
+  current: Double
+public defstruct EStateStmt <: CStmt&MStmt :
+  ref: Ref with: (updater => sub-ref)
+  states: Tuple<EState>
+public defstruct PinPropertiesStmt <: CStmt&MStmt :
+  ref: Ref with: (updater => sub-ref)
+  level: Int with: (updater => sub-level)
+  entries: Tuple<KeyValue<Symbol,?>> with: (ensure => supported-values!)
+
+public deftype LineType
+public deftype Microstrip <: LineType
+public deftype Stripline <: LineType
+public val Microstrip = new Microstrip
+public val Stripline = new Stripline
+
+;===== Symbols =====
+;===================
+
+public deftype Dir <: Equalable&Hashable
+public deftype Up <: Dir
+public deftype Down <: Dir
+public deftype Left <: Dir
+public deftype Right <: Dir
+public val Up = new Up
+public val Down = new Down
+public val Left = new Left
+public val Right = new Right
 
 ;===== Packages =====
 ;====================
@@ -122,6 +180,8 @@ public defstruct DefPackage <: TStmt :
   name: Symbol with: (updater => sub-name)
   pads: List<Pad> with: (updater => sub-pads)
   pad-defs: List<DefPad> with: (updater => sub-pad-defs)
+  external-names: List<String> with: (default => List(), updater => sub-external-names)
+
 
 public defstruct Pad :
   ref: Ref
@@ -141,6 +201,7 @@ public deftype SMD <: PadType
 public deftype TH <: PadType
 public val SMD = new SMD
 public val TH = new TH
+
 
 ;===== Attachments =====
 ;=======================
@@ -179,11 +240,14 @@ public defstruct RequireStmt <: MStmt :
 public defstruct InstSupportsStmt <: MStmt :
   inst: Ref with: (updater => sub-inst)
   capability: Symbol with: (updater => sub-capability)
-  options: List<SupportOption> with: (updater => sub-options)  
+  options: List<SupportOption> with: (updater => sub-options, ensure => non-empty-options!)  
 public defstruct PackageStmt <: MStmt :
   ref: Ref with: (updater => sub-ref)
   instance?: True|False with: (updater => sub-instance?)
   package: [Symbol, Mapping]|False with: (updater => sub-package)
+  pose: Pose|False with: (updater => sub-pose)
+  side: Side|False with: (updater => sub-side)
+  anchor: Ref|False with: (updater => sub-anchor)
 public defstruct EModelStmt <: MStmt :
   ref: Ref with: (updater => sub-ref)
   model: EModel with: (updater => sub-model)
@@ -193,13 +257,28 @@ public defstruct PartStmt <: MStmt :
 public defstruct ReferenceStmt <: MStmt :
   ref: Ref with: (updater => sub-ref)
   value: String with: (updater => sub-value)
+public defstruct SchematicGroupStmt <: MStmt :
+  ref: Ref with: (updater => sub-ref)
+  unit: Int|False with: (default => false, updater => sub-unit, ensure => non-negative!)
+  group: Symbol with: (updater => sub-group)
 public defstruct AttachStmt <: MStmt :
   attach:Symbol with: (updater => sub-attach)
   args:List<Ref> with: (updater => sub-args)  
+public defstruct ConnectionStmt <: MStmt :
+  args: Tuple<Ref|Tuple<Ref>> with: (updater => sub-args)
+public defstruct SupportedByStmt <: MStmt :
+  ref:Ref with: (updater => sub-ref)
+  port?:True|False
+  option-id:Ref with: (updater => sub-option-id)  
+  nested-supports:Tuple<SupportedByStmt> with: (updater => sub-nested-supports)
 
 public defstruct SupportOption :
+  id: Ref|False with: (updater => sub-id)
   requires: List<RequireStmt> with: (updater => sub-requires)
+  properties: List<PinPropertiesStmt> with: (updater => sub-properties)
   mapping: Mapping with: (updater => sub-mapping)
+with:
+  printer => true
 
 public defstruct Mapping :
   mappings: List<KeyValue<Ref, Ref>>
@@ -213,6 +292,7 @@ public deftype Top <: Side
 public deftype Bottom <: Side
 public val Top = new Top
 public val Bottom = new Bottom
+
 
 ;===== Electrical Models =====
 public deftype EModel <: Hashable&Equalable
@@ -283,7 +363,8 @@ public defstruct ComponentArray <: ComponentType :
 
 ;===== Make Commands =====
 ;=========================
-public defstruct MakeBoard <: TStmt :
+
+public defstruct MakeSchematic <: TStmt :
   module: Symbol
 
 ;===== Shapes =====
@@ -316,6 +397,12 @@ with:
 public defstruct Subtraction <: Shape :
   a: Shape
   b: Shape
+public defstruct Text <: Shape :
+  string: String with: (updater => sub-string)
+  font: Symbol with: (updater => sub-font)
+  size: Double with: (ensure => non-negative!, updater => sub-size)
+  anchor: Anchor with: (updater => sub-anchor)
+  pose: Pose with: (updater => sub-pose)
 
 public deftype Anchor <: Equalable
 public deftype N <: Anchor
@@ -344,11 +431,27 @@ public defstruct Pose <: Equalable & Hashable :
 with :
   constructor => #Pose
 
+;===== Electrical States =====
+;=============================
+
+public deftype EState
+public defstruct Driver <: EState :
+  voltage: Double
+public defstruct HighZ <: EState :
+  min-voltage: Double
+  max-voltage: Double
+  
 ;============================================================
 ;====================== Utilities ===========================
 ;============================================================
 public defn name! (s:NetStmt) :
   name(s) as Symbol
+
+public defn InstSupportsStmt (r:Ref, s:SupportsStmt) :
+  InstSupportsStmt(r, capability(s), options(s))
+
+public defn supports-stmt (s:InstSupportsStmt) :
+  SupportsStmt(capability(s), options(s))
 
 defn flatten-shapes (ss:Seqable<Shape|Seqable>) :
   generate<Shape> :
@@ -394,6 +497,7 @@ public defn get (p:Point, i:Int) -> Double :
 
 public defn Ref (x) : VarRef(to-symbol(x))
 
+
 defmethod hash (r:VarRef) : hash(name(r))
 defmethod hash (r:FieldRef) : 7 * hash(ref(r)) + hash(name(r))
 defmethod hash (r:IndexRef) : 11 * hash(ref(r)) + index(r)
@@ -401,6 +505,19 @@ defmethod equal? (a:VarRef, b:VarRef) : name(a) == name(b)
 defmethod equal? (a:FieldRef, b:FieldRef) : ref(a) == ref(b) and name(a) == name(b)
 defmethod equal? (a:IndexRef, b:IndexRef) : ref(a) == ref(b) and index(a) == index(b)
 public defn name! (r:Ref) : name(r as VarRef)
+
+defmethod equal? (a:Anchor, b:Anchor) :
+  match(a, b) :
+    (a:N, b:N) : true
+    (a:S, b:S) : true
+    (a:E, b:E) : true
+    (a:W, b:W) : true
+    (a:NE, b:NE) : true
+    (a:SE, b:SE) : true
+    (a:SW, b:SW) : true
+    (a:NW, b:NW) : true
+    (a:C, b:C) : true
+    (a, b) : false
 
 defmethod equal? (a:PinType, b:PinType) :
   match(a, b) :
@@ -429,6 +546,21 @@ defmethod equal? (a:Side, b:Side) :
     (a:Top, b:Top) : true
     (a:Bottom, b:Bottom) : true
     (a, b) : false
+
+defmethod equal? (a:Dir, b:Dir) :
+  match(a, b) :
+    (a:Up, b:Up) : true
+    (a:Down, b:Down) : true
+    (a:Left, b:Left) : true
+    (a:Right, b:Right) : true
+    (a, b) : false
+
+defmethod hash (a:Dir) :
+  match(a) :
+    (a:Up) : 0
+    (a:Down) : 1
+    (a:Left) : 2
+    (a:Right) : 3
 
 defmethod hash (a:Side) :
   match(a) :
@@ -460,42 +592,29 @@ defmethod equal? (a:EModel, b:EModel) :
 defmethod equal? (a:NamedColor, b:NamedColor) :
   name(a) == name(b)
 
-defmethod equal? (a:Anchor, b:Anchor) :
-  match(a, b) :
-    (a:N, b:N) : true
-    (a:S, b:S) : true
-    (a:E, b:E) : true
-    (a:W, b:W) : true
-    (a:NE, b:NE) : true
-    (a:SE, b:SE) : true
-    (a:SW, b:SW) : true
-    (a:NW, b:NW) : true
-    (a:C, b:C) : true
-    (a, b) : false
-
 defmethod compare (a:Ref, b:Ref) :
-  defn rank (a:Ref) :
-    match(a) :
-      (a:VarRef) : 0
-      (a:FieldRef) : 1
-      (a:IndexRef) : 2
-      
-  match(a, b) :
-    (a:VarRef, b:VarRef) :
-      compare(name(a), name(b))
-    (a:FieldRef, b:FieldRef) :
-      val c = compare(ref(a), ref(b))
-      if c == 0 : compare(name(a), name(b))
-      else : c
-    (a:IndexRef, b:IndexRef) :
-      val c = compare(ref(a), ref(b))
-      if c == 0 : compare(index(a), index(b))
-      else : c
-    (a, b) :
-      compare(rank(a), rank(b))
+  match(a:VarRef, b:VarRef) :
+    compare(name(a), name(b))
+  else :
+    defn ref? (r:Ref) :
+      match(r:FieldRef|IndexRef) : ref(r)
+      else : r
+    defn rank (r:Ref) :
+      match(r) :
+        (r:VarRef) : 0
+        (r:IndexRef) : 1      
+        (r:FieldRef) : 2
+    val c = compare(ref?(a), ref?(b))
+    if c == 0 :
+      match(a, b) :
+        (a:FieldRef, b:FieldRef) : compare(name(a), name(b))
+        (a:IndexRef, b:IndexRef) : compare(index(a), index(b))
+        (a, b) : compare(rank(a), rank(b))
+    else : c
 
 public defn component (s:InstStmt) :
   name(type(s) as SingleComponent)
 
 public defn InstStmt (name:Symbol, component:Symbol) :
   InstStmt(name, SingleComponent(component))
+

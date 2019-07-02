@@ -3,6 +3,10 @@
 ;lower :
 ;  post-power-generation = false
 ;
-;prune :
-;  prune-for = schematic
-;
+
+
+
+elkt :
+  average-character-width = 10
+  character-height = 20
+  padding = 30

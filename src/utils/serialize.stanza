@@ -5,6 +5,7 @@ defpackage serialize :
   import collections
   import rtm/utils
   import parser
+  import jitpcb/dlopen
 
 ;Deserializer Object
 protected deftype Deserializer
@@ -154,16 +155,6 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
   core/One :
     value:?
 
-  rtm/utils/FileTypeException :
-    filename: String
-    cause: String|False
-  rtm/utils/DirException :
-    filename: String
-    cause: String
-  rtm/utils/CreateDirException :
-    filename: String
-    cause: String
-
 ;============================================================
 ;================= IOException Serializers ==================
 ;============================================================
@@ -224,15 +215,31 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
     causes: List<Exception>
 
 ;============================================================
-;====================== JitPCB Errors =======================
+;====================== Util Errors =========================
 ;============================================================
 
 register-struct-serializers (o:OutputStream, i:InputStream) :
+  rtm/utils/FileTypeException :
+    filename: String
+    cause: String|False
+  rtm/utils/DirException :
+    filename: String
+    cause: String
+  rtm/utils/CreateDirException :
+    filename: String
+    cause: String
   rtm/utils/PathEndsWithSlash :
     path: String
-
-register-struct-serializers (o:OutputStream, i:InputStream) :
-  rtm/utils/EmptyPath : ()
+  rtm/utils/EmptyPath
+  rtm/utils/FlagNotANumber :
+    flag:String
+    value:String
+  rtm/utils/MissingProperty :
+    name:Symbol
+  rtm/utils/DuplicateProperty :
+    name:Symbol
+  rtm/utils/UnknownProperty :
+    name:Symbol
 
 ;============================================================
 ;===================== Catch All Error ======================
@@ -246,3 +253,11 @@ register-serializer :
     throw(DeserializationError("Read error")) when str is-not String
     new Exception :
       defmethod print (o:OutputStream, this) : print(o, str)    
+
+;============================================================
+;====================== DL Errors ===========================
+;============================================================
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  jitpcb/dlopen/DLError :
+    msg:String

@@ -44,6 +44,19 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
     name: Symbol 
     pins: List<Pin> 
     stmts: List<CStmt> 
+  rtm/ir/GroundStmt :
+    refs: List<Ref>
+  rtm/ir/PowerStmt :
+    voltage: Double
+    current: Double
+    refs: List<Ref>
+  rtm/ir/DiffPairStmt :
+    line-type: LineType|False
+    impedance: Double|False
+    skew: Double|False
+    max-loss: Double|False
+    spacing: Double|False 
+    pairs: List<[Ref Ref]>
   rtm/ir/DefaultPackageStmt :
     package: Symbol 
     mapping: Mapping 
@@ -54,8 +67,18 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
   rtm/ir/SupportsStmt :
     capability: Symbol
     options: List<SupportOption>
+  rtm/ir/PinPropertiesStmt :
+    ref: Ref
+    level: Int
+    entries: Tuple<KeyValue<Symbol,?>>  
   rtm/ir/ReferencePrefixStmt :
     prefix: String
+  rtm/ir/MaxCurrentDrawStmt :
+    refs: List<Ref>
+    current: Double
+  rtm/ir/EStateStmt :
+    ref: Ref
+    states: Tuple<EState>
   rtm/ir/DefPackage :
     name: Symbol
     pads: List<Pad>
@@ -100,6 +123,9 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
     ref: Ref 
     instance?: True|False 
     package: [Symbol, Mapping]|False 
+    pose: Pose|False 
+    side: Side|False
+    anchor: Ref|False
   rtm/ir/EModelStmt :
     ref: Ref 
     model: EModel 
@@ -109,9 +135,20 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
   rtm/ir/ReferenceStmt :
     ref: Ref 
     value: String
+  rtm/ir/SchematicGroupStmt :
+    ref: Ref
+    unit: Int|False
+    group: Symbol
   rtm/ir/AttachStmt :
     attach:Symbol
     args:List<Ref>
+  rtm/ir/ConnectionStmt :
+    args:Tuple<Ref|Tuple<Ref>>
+  rtm/ir/SupportedByStmt :
+    ref:Ref
+    port?:True|False
+    option-id:Ref
+    nested-supports:Tuple<SupportedByStmt>
   rtm/ir/Mapping :
     mappings: List<KeyValue<Ref, Ref>>
   rtm/ir/Resistor :
@@ -138,7 +175,9 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
     color: ColorSpec|False
     luminous-intensity: Double|False
   rtm/ir/SupportOption :
+    id: Ref|False
     requires: List<RequireStmt>
+    properties: List<PinPropertiesStmt>
     mapping: Mapping
   rtm/ir/NamedColor :
     name: Symbol      
@@ -152,7 +191,7 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
   rtm/ir/ComponentArray :
     type: ComponentType
     length: Int 
-  rtm/ir/MakeBoard :
+  rtm/ir/MakeSchematic :
     module: Symbol
   rtm/ir/Point :
     x: Double
@@ -174,6 +213,17 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
   rtm/ir/Subtraction :
     a: Shape
     b: Shape
+  rtm/ir/Text :
+    string: String 
+    font: Symbol
+    size: Double
+    anchor: Anchor
+    pose: Pose
+  rtm/ir/Driver :
+    voltage: Double
+  rtm/ir/HighZ :
+    min-voltage: Double
+    max-voltage: Double
 
 register-serializer :
   serialize (o:OutputStream, p:rtm/ir/Pose) :
@@ -186,8 +236,12 @@ register-serializer :
     val flip-x? = deserialize(i)
     #Pose(center, angle, flip-x?)
 
-#for (ENUM in [rtm/ir/TH, rtm/ir/SMD,
-               rtm/ir/Top, rtm/ir/Bottom]) :
+#for (ENUM in [rtm/ir/Microstrip, rtm/ir/Stripline,
+               rtm/ir/TH, rtm/ir/SMD,
+               rtm/ir/Top, rtm/ir/Bottom,
+               rtm/ir/Up, rtm/ir/Down, rtm/ir/Left, rtm/ir/Right,
+               rtm/ir/N, rtm/ir/S, rtm/ir/E, rtm/ir/W,
+               rtm/ir/NE, rtm/ir/SE, rtm/ir/SW, rtm/ir/NW, rtm/ir/C]) :
   register-serializer :
     serialize (o:OutputStream, x:ENUM) : false
     deserialize (i:InputStream) : ENUM

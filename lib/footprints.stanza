@@ -71,8 +71,6 @@ public defn make-pin-grid (n-pin:Int, smd?:True|False) :
 ; ====== Reference Label Helpers ===============================================
 
 public defn ref-label (x:Double, y:Double, a:Anchor) :
-  ;inside pcb-package :
-  ;  layer silkscreen(values) = text(">REF", Courier, 0.7056, a, loc(x,y))
   false
     
 public defn ref-label (x:Double, y:Double) :
@@ -125,9 +123,8 @@ public defn make-two-pin-package (Z:Double, G:Double, X:Double, nr:Int, nc:Int, 
     pad p[0] : pin-pad at loc((- C2), 0.0)
     pad p[1] : pin-pad at loc(C2, 0.0)
     
-    ;if courtyard? :
-    ;  layer courtyard = rectangle(cy-width, cy-height)
-    
+
+   ;layer silkscreen(f-silk) = line-rectangle(cy-width, cy-height)
 
 public defn make-two-pin-package (Z:Double, G:Double, X:Double, nr:Int, nc:Int):
   make-two-pin-package(Z,G,X,nr,nc,true)
@@ -142,6 +139,7 @@ public defn make-ipc-two-pin-package (part-name:String, courtyard?:True|False) :
       "3225-1210" : [4.40, 1.20, 2.70, 6, 10]
       "5025-2010" : [6.20, 2.60, 2.70, 6, 14]
       "6332-2512" : [7.40, 3.80, 3.80, 8, 16]
+      "7351-2920" : [9.70, 5.10, 5.60, 12, 20]
       else : fatal("Unrecognized two pin part name: '%_." % [part-name])
     make-two-pin-package(Z, G, X, nr, nc, courtyard?)
 
@@ -168,10 +166,6 @@ public defn make-to-package (n:Int) :
       else :
         pad p[i] : pin-pad at loc(pin-x, -5.3)
 
-    ; Based on max width and height from https://www.infineon.com/cms/en/product/packages/PG-TO252/PG-TO252-3-344/
-    ;val [c-w, c-h] = [6.8, 10.6]
-    
-    
 
 ; Generic dual-in-line small-outline SMD package
 ; pin-pitch - spacing between pin centerlines in mm
@@ -220,8 +214,6 @@ public defn make-sop-package (
     val c-h = pkg-height + (2.0 * cy-padding)
 
 
-    
-
     ; Create exposed pad if odd number of pins
     if n % 2 == 1 :
       val [exp-w, exp-h] = match(exp-pad-dims) :
@@ -256,19 +248,6 @@ public defn make-sop65-package (n:Int) :
     for (i in (n / 2) to n, l in pin-row) do :
       pad p[i] : pin-pad at l1 * l
     
-    ;val pkg-height = switch(n) :
-    ;  8 : 3.0
-    ;  14 : 5.0
-    ;  16 : 5.0
-    ;  20 : 6.5
-    ;  24 : 7.8
-    ;  28 : 9.7
-    ;  else :
-    ;    to-double((n / 2) - 1) * pin-pitch + 1.1
-    
-    ;val c-w = lead-span + 1.5
-    ;val c-h = pkg-height
-
 
 public defn make-soic127p-package (n:Int, lead-span:Double) :
   inside pcb-package :  
@@ -290,12 +269,6 @@ public defn make-soic127p-package (n:Int, lead-span:Double) :
     for (i in (n / 2) to n, l in pin-row) do :
       pad p[i] : pin-pad at l1 * l
     
-    ;val pkg-height = to-double((n / 2) - 1) * pin-pitch + 1.1
-    
-    ;val c-w = lead-span + 1.5
-    ;val c-h = pkg-height
-    
-
 
 public defn make-soic127p-package (n:Int) :
   make-soic127p-package(n, 6.0)
@@ -355,7 +328,6 @@ public defn make-dfn-package (
     val l0 = loc(pad-x0, pad-y0, -90.0)
     val ln2 = loc((- pad-x0), (- pad-y0), 90.0)
 
-
     val pin-row = to-list(row-locs(W, n-side, pad-pitch))
 
     for (i in 0 to n-side, l in pin-row) do :
@@ -363,16 +335,6 @@ public defn make-dfn-package (
 
     for (i in n-side to n-pad, l in pin-row) do :
       pad p[i] : pin-pad at ln2 * l
-
-    ;val pad-x0-abs = abs(pad-x0)
-    ;val pad-x0-dir = pad-x0 / pad-x0-abs
-
-    ;val courtyard-w = max(body-w, 2.0 * pad-x0-abs + pad-h)
-    ;val courtyard-h = max(body-h, 2.0 * abs(pad-y0) + pad-w)
-
-
-
-    ;val pol-x = pad-x0-dir * (pad-x0-abs + (pad-h / 2.0) + 0.5)
 
 
 public defn make-qfn-package (pin-pitch:Double, lead-span:Double, n-pins:Int, pad-width:Double, pad-length:Double) :
@@ -404,10 +366,39 @@ public defn make-qfn-package (pin-pitch:Double, lead-span:Double, n-pins:Int, pa
     for (i in (n * 3) to (n * 4), l in row-pos) do :
       pad p[i] : pin-pad at loc((y0), (- x0), 180.0) * l
 
-    ;val c-w = (lead-span + 0.3 * 2.0)
-    
-    
 
+public defn red-alph-letter (idx:Int) : ["A" "B" "C" "D" "E" "F" "G" "H" "J" "K" "L" "M" "N" "P" "R" "T" "U" "V" "W" "Y" 
+   "AA" "AB" "AC" "AD" "AE" "AF" "AG" "AH" "AJ" "AK" "AL" "AM" "AN" "AP" "AR" "AT" "AU" "AV" "AW" "AY"  
+   "BA" "BB" "BC" "BD" "BE" "BF" "BG" "BH" "BJ" "BK" "BL" "BM" "BN" "BP" "BR" "BT" "BU" "BV" "BW" "BY"][idx]
+
+public defn alph-letter (idx:Int) : ["A" "B" "C" "D" "E" "F" "G" "H" "I" "J" "K" "L" "M" "N" "O" "P" "Q" "R" "S" "T" "U" "V" "W" "X" "Y" "Z" 
+   "AA" "AB" "AC" "AD" "AE" "AF" "AG" "AH" "AI" "AJ" "AK" "AL" "AM" "AN" "AO" "AP" "AQ" "AR" "AS" "AT" "AU" "AV" "AW" "AX" "AY" "AZ" 
+   "BA" "BB" "BC" "BD" "BE" "BF" "BG" "BH" "BI" "BJ" "BK" "BL" "BM" "BN" "BO" "BP" "BQ" "BR" "BS" "BT" "BU" "BV" "BW" "BX" "BY" "BZ"][idx]
+
+public defn bga-pin-name (r:Int, c:Int) :
+     val letter = red-alph-letter(r)
+     Ref(string-join([letter, c + 1]))
+
+public defn bga-pkg (pitch:Double, pad-diam:Double, n-pads:[Int Int], courtyard:[Double Double], omit-pads:Tuple<Symbol>) :
+  inside pcb-package :
+    pcb-pad pin-pad :
+      type = SMD
+      shape = circle(pad-diam / 2.0)
+
+    defn make-pad (r:Int, c:Int) :
+      val x = ((to-double(n-pads[0]) - 1.0) / -2.0 + to-double(c)) * pitch
+      val y = ((to-double(n-pads[1]) - 1.0) / 2.0 - to-double(r)) * pitch
+      val letter = red-alph-letter(r)
+      val name = Ref(string-join([letter, c + 1]))
+
+      if not contains?(omit-pads, name!(name)) :
+        pad {name} : pin-pad at loc(x,y)
+
+    for c in 0 to n-pads[0] do :
+      for r in 0 to n-pads[1] do :
+        make-pad(r,c)
+
+    ref-label()
 
 public defn lga-pkg (pin-pitch:Double, n-y:Int, n-x:Int, pad-width:Double, pad-length:Double, package-edge:Double, package-width:Double, package-length:Double) :
   inside pcb-package :
@@ -453,22 +444,21 @@ public defn lga-pkg (pin-pitch:Double, n-y:Int, n-x:Int, pad-width:Double, pad-l
       val pos = (loc(top_pos + pin-offset-width-pos, 180.0)) * l
       pad p[i] : pin-pad at pos  ; top
 
-    ; add chip courtyard
-    val offset = 
-      if package-edge < 0.0 : 
-        (- 2.0 * package-edge) 
-      else :
-        0.0
-    ; expand courtyard to contain pins if they are larger than the package
-  
-    ; chip border
-
-    ; pin 1 marking
     ref-label(0.0, 0.0)
 
 ; ====== Two-Pin Chip Packages =================================================
 
 ; Discrete Passives (Resistors, Capacitors, Inductors)
+
+pcb-package GENERIC-1206 :
+  make-ipc-two-pin-package("3216-1206")
+  external-names = ("1206")
+  ref-label()
+
+pcb-package GENERIC-2920 :
+  make-ipc-two-pin-package("7351-2920")
+  external-names = ("2920")
+  ref-label()
 
 public pcb-package CAPC1005X55-labeled :
   make-ipc-two-pin-package("1005-0402",false)
@@ -476,26 +466,32 @@ public pcb-package CAPC1005X55-labeled :
 
 pcb-package CAPC3216X125 :
   make-ipc-two-pin-package("3216-1206")
+  external-names = ("1206")
   ref-label()
 
 pcb-package RESC1005X35 :
   make-ipc-two-pin-package("1005-0402")
+  external-names = ("0402")
   ref-label()
   
 pcb-package RESC1608X45 :
   make-ipc-two-pin-package("1608-0603")
+  external-names = ("0603")
   ref-label()
   
 pcb-package RESC2012X50 :
   make-ipc-two-pin-package("2012-0805")
+  external-names = ("0805")
   ref-label()
   
 pcb-package RESC3216X55 :
   make-ipc-two-pin-package("3216-1206")
+  external-names = ("1206")
   ref-label()
 
 pcb-package RESC6332X35 :
   make-ipc-two-pin-package("6332-2512")
+  external-names = ("2512")
   ref-label()
 
 pcb-package panasonic-res-array-pkg :
@@ -521,18 +517,26 @@ pcb-package FUSC7351X160 :
 
 pcb-package CAPC1005X55 :
   make-ipc-two-pin-package("1005-0402")
+  external-names = ("0402")
   ref-label()
 
 pcb-package CAPC1608X80 :
   make-ipc-two-pin-package("1608-0603")
+  external-names = ("0603")
   ref-label()
 
 pcb-package CAPC2012X125 :
   make-ipc-two-pin-package("2012-0805")
+  external-names = ("0805")
   ref-label()
 
 pcb-package CAPC3216X160 :
   make-ipc-two-pin-package("3216-1206")
+  external-names = ("1206")
+  ref-label()
+
+pcb-package PANASONIC-CAP-SIZE-C :
+  make-two-pin-package(9.1, 1.6, 2.1, 13, 18)
   ref-label()
 
 pcb-package CAPAE10000X10500 :
@@ -566,6 +570,11 @@ pcb-package INDC2518X200 :
 
 pcb-package INDC1005X55 :
   make-ipc-two-pin-package("1005-0402")
+  external-names = ("0402")
+  ref-label()
+
+pcb-package INDM656636X610 :
+  make-two-pin-package(5.47, 2.61, 5.69, 14, 14)
   ref-label()
 
 pcb-package INDM560520X300 :
@@ -582,11 +591,20 @@ pcb-package INDM10001000X280 :
 
 pcb-package PANASONIC-CAP-SIZE-D :
   make-two-pin-package(7.0, 1.8, 1.5, 15, 15)
+  ref-label()
 
 ; Diodes
 
+pcb-package SOD123 :
+  make-two-pin-package(4.08, 2.46, 1.12, 4, 9, true)
+  ref-label()
+
 pcb-package DIOM-5436X220 :
   make-two-pin-package(7.06, 2.74, 2.26, 8, 15)
+  ref-label()
+
+pcb-package DIOM-3618X133 :
+  make-two-pin-package(4.30, 1.9, 1.4, 4, 9)
   ref-label()
 
 pcb-package DIOM-1713X90 :
@@ -614,8 +632,6 @@ pcb-package LED-5511109F-pkg :
     make-pth-pad(0.545)
   pad p[0] : pin-pad at loc(-1.27, 0.0)
   pad p[1] : pin-pad at loc(1.27, 0.0)
-  
-
 
   ref-label()
 
@@ -651,7 +667,6 @@ pcb-package SOT230P700X180-4N :
   pad p[3] : big-pad at loc(0.0, (- y0))
 
   
-  
   ref-label()
 
 pcb-package SOT23-3N :
@@ -686,7 +701,6 @@ pcb-package SOT230P700X180-6N :
   val [c-w, c-h] = [6.5, 8.35]
 
 
-
   ref-label()
 
 ; TODO: Make SOT generator/merge with SOP
@@ -707,8 +721,6 @@ pcb-package SOT65P280X145-8N :
   pad p[6] : pin-pad at loc(x1, (- y0))
   pad p[7] : pin-pad at loc(x0, (- y0))
 
-
-  
 
   ref-label()
 
@@ -741,7 +753,6 @@ pcb-package DDPAK-TO263-pkg :
 
   pad p[5] : tab-pad at loc(0.0, pin-y)
 
-  
   ref-label()
 
 ; ====== Dual In-Line Packages =================================================
@@ -759,7 +770,6 @@ pcb-package SOT95P280X145-5N :
   pad p[4] : pin-pad at loc(x0, (- y0))
 
   
-  
   ref-label()
 
 pcb-package SOT95P280X100-3N :
@@ -771,7 +781,6 @@ pcb-package SOT95P280X100-3N :
   pad p[0] : pin-pad at loc(x0,y0)
   pad p[1] : pin-pad at loc((- x0), y0)
   pad p[2] : pin-pad at loc(0.0, (- y0))
-
 
   
   ref-label()
@@ -785,7 +794,6 @@ pcb-package SOT65P235X100-3N :
   pad p[0] : pin-pad at loc(x0,y0)
   pad p[1] : pin-pad at loc((- x0), y0)
   pad p[2] : pin-pad at loc(0.0, (- y0))
-
 
   
   ref-label()
@@ -928,8 +936,6 @@ pcb-package DFLS1100-fp :
   pad p[1] : pos-pad at loc(4.1 / -2.0, 0.0, 0.0)
 
 
-  ; chip border
-
 
 pcb-package SOT23-5N :
   pcb-pad pin-pad :
@@ -958,7 +964,6 @@ pcb-package SOT23-6N :
   pad p[4] : pin-pad at loc(0.0, halfy)
   pad p[5] : pin-pad at loc((- halfx), halfy)
 
-  
 
 ;Right angle SMA
 pcb-package molex-732511350-pkg :
@@ -970,7 +975,6 @@ pcb-package molex-732511350-pkg :
   pad p[0] : pin-pad at loc(0.0, 0.0)
   for (i in 1 to 5, l in grid-locs(2, 2, 4.75, 4.75)) do :
     pad p[i] : gnd-pad at loc(0.0, 0.0) * l
-
 
 
   ref-label()
@@ -990,8 +994,6 @@ public pcb-package molex-microfit-3-pkg (n:Int) :
   pad p[n + 1] : right at loc(-5.6 - width / 2.0, 4.6)
 
 
-  ;val x = 5.6 * 2.0 + width
-  ;val y = 10.7
 
 
 pcb-package tdk-CLF7045T-471M-D-fp :
@@ -1003,7 +1005,7 @@ pcb-package TSSOP-14 :
 pcb-package TSSOP-16 :
   lga-pkg(0.65, 8, 0, 0.45, 1.45, 1.45 / -2.0, 4.4, 5.0)
 
-pcb-package rhom-SMLP34RGB-fp :
+pcb-package rohm-SMLP34RGB-fp :
   pcb-pad pin-pad :
     make-smd-pad(C, 0.45, 0.45)
   val d = 0.45 / 2.0 + 0.2
@@ -1018,6 +1020,11 @@ pcb-package ABM7-8MHZ-D2Y-T-pkg :
   lga-pkg(0.5, 1, 0, 2.6, 1.9, -0.2, 6.0, 3.5)
 
 ; ====== Quad Packages =========================================================
+pcb-package UTQFN50P500X600X85-36 :
+  lga-pkg(0.5, 10, 8, 0.25, 0.4 + 0.2, -0.2, 5.0, 6.0)
+  pcb-pad hs-pad :
+    make-smd-pad(3.7,4.2)
+  pad p[36] : hs-pad at loc(0.0, 0.0)
 
 pcb-package PQFN80P300X500X79-14 :
   val x0 = 1.05 / -2.0
@@ -1137,6 +1144,13 @@ pcb-package QFN65P400X400X100-16 :
   pad p[16] : hs-pad at loc(0.0, 0.0)
   ref-label()
 
+pcb-package QFN50P700X700X85-48 :
+  make-qfn-package(0.5, 7.0, 48, 0.3, 0.4)
+  pcb-pad hs-pad :
+    make-smd-pad(3.1, 3.1)
+  pad p[48] : hs-pad at loc(0.0, 0.0)
+  ref-label()
+
 pcb-package QFP80P900X900X160-32 :
   val x0 = -6.1 / 2.0
   val y0 = -7.3 / 2.0
@@ -1196,10 +1210,6 @@ public pcb-package pin-header-pkg (n-pin:Int, n-row:Int, pin-pitch:Double, row-p
 
   val n-col = to-int(ceil(to-double(n-pin) / to-double(n-row)))
 
-  val c-w = to-double(n-row) * row-pitch
-  val c-h = to-double(n-col) * pin-pitch
-
-
   
   ref-label()
 
@@ -1212,17 +1222,6 @@ pcb-package ironwood-C17829-socket-pkg :
   for (i in 0 to 676, l in grid-locs(26, 26, 1.0, 1.0)) do :
     pad p[i] : pin-pad at loc(0.0, 0.0) * l
 
-  ;  circle(14.4875, 14.8625, 1.70 / 2.0)
-  ;  circle(14.4875, -14.8625, 1.70 / 2.0)
-  ;  circle(-15.2375, -14.8625, 1.70 / 2.0)
-  ;  circle(-15.2375, 14.8625, 1.70 / 2.0)
-  ;  circle(14.4875, 12.3225, 0.85 / 2.0)
-  ;  circle(-15.2375, -9.7825, 0.85 / 2.0))
-  ;
-  ;  line-rectangle(8.0, 5.0, 0.0, 7.5)
-  ;  line-rectangle(8.0, 5.0, 0.0, -7.5)
-  ;  line-rectangle(5.0, 8.0, 7.5, 0.0)
-  ;  line-rectangle(5.0, 8.0, -7.5, 0.0))
 
   ref-label()
 
@@ -1272,26 +1271,6 @@ public pcb-package samtec-qsh-pkg (n-row:Int) :
     pad p[n + 2 + b * 4] : g2-pad at loc(gx3 + offset, 0.0)
     pad p[n + 3 + b * 4] : g1-pad at loc(gx4 + offset, 0.0)
 
-  ; alignment holes
-  ;  symmetric-about-x([
-  ;    circle(B / 2.0, 2.67, 0.51)
-  ;]))
-  ;
-  ;  symmetric-about-x([
-  ;    rectangle(1.1, 1.1, loc(B / 2.0, 2.67))
-  ;]))
-  ;
-  ;val cyw = A
-  ;val cyw2 = cyw / 2.0
-  ;val cyh = 7.6
-  ;val cyh2 = cyh / 2.0
-  ;val bevel = 2.0
-  ;
-  ;
-  ;  line-rectangle(cyw, cyh)
-  ;  line(0.25, point((- cyw2), cyh2 - bevel), point((- cyw2) + bevel, cyh2))
-  ;  line(0.25, point(cyw2, cyh2 - bevel), point(cyw2 - bevel, cyh2))
-  ;)
 
   ref-label()
 
@@ -1303,8 +1282,6 @@ pcb-package te-1551920-2-pkg :
   val y-ref = 16.8 / 2.0
   val x-ref = 11.6
 
-  ;  circle(0.0, y-ref, 1.55 / 2.0)
-  ;  circle(0.0, -1.0 * y-ref, 1.55 / 2.0))
 
   for (i in 0 to 19, l in col-locs(S, 19, 0.8)) do :
     pad p[i] : pin-pad at loc(7.37, -15.8 + y-ref) * l
@@ -1334,9 +1311,6 @@ pcb-package te-1551892-1-pkg :
   for (i in 8 to 12, l in pin-row) do :
     pad p[i] : comp-pin at loc(-3.1, -19.0 / 2.0) * l
 
-  ;                        (loc(0.0, 19.2 / 2.0) * rectangle(NW, 12.49, 19.0)))
-
-  ;
 
   ref-label()
 
@@ -1349,13 +1323,6 @@ pcb-package cui-PJ-002BH-SMT-TR-pkg :
   pad p[2] : pin-pad at loc(11.1, -5.7)
   pad p[3] : pin-pad at loc(11.2, 5.7)
 
-  ;  circle(5.0, 0.0, 0.85)
-  ;  circle(9.5, 0.0, 0.9)
-  ;)
-  ;
-  ;  line-rectangle(14.8, 9.0, 7.4, 0.0)
-  ;)
-  ;
 
   ref-label()
 
@@ -1366,12 +1333,6 @@ public pcb-package samtec-tsm-pkg (n-pin:Int) :
   for (i in 0 to n-pin, l in grid-locs(C, n-pin / 2, 2, 4.95, 2.54)) do :
     pad p[i] : pin-pad at loc(0.0, 0.0, 90.0) * l * loc(0.0, 0.0, 90.0)
 
-  val cyw = to-double(n-pin / 2) * 2.54
-  val cyh = 8.63
-
-  ;
-  ;
-  ;val x0 = to-double((n-pin / 2) - 1) * 2.54 / -2.0
   
   ref-label()
 
@@ -1408,19 +1369,12 @@ pcb-package harwin-M20-7812045-pkg :
     for j in 0 to n-row do :
       pad p[n-row * i + j] : pin-pad at l0 * loc(to-double(j) * row-pitch, (- to-double(i) * pin-pitch))
 
-  ;  symmetric-about-y(
-  ;  [circle(0.0, (2.54 * 20.0 - 5.08) / 2.0, 1.8 / 2.0)])
-  ;  grid-locs(20, 2, 2.54, 2.54) * circle(0.51))
-  ;
 
   ref-label()
 
 public pcb-package solder-jumper-pkg (n:Int) :
   make-pin-grid(n, true)
   
-  val c-w = 2.5
-  val c-h = to-double(n) * 2.0 + 0.5
-
 
   ref-label()
 
@@ -1528,7 +1482,6 @@ pcb-package molex-5025700893-pkg :
   pad p[12] : case-pad1 at loc(4.25, -15.9)
   pad p[13] : case-pad1 at loc(13.15, -15.9)
 
-  ;                         rectangle(0.5, 1.0, loc(13.6, -9.15)))
   
   ref-label()
 
@@ -1579,28 +1532,6 @@ public pcb-package samtec-qth-pkg (n-row:Int) :
     pad p[n + 3 + b * 4] : g1-pad at loc(gx4 + offset, 0.0)
 
   ; alignment holes
-  ;  symmetric-about-x([
-  ;    circle(D / 2.0, 2.03, 0.51)
-  ;  ]))
-  ;
-  ;  symmetric-about-x([
-  ;    rectangle(1.1, 1.1, loc(D / 2.0, 2.03))
-  ;  ]))
-  
-  val cyx = A / 2.0 + 0.5 ; maximum x coordinate of courtyard
-  val cyy = 4.0 ; maximum y coordinate of courtyard
-  val bevel = 2.0 ; length of side of bevel in mm
-  
-  val outline = polygon(
-    symmetric-about-x([
-      point(0.0, (- cyy))
-      point(cyx - bevel, (- cyy)),
-      point(cyx, (- cyy) + bevel),
-      point(cyx, cyy),
-      point(0.0, cyy),
-    ])
-  )
-
   
    
   ref-label()
@@ -1647,23 +1578,6 @@ public pcb-package ipex-cabline-vs-pkg (n:Int) :
   pad p[n + 2] : g1-pad at loc((- x3), y5)
   pad p[n + 3] : g2-pad at loc((- x5), y2)
   
-  ;   symmetric-about-x([
-  ;    point(0.0, y1)
-  ;    point(x7, y1)
-  ;    point(x7, y7)
-  ;    point(0.0, y7)
-  ;  ]))
-  ;
-  ;  symmetric-about-x([
-  ;    point(0.0, y1)
-  ;    point(x6, y1)
-  ;    point(x6, y2)
-  ;    point(x4, y2)
-  ;    point(x4, y4)
-  ;    point(x2, y4)
-  ;    point(x2, y3)
-  ;    point(0.0, y3)
-  ;  ]))
   
   ref-label()
 
@@ -1831,7 +1745,6 @@ public pcb-package amphenol-LD-pkg (n:Int, male?:False|True):
   pad p[n + 1] : gnd-pad at loc(0.0, B / -2.0)
 
   
-  
   ref-label()
 
 ; TE Connectivity M12 5-pin right-angle connector
@@ -1848,11 +1761,6 @@ pcb-package te-4-2172079-2-pkg :
   pad p[4] : pin-pad at loc(0.0, 0.0)
   pad p[5] : pin-pad at loc(0.0, -4.0)
 
-  ;                     circle(-7.5, 0.0, (2.3 / 2.0))
-  ;                     circle(7.5, -4.0, (2.8 / 2.0))
-  ;                     circle(-7.5, -4.0, (2.8 / 2.0)))
-  ;
-  ;
   
   ref-label()
 
@@ -1869,8 +1777,6 @@ pcb-package J-MPD-BK-5033 :
   pad p[1] : pos-pad at loc(x-dim, 0.0)
   pad p[2] : gnd-pad at loc(0.0, 0.0)
   
-  ;  rectangle(3.0, 3.0, loc((-1.0 * x-dim), 0.0))
-  ;  rectangle(3.0, 3.0, loc(x-dim, 0.0)))
   
   ref-label()
 
@@ -1882,12 +1788,6 @@ pcb-package XT-60-female-pkg :
   pad p[0] : pin-pad at loc(0.0, 0.0)
   pad p[1] : pin-pad at loc(7.2, 0.0)
   
-  ;                                     point(-4.4, 1.25),
-  ;                                     point(-4.4, -1.25), 
-  ;                                     point(-2.4, -4.0), 
-  ;                                     point(11.9, -4.0), 
-  ;                                     point(11.9, 4.0), 
-  ;                                     point(-2.4, 4.0))
   
   ref-label()
 
@@ -1926,8 +1826,6 @@ public pcb-package test-point-pads-pkg (pad-r: Double, mask-r: Double, point-loc
   val w = maxx - minx + 2.0 * mask-r
   val h = maxy - miny + 2.0 * mask-r
   
-  ;if bounding-courtyard :
-  ;  layer courtyard = rectangle(w, h, loc(minx + w / 2.0 - mask-r, miny + h / 2.0 - mask-r))
   
   ref-label(0.0, 1.5)
 
@@ -1952,11 +1850,11 @@ public pcb-package plated-hole-pkg (drill-r:Double, pad-r: Double, mask-r:Double
   
   ref-label()
 
-;public pcb-package non-plated-hole-pkg (drill-r:Double, mask-r:Double) :
+public pcb-package non-plated-hole-pkg (drill-r:Double, mask-r:Double) :
+  false
 
 public defn non-plated-hole-pkg (drill-r:Double) :
-  false
-  ;non-plated-hole-pkg(drill-r, drill-r)
+  non-plated-hole-pkg(drill-r, drill-r)
 
 ; ====== Switches, Relays ======================================================
 
@@ -1975,7 +1873,6 @@ pcb-package SW-JS102011SAQN-pkg :
   for i in 0 to 3 do :
     pad p[i] : pin-pad at loc((to-double(i - 1) * 2.5), 0.0)
   
-  ;                     circle(3.2, -4.0, 0.45))
   
   ref-label()
 
@@ -2008,7 +1905,6 @@ pcb-package mbed-nucleo-pkg :
   for [i,l] in zip(15 to 30, row-pos) do :
     pad p[i] : pin-pad at loc((- x0),(- y0), -90.0) * l
 
-  ; Expand to include pads
   
   ref-label()
 
@@ -2027,12 +1923,6 @@ pcb-package particle-electron-pkg :
   for (i in 18 to 36, l in row-pos) do :
     pad p[i] : pin-pad at loc((- x0), (- y0), 270.0) * l
 
-  ;  rectangle(0.1 * 25.4, 1.8 * 25.4, loc(-0.35 * 25.4, 0.0))
-  ;  rectangle(0.1 * 25.4, 1.8 * 25.4, loc(0.35 * 25.4, 0.0))
-  ;)
-  ;  rectangle(0.1 * 25.4, 1.8 * 25.4, loc(-0.35 * 25.4, 0.0))
-  ;  rectangle(0.1 * 25.4, 1.8 * 25.4, loc(0.35 * 25.4, 0.0))
-  ;)
   
   ref-label()
 
@@ -2052,7 +1942,7 @@ public pcb-package pjrc-teensy-3-2-pkg (pinout:Symbol) :
     for i in 0 to 7 seq : [4, 12 - i] ; center right
     for i in 0 to 3 seq : [5, 5 - i] ; right inner
     for i in 0 to 5 seq : [1 + i, 13] ; bottom edge
-    [[5, 1], [6,-1]] ; [vusb, reset]
+    [[5, 1], [6, 14]] ; [vusb, reset]
   ]
   
   val n-pins = switch(pinout) :
@@ -2066,12 +1956,11 @@ public pcb-package pjrc-teensy-3-2-pkg (pinout:Symbol) :
     pad p[i] : pin-pad at loc(x0 + to-double(x) * 2.54, y0 - to-double(y) * 2.54)
   
   val [w,h,l] = if pinout == `all-pins :
-    [7.0 * 2.54, 15.0 * 2.54, loc(0.0, 0.5 * 2.54)]
+    [7.0 * 2.54, 15.0 * 2.54, loc(0.0, -0.5 * 2.54)]
   else :
     [7.0 * 2.54, 14.0 * 2.54, loc(0.0, 0.0)]
   ;val w = 7.0 * 2.54
   ;val h = 14.0 * 2.54
-
 
   
   ref-label()
@@ -2095,8 +1984,6 @@ pcb-package bourns-DR331-513AE-pkg :
   pad p[1] : pin-pad at loc(x0, (- y0))
   pad p[2] : pin-pad at loc((- x0), (- y0), 180.0)
   pad p[3] : pin-pad at loc(( - x0), y0, 180.0)
-
-
 
   
   ref-label()
@@ -2140,11 +2027,28 @@ pcb-package TC2030-MCP-NL-pkg:
 ; pad p[7] : align at loc(5.08, 1.016)
 ; pad p[8] : align at loc(5.08, -1.016)
 
-  ;  circle(0.0, 0.0, 0.495)
-  ;  circle(5.08, 1.016, 0.495)
-  ;  circle(5.08, -1.016, 0.495)
-  ;  )
-  ;
+  
+  ref-label()
+
+pcb-package TC2050-MCP-NL-pkg:
+  pcb-pad pin-pad :
+    type = SMD
+    shape = circle(0.395)
+
+  val p = 1.27
+  val row-pos = to-list(loc(0.0,0.0,0.0) * row-locs(W, 2, p))
+
+  for (i in 0 to 2, l in row-pos) do :
+    pad p[i] : pin-pad at loc(p, -0.635, 90.0) * l
+  for (i in 2 to 4, l in row-pos) do :
+    pad p[i] : pin-pad at loc(2.54, -0.635, 90.0) * l
+  for (i in 4 to 6, l in row-pos) do :
+    pad p[i] : pin-pad at loc(3.81, -0.635, 90.0) * l
+  for (i in 6 to 8, l in row-pos) do :
+    pad p[i] : pin-pad at loc(5.08, -0.635, 90.0) * l
+  for (i in 8 to 10, l in row-pos) do :
+    pad p[i] : pin-pad at loc(6.35, -0.635, 90.0) * l
+
   
   ref-label()
 
@@ -2180,8 +2084,6 @@ pcb-package murata-UEI30-pkg :
   pad p[4] : pin-pad at loc((- x0), 0.0)
   pad p[5] : pin-pad at loc((- x0), -10.16)
 
-  ;                               rectangle(2.5, 23.4, loc((- x0), 0.0)))
-  ;
 
   ref-label()
 
@@ -2227,7 +2129,6 @@ pcb-package recom-R-78E-0-5-pkg :
   pad p[2] : pin-pad at loc(2.54, 0.0)
 
   
-  
   ref-label()
 
 ; Beware that the only difference between the 0.5 and 1.0 versions
@@ -2240,7 +2141,6 @@ pcb-package recom-R-78B-1-0-pkg :
   pad p[0] : pin-pad at loc(-2.54, 0.0)
   pad p[1] : pin-pad at loc(0.0, 0.0)
   pad p[2] : pin-pad at loc(2.54, 0.0)
-
 
 
   ref-label()
@@ -2256,13 +2156,6 @@ pcb-package ant-2GHz4-inverted-f-geom :
   pad p[0] : launch at loc(0.0, 0.0)
   pad p[1] : gnd-pt at loc(-2.1, 0.45)
 
-  ;trace on layer(0) = line(0.5, point(-2.1, 5.15), point(2.2, 5.15), point(2.2, 2.51), 
-  ;                              point(4.7, 2.51),  point(4.7, 5.15), point(6.9, 5.15), 
-  ;                              point(6.9, 2.51),  point(9.4, 2.51), point(9.4, 5.15), 
-  ;                              point(11.6, 5.15), point(11.6, 0.96))
-  ;trace on layer(0) = line(0.5, point(0.0, 0.0),   point(0.0, 5.15))
-  ;trace on layer(0) = rectangle(0.9, 5.4, loc(-2.1, 2.7))
-  ;via(0.3, 0.126) on layer(0) through layer(1) at loc(-2.1, 0.45)
 
 ; Omron SMD SSR
 pcb-package omron-g3vm-pkg :
@@ -2281,7 +2174,6 @@ pcb-package omron-g3vm-pkg :
   for (i in 4 to 8, l in pin-row) do :
     pad p[i] : pin-pad at l1 * l
 
-  
   
   ref-label()
 
@@ -2330,10 +2222,6 @@ pcb-package watterott-TMC2130-pkg :
   pad p[17] : pin-pad at loc((-2.0 * 2.54 - x0), (- y0))
   pad p[18] : pin-pad at loc((-1.5 * 2.54 - x0), (1.651 - y0))
 
-  ;  rectangle(0.1 * 25.4, 0.8 * 25.4, loc(-0.25 * 25.4, 0.0))
-  ;  rectangle(0.1 * 25.4, 0.8 * 25.4, loc(0.25 * 25.4, 0.0))
-  ;  rectangle(5.0, 4.0, loc(2.5, -0.4 * 25.4 + 2.0))
-  ;)
 
   ref-label()
 
@@ -2375,7 +2263,6 @@ pcb-package allegro-ACS781LLRTR-050U-T-pkg :
   val [c-w, c-h] = [7.0, 7.0]
 
 
-
   ref-label()
 
 ; XP Power half brick converter with heat sink
@@ -2404,13 +2291,6 @@ pcb-package xp-power-QSB20024S24-pkg :
   val h-y = 25.4
 
 
-  val [c-w, c-h] = [60.0, 70.0]
-
-
-  ;  line(0.254, [point(-30.0, 30.0), point(30.0, 30.0)])
-  ;  line(0.254, [point(-30.0, -30.0), point(30.0, -30.0)])
-  ;])
-
   ref-label()
 
 ; Murata UQQ quater brick converter with heat sink
@@ -2435,8 +2315,6 @@ pcb-package murata-UQQ-24-4-Q12PB-C-pkg :
   pad p[6] : pad-40-mil at loc((- x0), y1)
   pad p[7] : pad-60-mil at loc((- x0), y0)
   
-  ;val [c-w, c-h] = [60.0, 64.0]
-
 
 pcb-package PSON125P300X500X120-8 :
   pcb-pad pin-pad :
@@ -2477,8 +2355,6 @@ pcb-package mps-MPM3630-pkg :
   for i in 0 to 6 do :
     val pad-type = if i == 2 or i == 3 : pad-long else : pad-short
     pad p[12 + i] : pad-type at loc(1.25 - to-double(i) * 0.5, 2.8, 180.0)
-
-
 
 
   ref-label()
@@ -2532,3 +2408,217 @@ pcb-package SC70-8N-pkg :
   val c-h = pkg-height
   
   ref-label()
+
+pcb-package BGA11N50P3X4 :
+  bga-pkg(0.5, 0.25, [3 4], [1.44 1.94], [`A1])
+
+pcb-package ndk-NX3225GD-pkg :
+  make-two-pin-package(3.4, 0.4, 2.7, 6, 7)
+  ref-label()
+
+pcb-package stmicro-SPBTLE-RFTR-pkg :
+
+  pcb-pad pin-pad :
+    make-smd-pad(1.0, 1.6)
+
+  val pin-pitch = 1.27
+  val n = 10
+
+  val x0 = -13.5 / 2.0
+  val y0 = (to-double((n / 2) - 1) * pin-pitch) / 2.0
+  val l0 = loc(x0, y0, -90.0)
+  val l1 = loc((- x0), (- y0), 90.0)
+  
+  val pin-row = to-list(row-locs(W, n / 2, pin-pitch))
+
+  for (i in 0 to (n / 2), l in pin-row) do :
+    pad p[i] : pin-pad at l0 * l
+
+  pad p[5] : pin-pad at loc(4.0 + x0, -1.0 - y0)
+  
+  for (i in (n / 2) to n, l in pin-row) do :
+    pad p[i + 1] : pin-pad at l1 * l
+
+  layer courtyard = rectangle(13.5 + 1.6, 11.5 + 0.8, loc(0.0, 1.3))
+  layer board-edge = line(0.0, point((- x0) , y0 + 1.0), point(x0, y0 + 1.0))
+  layer silkscreen(f-silk) = line-rectangle(13.5 + 1.6, 8.0, 0.0, -1.0)
+  ref-label()
+
+pcb-package broadcom-apds-9301-pkg :
+  pcb-pad pin-pad :
+    make-smd-pad(1.1, 0.6)
+  pcb-pad mid-pad :
+    make-smd-pad(1.1, 0.7)
+
+  val x = (3.3 - 1.1) / 2.0
+  val y = (2.6 - 0.6) / 2.0
+
+  pad p[0] : pin-pad at loc((- x), (- y))
+  pad p[1] : pin-pad at loc((x), (- y))
+  pad p[2] : pin-pad at loc((x), 0.0)
+  pad p[3] : pin-pad at loc((x), (y))
+  pad p[4] : pin-pad at loc((- x), (y))
+  pad p[5] : pin-pad at loc((- x), 0.0)
+
+  layer courtyard = rectangle(3.3, 2.6)
+
+  layer silkscreen(f-silk) = line-rectangle(3.3, 2.6)
+  layer silkscreen(pol) = circle(-0.75 - x, (- y), 0.254)
+  ref-label()
+
+pcb-package PQFN50P300X250X86-14N :
+  lga-pkg(0.5, 4, 3, 0.25, 0.475 + 0.2, -0.2 + 0.1, 3.0, 2.5)
+
+pcb-package hiber-v2-pkg :
+  pcb-pad pin-pad :
+    make-smd-pad(1.35, 1.35)
+  pcb-pad ant-pad :
+    make-smd-pad(1.35, 1.85)
+
+  defn make-pad (r:Int, c:Int) :
+    val x = (-4.5 + to-double(c)) * 2.5
+    val y = (4.5 - to-double(r)) * 2.5
+    val letter = ["A" "B" "C" "D" "E" "F" "G" "H" "J" "K"][r]
+    val name = Ref(string-join([letter, c + 1]))
+    if r == 0 and c == 6 :
+      pad {name} : ant-pad at loc(x,y) * loc(0.0,0.762)
+    else :
+      pad {name} : pin-pad at loc(x,y)
+
+  for r in 0 to 10 do :
+    if r == 0 or r == 9 :
+      for c in 0 to 10 do :
+        make-pad(r,c)
+    else :
+      make-pad(r,0)
+      make-pad(r,9)
+
+  layer courtyard = rectangle(27.5, 27.5)
+
+  layer silkscreen(f-silk) = line-rectangle(27.5, 27.5  )
+  layer silkscreen(pol) = circle(-15.0, 11.0, 0.254)
+  ref-label()
+
+pcb-package QFP50P1200X1200X160-64N :
+  lga-pkg(0.5, 16, 16, 0.3, 1.2, -1.2, 10.3, 10.3)
+
+pcb-package QFP50P900X900X160-48N :
+  lga-pkg(0.5, 12, 12, 0.3, 1.2, -1.2, 9.3, 9.3)
+
+pcb-package ublox-max-8q-0-pkg :
+  pcb-pad pin-pad :
+    make-smd-pad(0.7, 1.8)
+
+  val pin-pitch = 1.1
+  val lead-span = 9.7 - (1.0 - 0.8)
+  val x0 = (- ((lead-span / 2.0)))
+  val y0 = (to-double(9 - 1) * pin-pitch) / 2.0
+  val l0 = loc(x0, y0, -90.0)
+  val l1 = loc((- x0), (- y0), 90.0)
+  
+  val pin-row = to-list(row-locs(W, 9, pin-pitch))
+
+  for (i in 0 to 9, l in pin-row) do :
+    pad p[i] : pin-pad at l0 * l
+  
+  for (i in 9 to 18, l in pin-row) do :
+    pad p[i] : pin-pad at l1 * l
+  
+  val pkg-height = 10.1
+  
+  val c-w = lead-span + 1.6
+  val c-h = pkg-height
+  
+  layer courtyard = rectangle(c-w, c-h)
+
+  layer silkscreen(f-silk) = line-rectangle(c-w, c-h)
+  layer silkscreen(pol) = circle(x0 - 2.0, y0, 0.254)
+  ref-label()
+
+pcb-package hiber-HBR-DS-18002-pkg :
+  pcb-pad pin-pad :
+    make-smd-pad(1.8, 0.7)  
+
+  val x0 = -35.6 / 2.0
+  val y0 = -47.2 / 2.0 + 4.02
+
+  val row-pos = to-list(loc(0.0,0.0,0.0) * row-locs(W, 16, 2.54))
+
+  for (i in 0 to 16, l in row-pos) do :
+    pad p[i] : pin-pad at loc(x0, y0, 90.0) * l
+
+  for (i in 16 to 29, l in row-pos) do :
+    pad p[i] : pin-pad at loc((x0 + 2.54), (47.2 / 2.0), 0.0) * l
+
+  for (i in 29 to 45, l in row-pos) do :
+    pad p[i] : pin-pad at loc((- x0), (- y0), -90.0) * l
+
+  layer courtyard = rectangle(35.6, 47.2)
+  
+  ref-label()
+
+pcb-package linx-712-CONUFL001-SMD-pkg :
+  pcb-pad pin-pad-1 :
+    make-smd-pad(1.0, 1.05)
+
+  pcb-pad pin-pad-2 :
+    make-smd-pad(1.05, 2.2)
+
+  val y0 = -1.0 - (1.05 / 2.0)
+  val x0 = 1.45
+  pad p[0] : pin-pad-1 at loc(0.0, y0)
+  pad p[1] : pin-pad-2 at loc(x0, 0.0)
+  pad p[2] : pin-pad-2 at loc((- x0), 0.0)
+
+  layer courtyard = rectangle(4.0, 3.15, loc(0.0, -0.475))
+  layer silkscreen(f-silk) = line-rectangle(4.0, 3.15, 0.0, -0.475)
+  ref-label()
+
+pcb-package si-SiT8208-pkg :
+  pcb-pad pin-pad :
+    make-smd-pad(1.1, 1.0)
+  val x = 1.9 / 2.0
+  val y = 1.5 / 2.0
+  pad p[0] : pin-pad at loc((- x), (- y))
+  pad p[1] : pin-pad at loc(x, (- y))
+  pad p[2] : pin-pad at loc(x, y)
+  pad p[3] : pin-pad at loc((- x), y)
+  layer courtyard = rectangle(2.7, 2.4)
+  layer silkscreen(f-silk) = line-rectangle(2.7, 2.4)
+  layer silkscreen(pol) = circle((- x) - 0.5, (- y), 0.254)
+  ref-label()
+
+pcb-package ASP-134488-01-pkg :
+  ; TODO: Get real dimensions
+  bga-pkg(1.27, 0.64, [40 10], [55.78 14.68], [])
+
+pcb-package pulse-J0G-0009NL-pkg :
+  pcb-pad pin-pad :
+    make-pth-pad(0.89 / 2.0)
+  pcb-pad case-pad :
+    make-pth-pad(1.27 / 2.0)
+  pcb-pad shield-pad :
+    make-pth-pad(1.57 / 2.0)
+
+
+  val pin-row = row-locs(6, 1.02)
+  for (i in 0 to 6, l in pin-row) do :
+    pad p[i] : pin-pad at loc(0.0, -6.6) * l
+  val three-row = row-locs(3, 1.02)
+  for (i in 6 to 9, l in pin-row) do :
+    pad p[i] : pin-pad at loc(-2.0 * 1.02, -9.14) * l
+  for (i in 9 to 12, l in pin-row) do :
+    pad p[i] : pin-pad at loc(2.0 * 1.02, -9.14) * l
+
+  pad p[12] : case-pad at loc(-15.04 / 2.0, 8.89 - 2.54)  
+  pad p[13] : case-pad at loc(-15.04 / 2.0, 8.89)  
+  pad p[14] : case-pad at loc(15.04 / 2.0, 8.89)  
+  pad p[15] : case-pad at loc(15.04 / 2.0, 8.89 - 2.54)  
+  pad p[16] : case-pad at loc(15.04 / 2.0, 8.89 - 2.54 * 2.0)  
+  pad p[17] : shield-pad at loc(17.58 / 2.0, 0.0)  
+  pad p[18] : shield-pad at loc(-17.58 / 2.0, 0.0)  
+
+  layer cutout = union(
+    symmetric-about-y([
+      circle(9.65 / 2.0, 0.0, 3.2 / 2.0)
+  ]))

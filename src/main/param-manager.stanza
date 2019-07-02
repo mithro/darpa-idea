@@ -4,23 +4,31 @@ defpackage param-manager :
   import collections
   import rtm/utils
   import rtm/errors
+  import jitpcb/config
+  import jitpcb/errors
 
 ;============================================================
 ;==================== Public Interface ======================
 ;============================================================
 
-public defn read-params (over-name:String|False, base-name:String, configs:List<Symbol>) :
-  defn parse-file (base?:True|False) :
-    val filename = base-name when base? else over-name
-    match(filename:String) :
-      val forms = read-file(filename)
-      val file = parse-syntax[param-file / #param-file](forms)
-      check(file, base?)
-      file
-    else :
-      ParamFile([])
-  val param-file = merge(parse-file(false), parse-file(true))
-  Params(param-file, configs)
+public defn read-params (over-name:String|False, configs:List<Symbol>) :
+  defn parse! (filename:String, base?:True|False) :
+    val file = parse-syntax[param-file / #param-file](read-file(filename))
+    check(file, base?)
+    file
+
+  ;First read the base file
+  val base-file-path = norm-path("%_/jitpcb.params" % [jitpcb-install-dir()])
+  throw(NoParamFile(base-file-path)) when not file-exists?(base-file-path)
+  val base-file = parse!(base-file-path, true)
+
+  ;Then read the over file
+  match(over-name:String) :
+    val merged = merge(parse!(over-name, false), base-file)
+    Params(merged, configs)
+  ;No over file, just return the base file
+  else :
+    Params(base-file, configs)
 
 ;============================================================
 ;====================== Params ==============================
@@ -315,25 +323,11 @@ defsyntax param-file :
 ;======================== Errors ============================
 ;============================================================
 
-public defstruct InvalidParam <: Exception :
-  config:Symbol
-  field:Symbol
-  message:String
-  value  
-defmethod print (o:OutputStream, t:InvalidParam) :
-  print(o, "Parameter %~ in config %~ cannot be assigned value %~: %_" % [
-    field(t), config(t), value(t), message(t)])
-
-public defstruct ParamException <: Exception :
-  info: FileInfo|False with: (default => false)
-  msg
-with :
-  constructor => PE
-
-defmethod print (o:OutputStream, e:ParamException) :
-  print(o, "%_: " % [info(e)]) when info(e) is-not False    
-  print(o, msg(e))
-
+public defn PE (info:FileInfo|False, msg) :
+  ParamException(info, to-string(msg))
+public defn PE (msg) :
+  ParamException(false, to-string(msg))
+  
 defn UnknownConfigName (c:Symbol) :
   PE("There is no config set named %~." % [c])
 defn DuplicateConfigNameArgs (dup-config-names:Collection<Symbol>) :
@@ -370,8 +364,6 @@ defn name? (s:ParamSet) : attempt: One(name(s) as? Symbol) else: None()
 ;<PARAM FILE>
 lower :
   print-post-power-generation = true
-export-kicad :
-  preplaced = "asdfkadf.kicad"
 bom :
   vendors = ("Digi-Key", "Mouser")
   selection = "selection-doc.txt"
@@ -381,7 +373,7 @@ placer :
 prune :
   prune-for = board
   prune-all = (asdf asdf sdaf asdf asdf)
-prune (starsky-special) :
+prune (ngc-special) :
   prune-for = board
   prune-all = (asdf asdf sdaf asdf asdf)
 ;<PARAM FILE>

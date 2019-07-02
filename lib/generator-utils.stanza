@@ -4,6 +4,7 @@ defpackage generator-utils :
   import rtm/ir
   import rtm/ir-gen
   import rtm/ir-utils
+  import symbols
 
 #use-added-syntax(ir-gen)
 
@@ -93,17 +94,17 @@ public defn place-variants (
 
       add(args-bounds, arg-set => apply(box-loc, bounds(arg-box)))
 
-      ;if place-symbol? :
-      ;  ;symbol(arg-inst) at unit-loc(box-loc)
-      ;  match(sch-group) :
-      ;    (s:Symbol) :
-      ;      schematic-group(arg-inst) = {Ref(s)}
-      ;    (o) :
-      ;      false
+      if place-symbol? :
+        ;symbol(arg-inst) at unit-loc(box-loc)
+        match(sch-group) :
+          (s:Symbol) :
+            schematic-group(arg-inst) = {Ref(s)}
+          (o) :
+            false
 
       ; TODO: pass side in?
-      ;if place-package? :
-      ;  package(arg-inst) at box-loc on Top
+      if place-package? :
+        package(arg-inst) at box-loc on Top
 
   args-bounds
 

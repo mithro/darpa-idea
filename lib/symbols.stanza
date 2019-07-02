@@ -8,7 +8,11 @@ defpackage symbols :
 
 #use-added-syntax(ir-gen)
 
-val UNIT-TO-MM = 2.54
+; ====== Unit Conversion Functions =======
+; The following functions expect sizes and coordinates in "Symbol Units" which 
+; is the expected grid size in schematics. For Kicad this is 50 mil, or 1.27 mm
+
+public val UNIT-TO-MM = 2.54
 
 public defn unit-point (x:Double, y:Double, scale:Double) :
   point(scale * x, scale * y)
@@ -50,167 +54,16 @@ public defn unit-loc (p:Point|[Double,Double], scale:Double) :
 public defn unit-loc (p:Point|[Double,Double]) :
   unit-loc(p, UNIT-TO-MM)
 
-public defn unit-line (w:Double, ps:Collection<Point|[Double,Double]>, scale:Double) :
-  false
-
-public defn unit-line (w:Double, ps:Collection<Point|[Double,Double]>) :
-  unit-line(w, ps, UNIT-TO-MM)
-
-public defn unit-line (ps:Collection<Point|[Double,Double]>) :
-  unit-line(0.05, ps)
-
-public defn unit-polygon (l:Symbol, ps:Collection<Point|[Double,Double]>, scale:Double) :
-  false
-
-public defn unit-polygon (l:Symbol, ps:Collection<Point|[Double,Double]>) :
-  unit-polygon(l, ps, UNIT-TO-MM)
-
-public defn unit-polygon (ps:Collection<Point|[Double,Double]>) :
-  unit-polygon(`background, ps)
-
-public defn unit-circle (l:Symbol, p:Point|[Double,Double], r:Double, scale:Double) :
-  val [x,y] = point-coords(p)
-  false
-
-public defn unit-circle (l:Symbol, p:Point|[Double,Double], r:Double) :
-  unit-circle(l, p, r, UNIT-TO-MM)
-
-public defn unit-circle (p:Point|[Double,Double], r:Double) :
-  unit-circle(`foreground, p, r)
-
-public defn unit-circle (l:Symbol, r:Double) :
-  unit-circle(l, [0.0,0.0], r)
-
-public defn unit-triangle (l:Symbol, p0:Point|[Double,Double], p1:Point|[Double,Double], w:Double, scale:Double) :
-  val [x0, y0] = point-coords(p0)
-  val [x1, y1] = point-coords(p1)
-
-  val [dx, dy] = [x1 - x0, y1 - y0]
-  val len = pow(pow(dx, 2.0) + pow(dy, 2.0), 0.5)
-  val [ux, uy] = [dx / len, dy / len]
-
-  val w2 = w / 2.0
-  val p2 = [x0 - (w2 * uy), y0 + (w2 * ux)]
-  val p3 = [x0 + (w2 * uy), y0 - (w2 * ux)]
-  
-  unit-polygon(l, [p1, p2, p3], scale)
-
-public defn unit-triangle (l:Symbol, p0:Point|[Double,Double], p1:Point|[Double,Double], w:Double) :
-  unit-triangle(l, p0, p1, w, UNIT-TO-MM)
-
-public defn unit-triangle (p0:Point|[Double,Double], p1:Point|[Double,Double], w:Double) :
-  unit-triangle(`background, p0, p1, w)
-
-public defn unit-rectangle (l:Symbol, w:Double, h:Double, p:Pose, scale:Double) :
-  false
-
-public defn unit-rectangle (l:Symbol, w:Double, h:Double, p:Pose) :
-  unit-rectangle(l, w, h, p, UNIT-TO-MM)
-
-public defn unit-rectangle (w:Double, h:Double, p:Pose) :
-  unit-rectangle(`foreground, w, h, p)
-
-public defn unit-rectangle (l:Symbol, w:Double, h:Double) :
-  unit-rectangle(l, w, h, loc(0.0,0.0))
-
-public defn unit-rectangle (w:Double, h:Double) :
-  unit-rectangle(`foreground, w, h)
-
-public defn unit-rectangle (p0:Point|[Double,Double], p1:Point|[Double,Double]) :
-  val [x0, y0] = point-coords(p0)
-  val [x1, y1] = point-coords(p0)
-  val w = x1 - x0
-  val h = y1 - y0
-  val cx = x0 + w / 2.0
-  val cy = y0 + h / 2.0
-  unit-rectangle(w, h, loc(cx, cy))
-
-val MM-TO-POINT = 72.0 / 24.5
-
-public defn unit-text (l:Symbol, p:Point|[Double,Double], txt, size:Double, a:Anchor, scale:Double) :
-  false
-
-public defn unit-text (l:Symbol, p:Point|[Double,Double], txt, size:Double, a:Anchor) :
-  unit-text(l, p, txt, size, a, UNIT-TO-MM)
-
-public defn unit-text (l:Symbol, p:Point|[Double,Double], txt, size:Double) :
-  unit-text(l, p, txt, size, C)
-
-public defn unit-text (l:Symbol, p:Point|[Double,Double], txt) :
-  unit-text(l, p, txt, 0.5)
-
-public defn unit-text (p:Point|[Double,Double], txt) :
-  unit-text(`symbol, p, txt)
-
-public defn unit-text (p:Point|[Double,Double], txt, size:Double) :
-  unit-text(`symbol, p, txt, size)
-
-public defn unit-ref (p:Point|[Double,Double], ref-prefix, size:Double, a:Anchor, scale:Double) :
-  unit-text(`reference, p, ref-prefix, size, a, scale)
-
-public defn unit-ref (p:Point|[Double,Double], ref-prefix, size:Double, a:Anchor) :
-  unit-ref(p, ref-prefix, size, a, UNIT-TO-MM)
-
-public defn unit-ref (p:Point|[Double,Double], ref-prefix, size:Double) :
-  unit-ref(p, ref-prefix, size, W)
-
-public defn unit-ref (p:Point|[Double,Double], ref-prefix) :
-  match(ref-prefix) :
-    (f:False) : unit-ref(p, ">REF", 0.5)
-    (o) : unit-ref(p, ref-prefix, 0.5)
-
-public defn unit-ref (p:Point|[Double,Double]) :
-  unit-ref(p, ">REF")
-
-public defn unit-val (p:Point|[Double,Double], size:Double, a:Anchor, scale:Double) :
-  unit-text(`value, p, ">VALUE", size, a, scale)
-
-public defn unit-val (p:Point|[Double,Double], size:Double, a:Anchor) :
-  unit-val(p, size, a, UNIT-TO-MM)
-
-public defn unit-val (p:Point|[Double,Double], size:Double) :
-  unit-val(p, size, W)
-
-public defn unit-val (p:Point|[Double,Double]) :
-  unit-val(p, 0.5)
-
-defn unit-approx-arc (p:Point|[Double,Double], r:Double, a1:Double, a0:Double, w:Double, n:Int, scale:Double) :
-  val pts = Vector<[Double,Double]>()
-  val a-delta = (a1 - a0) / to-double(n)
-  val [x,y] = point-coords(p)
-
-  for i in 0 through n do :
-    val ai = a0 + to-double(i) * a-delta
-    add(pts, [x + r * cos(ai), y + r * sin(ai)])
-
-  unit-line(w, pts, scale)
-
-defn unit-approx-arc (p:Point|[Double,Double], r:Double, a1:Double, a0:Double, w:Double, n:Int) :
-  unit-approx-arc(p, r, a1, a0, w, n, UNIT-TO-MM)
-
-defn unit-approx-arc (p:Point|[Double,Double], r:Double, a1:Double, a0:Double, w:Double) :
-  unit-approx-arc(p, r, a1, a0, w, 10)
-
-defn unit-approx-arc (p:Point|[Double,Double], r:Double, a1:Double, a0:Double) :
-  unit-approx-arc(p, r, a1, a0, 0.05)
-
-defn unit-approx-arc (p:Point|[Double,Double], r:Double, a1:Double) :
-  unit-approx-arc(p, r, a1, 0.0)
 
 ; ====== Shared Geometry Helpers ======
 
-defn draw-opto (dir:Symbol) :
-  unit-circle(`no-fill, 0.75)
-  unit-line([[0.5, 0.1], [0.9, -0.3]])
-  unit-line([[0.5, -0.2], [0.9, -0.6]])
-  switch(dir) :
-    `emitter :
-      unit-line([[0.75, -0.3], [0.9, -0.3], [0.9, -0.15]])
-      unit-line([[0.75, -0.6], [0.9, -0.6], [0.9, -0.45]])
-    `detector :
-      unit-line([[0.5, -0.05], [0.5, 0.1], [0.65, 0.1]])
-      unit-line([[0.5, -0.35], [0.5, -0.2], [0.65, -0.2]])
-    else : fatal("Incorrect opto type %_." % [dir])
+
+
+; ====== Switches, Relays ======================================================
+
+; TODO: Switch symbol parametric in connections
+
+; TODO: Relay symbol parametric in connections
 
 ; ====== Generic Box ===========================================================
 
@@ -226,23 +79,21 @@ defmethod print (o:OutputStream, bpl:BoxPinLocs) :
   for pl in pin-locs(bpl) do :  
     println(o2, pl)
 
-public deftype PinSpecType <: Hashable & Equalable
-
 public defstruct PinSpec <: Hashable & Equalable :
-  l-pins: Tuple<Ref|KeyValue<Ref,Int>>
-  r-pins: Tuple<Ref|KeyValue<Ref,Int>>
-  b-pins: Tuple<Ref|KeyValue<Ref,Int>>
-  t-pins: Tuple<Ref|KeyValue<Ref,Int>>
+  l-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  r-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  b-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
+  t-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
   order: Symbol|False
 with:
   constructor => #PinSpec
 
-defn to-pin-tuple (entries:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>) :
+defn to-pin-tuple (entries:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
   to-tuple $ for e in entries seq :
     match(e) :
       (e:Ref) : e
       (e:Symbol) : Ref(e)
-      (e:KeyValue<Symbol|Ref, Int>) :
+      (e:KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>) :
         match(key(e)) :
           (k:Symbol) : Ref(k) => value(e)
           (k:Ref) : k => value(e)
@@ -251,53 +102,53 @@ defn to-pin-tuple (entries:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>) :
 ;  PinSpec2([
 ;    `l-pins => [`a => 1, `b => 2]
 ;    `b-pins => [`c => 3, `d => 4]])
-public defn PinSpec2 (pins:Tuple<KeyValue<Symbol, Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>>>, order:Symbol|False) :
+public defn PinSpec2 (pins:Tuple<KeyValue<Symbol, Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>>>, order:Symbol|False) :
   val allowed-pins = `(l-pins, b-pins, r-pins, t-pins)
   for k in seq(key, pins) do :
     fatal("Not an allowed pin setting: %_" % [k]) when not contains?(allowed-pins, k) 
   defn grab-option (o:Symbol) : to-pin-tuple(lookup?(pins, o, []))
   #PinSpec(grab-option(`l-pins), grab-option(`r-pins), grab-option(`b-pins), grab-option(`t-pins), order)
 
-public defn PinSpec2 (pins:Tuple<KeyValue<Symbol, Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>>>) :
+public defn PinSpec2 (pins:Tuple<KeyValue<Symbol, Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>>>) :
   PinSpec2(pins, false)
       
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>) :
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
   #PinSpec(to-pin-tuple(left), [], [], [], false)
 
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
                      order:Symbol|False) :
   #PinSpec(to-pin-tuple(left), [], [], [], order)
   
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>) :
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
   #PinSpec(to-pin-tuple(left), to-pin-tuple(right), [], [], false)
 
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
                      order:Symbol|False) :
   #PinSpec(to-pin-tuple(left), to-pin-tuple(right), [], [], order)
   
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>) :
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
   #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), [], false)
 
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
                      order:Symbol|False) :
   #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), [], order)
   
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     top:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>) :
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     top:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>) :
   #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), to-pin-tuple(top), false)
 
-public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
-                     top:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int>>,
+public defn PinSpec (left:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     right:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     bottom:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
+                     top:Seqable<Symbol|Ref|KeyValue<Symbol|Ref, Int|Symbol|Seqable<Int|Symbol>>>,
                      order:Symbol|False) :
   #PinSpec(to-pin-tuple(left), to-pin-tuple(right), to-pin-tuple(bottom), to-pin-tuple(top), order)
 
@@ -319,195 +170,8 @@ defmethod print (o:OutputStream, ps:PinSpec) :
   println(o2, b-pins(ps))
   println(o2, t-pins(ps))
 
-defn resolve-pin-locs (spec:PinSpec) :
 
-  ; Sequence of no connect (NC) pin references
-  val nc-ref = seq({Ref("NC%_" % [_])}, 0 to false)
-  
-  ; Mapping from BoxPinLocs/pad index to symbol pin ref, side, and side index
-  ; pad index is 1-index, pin ref is 0-indexed, and side index is 0-indexed
-  val pad-pin-map = HashTable<Int,[Ref,Symbol,Int]>()
-  
-  ; Iterator for assigning unused pad indices
-  val free-idx-seq = to-seq(1 to false)
 
-  ; Function that steps through used pad indices in pad-pin-map until it finds an unused one
-  defn next-free-idx () :
-    while key?(pad-pin-map, peek(free-idx-seq)) :
-      next(free-idx-seq)
-    next(free-idx-seq)
-
-  ; Mapping from side to vector of un-numbered pin refs (with side and side index)
-  val no-nums = HashTable-init<Symbol,Vector<[Ref,Symbol,Int]>>(Vector<[Ref,Symbol,Int]>{})
-  
-  ; Add pins with assigned pin number, and keep track of un-numbered pins
-  for [maybe-pins, side] in [
-    [l-pins(spec), `left]
-    [r-pins(spec), `right]
-    [b-pins(spec), `bottom]
-    [t-pins(spec), `top]
-  ] do :
-    match(maybe-pins) :
-      (side-pins:Collection<Ref|KeyValue<Ref,Int>>&Lengthable) :
-        for [pin-ref, side-idx] in zip(side-pins, 0 to length(side-pins)) do :
-          match(pin-ref) :
-            (kv:KeyValue<Ref,Int>) :
-              if key?(pad-pin-map, value(kv)) :
-                fatal("Duplicate pin number %_ in generic box symbol pin map." % [value(kv)])
-              pad-pin-map[value(kv)] = [key(kv), side, side-idx]
-            (r:Ref) :
-              add(no-nums[side], [r, side, side-idx])
-      (o) : false
-
-  ; Resolve un-numbered pins in specified side ordering
-  defn side-pins (side:Symbol) :
-    to-list $ for [vref, vside, vidx] in values(pad-pin-map) filter :
-      vside == side
-
-  defn alternate (a:Seqable, b:Seqable) :
-    val a-seq = to-seq(a)
-    val b-seq = to-seq(b)
-    
-    generate:
-      while not empty?(a-seq) or not empty?(b-seq) :
-        if not empty?(a-seq) : yield(next(a-seq))
-        if not empty?(b-seq) : yield(next(b-seq))
-
-  val def-order = match(order(spec)) :
-    (s:Symbol) : s
-    (o) : `lrbt
-
-  ; Define order to process un-numbered pins based on order spec
-  val no-num-seq = switch(def-order) :
-    `ccw : cat-all([
-        no-nums[`left]
-        no-nums[`bottom]
-        in-reverse(no-nums[`right])
-        in-reverse(no-nums[`top])
-      ])
-    
-    `alternate : cat(
-        alternate(
-          no-nums[`left]
-          no-nums[`right])
-        alternate(
-          no-nums[`top]
-          no-nums[`bottom])
-      )
-    
-    ; default case for `lrbt and `d-sub
-    else : cat-all([
-        no-nums[`left]
-        no-nums[`right]
-        no-nums[`bottom]
-        no-nums[`top]
-      ])
-
-  ; Assign un-numered and place in pad-pin-map list
-  for no-num-pin in no-num-seq do :
-    pad-pin-map[next-free-idx()] = no-num-pin
-  
-  ; Resolve no-connects, add to left side to create dense pad map list
-  defn side-count (side:Symbol) :
-    length(side-pins(side))
-
-  var left-side-idx = side-count(`left)
- 
-  for i in 1 to maximum(keys(pad-pin-map)) do :
-    if not key?(pad-pin-map, i) :
-      pad-pin-map[i] = [next(nc-ref), `left, left-side-idx]
-      left-side-idx = left-side-idx + 1
-
-  ; Determine box width and height in order to fit ref text
-  defn text-width (ref:Ref) :
-    0.0
-  
-  defn text-width (ref-tup:[Ref,?,?]) :
-    text-width(ref-tup[0])
-  
-  val n-center = max(side-count(`bottom), side-count(`top))
-  
-  val [lr-pad, tb-pad] = if n-center > 0 : [0.5, 1.0] else: [0.0, 0.0]
-
-  val left-w = maximum(0.0, seq(text-width{_}, side-pins(`left))) + lr-pad
-  val center-w = to-double(n-center)
-  val right-w = maximum(0.0, seq(text-width{_}, side-pins(`right))) + lr-pad
-  
-  val box-w = left-w + center-w + right-w 
-  
-  defn text-heights (sa:Seqable<[Ref,?,?]>, sb:Seqable<[Ref,?,?]>) :
-    val a = to-seq(sa)
-    val b = to-seq(sb)
-    generate :
-      while not empty?(a) or not empty?(b) :
-        switch([empty?(a),empty?(b)]) :
-          [false,false] :
-            yield(text-width(next(a)) + 1.0 + text-width(next(b)))
-          [true,false] :
-            yield(text-width(next(b)))
-          else :
-            yield(text-width(next(a)))
-
-  val h = maximum(
-    to-double(max(length(side-pins(`left)), length(side-pins(`right)))),
-    text-heights(side-pins(`bottom), side-pins(`top))
-  )
-  
-  val box-h = h + tb-pad 
-
-  ; Iterate through all pins in pin number order to assign coordinates
-  val top-y = (box-h / 2.0) - 0.5 - (tb-pad / 2.0)
-  val center-x = (box-w / -2.0) + left-w + 0.5
-
-  defn pin-coord (side:Symbol, side-idx:Int) :
-    ; TODO: get rid of special case for d-sub with pin order input?
-    val delta = switch(order(spec)) :
-      `d-sub :
-        if side-idx > side-count(side) / 2 :
-          to-double(side-idx * 2 - side-count(side))
-        else : 
-          to-double(side-idx * 2)
-      else :
-        to-double(side-idx)
-    
-    switch(side) :
-      `left : top-y - delta
-      `right : top-y - delta
-      `bottom : center-x + delta
-      `top : center-x + delta
-
-  val pin-locs = to-list $ for i in 1 through maximum(keys(pad-pin-map)) seq :
-    val [ref, side, idx] = pad-pin-map[i]
-    [ref, side, pin-coord(side, idx)]
-  
-  ; TODO: option for filtering out NC before returning?
-  BoxPinLocs(box-w, box-h, pin-locs)
-
-defn place-box-pins (bpl:BoxPinLocs) :
-  false
-
-defn side-pins (bpl:BoxPinLocs, side:Symbol) :
-  to-list $ for [ref, pin-side, coord] in pin-locs(bpl) filter :
-    pin-side == side
-
-defn place-ref-val (bpl:BoxPinLocs) :
-  val top-pins? = length(side-pins(bpl, `top)) > 0
-  val bottom-pins? = length(side-pins(bpl, `bottom)) > 0
-  
-  val w2 = box-w(bpl) / 2.0
-  val h2 = box-h(bpl) / 2.0
-
-  val [rx, ry, vx, vy] = switch([top-pins?, bottom-pins?]):
-    [false, false] : [(- w2), h2 + 0.5, (- w2), (- h2) - 0.5]
-    [false, true] : [(- w2), h2 + 1.0, (- w2), h2 + 0.5]
-    [true, false] : [(- w2), (- h2) - 0.5, (- w2), (- h2) - 1.0]
-    [true, true] : [w2, h2 + 0.5, w2, (- h2) - 0.5]
-  
-  unit-ref([rx, ry])
-  unit-val([vx, vy])
-
-public defn generic-box-body (spec:PinSpec) :
-  false
 
 
 

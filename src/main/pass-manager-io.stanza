@@ -1,0 +1,21 @@
+#use-added-syntax(serializer)
+
+defpackage pass-manager-io :
+  import core
+  import rtm/ir
+
+public deftype PassArg
+public defmulti filename (a:PassArg) -> String
+
+public defstruct FileArg <: PassArg :
+  filename:String with: (as-method => true)
+public defstruct GenArg <: PassArg :
+  filename:String with: (as-method => true)
+  prog:Collection<TStmt>
+
+register-struct-serializers (o:OutputStream, i:InputStream) :
+  pass-manager-io/FileArg :
+    filename:String
+  pass-manager-io/GenArg :
+    filename:String
+    prog:Collection<TStmt>

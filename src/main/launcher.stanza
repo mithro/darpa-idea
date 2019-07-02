@@ -1,15 +1,12 @@
 defpackage jitpcb/launcher :
   import core
   import collections
-  import parser
+  import jitpcb/driver
   import rtm/errors
-  import pass-manager
 
-let :
-  try :
-    for f in LAUNCH-FNS do :
-      f()
-  catch (e) :
-    val error? = print-error-report(e)
-    exit(-1) when error?
+try :
+  LAUNCH-FN()
+catch (e) :
+  val error? = print-error-report(e)
+  exit(-1) when error?
   

@@ -79,6 +79,25 @@ defmethod print (o:OutputStream, t:PinType) :
 defmethod print (o:OutputStream, s:CStmt) :
   defn P (x) : print(o, x)
   match(s) :
+    (s:GroundStmt) :
+      P $ "ground(%,)" % [refs(s)]
+    (s:PowerStmt) :
+      P $ "power(%,) :" % [refs(s)]
+      P $ "\n  voltage = %~" % [voltage(s)]
+      P $ "\n  current = %~" % [current(s)]
+    (s:DiffPairStmt) :
+      defn ppair ([x,y]:[Ref,Ref]) :
+        "(%_, %_)" % [x,y]
+      defn prop? (name:String, p) :
+        match(p:False) : false
+        else : "%_ = %~" % [name, p]
+      P $ "diffpairs(%,)" % [seq(ppair,pairs(s))]
+      print-property-block(o, [
+        prop?("line-type", line-type(s))
+        prop?("impedance", impedance(s))
+        prop?("skew", skew(s))
+        prop?("max-loss", max-loss(s))
+        prop?("spacing", spacing(s))])
     (s:DefaultPackageStmt) :
       val m? = not empty?(mapping(s))
       P $ "package = %_%_" % [star-escape(package(s), m?), mapping(s)]
@@ -89,23 +108,98 @@ defmethod print (o:OutputStream, s:CStmt) :
     (s:ReferencePrefixStmt) :
       P $ "reference-prefix = %~" % [prefix(s)]
 
-defmethod print (o:OutputStream, s:SupportsStmt) :
-  if empty?(options(s)) :
-    print(o, "supports %~" % [capability(s)])
+defmethod print (o:OutputStream, s:PinPropertiesStmt) :
+  val level-str = "" when level(s) == 0
+             else " (level = %_)" % [level(s)]
+  if empty?(entries(s)) :
+    print(o, "properties(%_)%_ : ()" % [ref(s), level-str])
   else :
     val o2 = IndentedStream(o)
-    print(o, "supports %~ :" % [capability(s)])
-    if length(options(s)) == 1 :
-      val opt = head(options(s))
-      val o2 = IndentedStream(o)
-      do(lnprint{o2, _}, requires(opt))
-      do(lnprint{o2, _}, mappings(mapping(opt)))
+    print(o, "properties(%_)%_ :" % [ref(s), level-str])
+    for e in entries(s) do :
+      lnprint(o2, "%~ => " % [key(e)])
+      print-kv(o2, value(e))
+
+;<doc>===================================
+;=========== Literal Values =============
+;========================================
+The reading and printing of literal values:
+All supported value types:
+  - True
+  - False
+  - Char
+  - Byte
+  - Int
+  - Long
+  - Float
+  - Double
+  - String    
+  - Symbol
+  - List
+  - Tuple
+  - Ref
+  
+Overarching invariant: ESIR should be able to be copied-and-pasted
+into the generator system and ran.
+
+Self-evaluating primitives, Char,Byte,Int,Long,Float,Double,String,
+can be written out using Stanza's formatted write utility. Symbols
+must be quoted. Lists are written out using the #L(...) generator
+syntax. Tuples are written out using [...] syntax. Refs are written
+using the #R(...) generator syntax.
+;========================================
+;===================================<doc>
+
+defn print-kv (o:OutputStream, v) :
+  defn P (v) :
+    match(v) :
+      (v:True|False|Char|Byte|Int|Long|
+         Float|Double|String) : "%~" % [v]
+      (v:Symbol) : "`%~" % [v]
+      (v:Ref) : "#R(%~)" % [v]
+      (v:List) : "#L(%,)" % [seq(P,v)]
+      (v:Tuple) : "[%,]" % [seq(P,v)]
+  print(o, P(v))
+
+defmethod print (o:OutputStream, s:SupportsStmt) :
+  defn id-str (o:SupportOption) :
+    match(id(o)) :
+      (r:Ref) : " (%_)" % [r]
+      (r:False) : ""
+
+  val o2 = IndentedStream(o)    
+  if length(options(s)) == 1 :
+    val opt = head(options(s))
+    val empty-opt? = empty?(requires(opt)) and
+                     empty?(properties(opt)) and
+                     empty?(mappings(mapping(opt)))
+    if empty-opt? :
+      print(o, "supports %~%_" % [capability(s), id-str(opt)])
     else :
-      for opt in options(s) do :
-        lnprint(o, "  option :")
-        val o2 = IndentedStream(o, 4)
-        do(lnprint{o2, _}, requires(opt))
-        do(lnprint{o2, _}, mappings(mapping(opt)))
+      val o2 = IndentedStream(o)
+      print(o, "supports %~%_ :" % [capability(s), id-str(opt)])
+      do(lnprint{o2, _}, requires(opt))
+      do(lnprint{o2, _}, properties(opt))      
+      do(lnprint{o2, _}, mappings(mapping(opt)))
+  else :
+    print(o, "supports %~ :" % [capability(s)])
+    for opt in options(s) do :
+      lnprint(o, "  option%_ :" % [id-str(opt)])
+      val o2 = IndentedStream(o, 4)        
+      do(lnprint{o2, _}, requires(opt))
+      do(lnprint{o2, _}, properties(opt))      
+      do(lnprint{o2, _}, mappings(mapping(opt)))
+
+defmethod print (o:OutputStream, s:MaxCurrentDrawStmt) :
+  print(o, "max-current-draw(%,) = %~" % [refs(s), current(s)])
+
+defmethod print (o:OutputStream, s:EStateStmt) :
+  print(o, "estate(%_) = [%,]" % [ref(s), states(s)])
+
+defmethod print (o:OutputStream, s:EState) :
+  print{o, _} $ match(s) :
+    (s:Driver) : "drives(%_)" % [voltage(s)]
+    (s:HighZ) : "highz(%_, %_)" % [min-voltage(s), max-voltage(s)]
 
 defmethod print (o:OutputStream, c:DefComponent) :
   if empty?(pins(c)) and empty?(stmts(c)) :
@@ -116,8 +210,20 @@ defmethod print (o:OutputStream, c:DefComponent) :
       print-all(o, pre-nl(pins(c)))
       print-all(o, pre-nl(stmts(c)))
 
+defmethod print (o:OutputStream, t:LineType) :
+  print{o, _} $ match(t) :
+    (t:Microstrip) : "Microstrip"
+    (t:Stripline) : "Stripline"
+
+
+
+
 defmethod print (o:OutputStream, p:DefPackage) :
-  if empty?(cat-all([pad-defs(p), pads(p)])) :
+  val all-defs = cat-all $ [
+    pad-defs(p),
+    pads(p),
+  ]
+  if empty?(all-defs) :
     print(o, "pcb-package %~ : ()" % [name(p)])
   else :
     print(o, "pcb-package %~ :" % [name(p)])
@@ -142,6 +248,7 @@ defmethod print (o:OutputStream, p:PadType) :
     (p:SMD) : "SMD"
     (p:TH) : "TH"
 
+
 defmethod print (o:OutputStream, d:DefPart) :
   val o2 = IndentedStream(o)
   print(o, "pcb-part %~ :" % [name(d)])
@@ -150,6 +257,12 @@ defmethod print (o:OutputStream, d:DefPart) :
   print(o2, "\npackage = %~" % [package(d)])
   print(o2, "\ncomponent = %~" % [component(d)]) when component(d) is-not False
   print(o2, "\nemodel = %_" % [emodel(d)]) when emodel(d) is-not False
+
+
+
+
+
+
 
 defmethod print (o:OutputStream, s:NetStmt) :
   val name-str = match(name(s)) :
@@ -174,15 +287,30 @@ defmethod print (o:OutputStream, s:NodeStmt) :
   print(o, "node %~ : %_" % [name(s), type(s)])
 
 defmethod print (o:OutputStream, s:InstSupportsStmt) :
-  print(o, "inst %~ " % [inst(s)])
-  print(o, SupportsStmt(capability(s), options(s)))
+  print(o, "inst %~ %_" % [inst(s), supports-stmt(s)])
+
+defmethod print (o:OutputStream, s:SupportedByStmt) :
+  val port-str = "port" when port?(s) else "capability"
+  print(o, "required %_ %_ supported-by %_" % [port-str, ref(s), option-id(s)])
+  if not empty?(nested-supports(s)) :
+    print(o, " where :")
+    val o2 = IndentedStream(o)
+    do(lnprint{o2, _}, nested-supports(s))
+
+
 
 defmethod print (o:OutputStream, s:PackageStmt) :
   val selector = "" when instance?(s) else "insts-of "
   val package = match(package(s)) :
                  ([p m]:[Symbol Mapping]) : " = %_%_" % [star-escape(p, not empty?(m)), m]
                  (p:False) : ""
-  print(o, "package(%_%~)%_" % [selector, ref(s), package])
+  val loc = match(pose(s)) :
+              (p:Pose) : " at %_" % [p]
+              (p:False) : ""
+  val side = match(side(s)) :
+               (s:Side) : " on %_" % [s]
+               (s:False) : ""
+  print(o, "package(%_%~)%_%_%_%_" % [selector, ref(s), package, loc, side, anchor-str(anchor(s))])
 
 defmethod print (o:OutputStream, s:EModelStmt) :
   print(o, "emodel(%_) = %_" % [ref(s), model(s)])
@@ -190,11 +318,24 @@ defmethod print (o:OutputStream, s:EModelStmt) :
 defmethod print (o:OutputStream, p:PartStmt) :
   print(o, "part(%_) = %~" % [ref(p), part(p)])
 
+
+defmethod print (o:OutputStream, s:SchematicGroupStmt) :
+  if unit(s) is False :
+    print(o, "schematic-group(%_) = %~" % [ref(s), group(s)])
+  else :
+    print(o, "schematic-group(%_, %_) = %~" % [ref(s), unit(s), group(s)])
+
+
 defmethod print (o:OutputStream, s:AttachStmt) :
   print(o, "attach %~ (%,)" % [attach(s), args(s)])
 
+defmethod print (o:OutputStream, s:ConnectionStmt) :
+  print(o, "connect (%,)" % [args(s)])
+
+
 defmethod print (o:OutputStream, s:ReferenceStmt) :
   print(o, "reference-designator(%_) = %~" % [ref(s), value(s)])
+
 
 defmethod print (o:OutputStream, c:CapabilityType) :
   defn loop (c:CapabilityType, star?:True|False) :
@@ -235,10 +376,18 @@ defmethod print (o:OutputStream, d:Diode) :
 defmethod print (o:OutputStream, c:NamedColor) :
   print(o, "NamedColor(`%~)" % [name(c)])
 
+
 defmethod print (o:OutputStream, s:Side) :
   print{o, _} $ match(s) :
     (s:Top) : "Top"
     (s:Bottom) : "Bottom"
+
+defmethod print (o:OutputStream, d:Dir) :
+  print{o, _} $ match(d) :
+    (d:Up) : "Up"
+    (d:Down) : "Down"
+    (d:Left) : "Left"
+    (d:Right) : "Right"
 
 defmethod print (o:OutputStream, m:Mapping) :
   if not empty?(m) :
@@ -268,8 +417,10 @@ defmethod print (o:OutputStream, p:RPin) :
     (t:SinglePin) : "pin %~" % [ref(p)]
     (t) : "port %~ : %_" % [ref(p), t]
 
-defmethod print (o:OutputStream, b:MakeBoard) :
-  print(o, "make-board(%~) : ()" % [module(b)])  
+
+defmethod print (o:OutputStream, b:MakeSchematic) :
+  print(o, "make-schematic(%~)" % [module(b)])
+
 defmethod print (o:OutputStream, s:Point) :
   print(o, "point(%~, %~)" % [x(s),y(s)])
 defmethod print (o:OutputStream, s:Polygon) :
@@ -284,6 +435,8 @@ defmethod print (o:OutputStream, s:Union) :
   print(o, "union(%_)" % [add-indents("%*" % [pre-nl(shapes(s))])])
 defmethod print (o:OutputStream, s:Subtraction) :
   print(o, "subtraction(%_, %_)" % [a(s), b(s)])
+defmethod print (o:OutputStream, s:Text) :
+  print(o, "text(%~, %~, %~, %_, %_)" % [string(s), font(s), size(s), anchor(s), pose(s)])
 
 defmethod print (o:OutputStream, a:Anchor) :
   print{o, _} $ match(a) :
@@ -328,3 +481,7 @@ defn trim-trailing<?T> (f:T -> True|False, xs0:Seqable<?T>) :
 defn trim-trailing-false (xs:Seqable) :
   trim-trailing({_ is False}, xs)
 
+defn anchor-str (a:Ref|False) :
+  match(a) :
+    (a:Ref) : " (relative-to %_)" % [a]
+    (a:False) : ""

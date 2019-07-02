@@ -4,6 +4,28 @@ defpackage rtm/utils :
   import stz/arg-parser
 
 ;============================================================
+;================= Table Utilities ==========================
+;============================================================
+
+public defn to-inttable<?V> (key:V -> Int, values:Seqable<?V>) -> IntTable<V> :
+  to-inttable<V> $
+    for v in values seq :
+      key(v) => v
+
+public defn to-hashtable<?K,?V> (key:V -> ?K, values:Seqable<?V>) -> HashTable<K,V> :
+  to-hashtable<K,V> $
+    for v in values seq :
+      key(v) => v
+
+public defn update?<?K,?V> (f:() -> V, table:Table<?K,?V>, k:K) -> V :
+  if key?(table, k) :
+    table[k]
+  else :
+    val v = f()
+    table[k] = v
+    v
+
+;============================================================
 ;===================== String Utilities =====================
 ;============================================================
 
@@ -35,9 +57,31 @@ public defn replace-template (template:String, fills:Seqable<KeyValue<String,Str
     replace(t, key(e), value(e))
   reduce(fill, template, fills)
 
-public defn lnprint (o:OutputStream, x) :
-  print(o, '\n')
-  print(o, x)
+;============================================================
+;===================== Argument Parsing =====================
+;============================================================
+
+#for (num-arg in [int-arg, long-arg, float-arg, double-arg]
+      num-arg? in [int-arg?, long-arg?, float-arg?, double-arg?]
+      to-num in [to-int, to-long, to-float, to-double]
+      Num in [Int, Long, Float, Double]) :
+
+  public defn num-arg (parsed:ParseResult, flag:String) :
+    val str = single(parsed, flag)
+    match(to-num(str)) :
+      (v:Num) : v
+      (v:False) : throw(FlagNotANumber(flag, str))  
+
+  public defn num-arg?<?T> (parsed:ParseResult, flag:String, default:?T) :
+    if has-flag?(parsed, flag) : num-arg(parsed, flag)
+    else : default
+
+public defstruct FlagNotANumber <: Exception :
+  flag:String
+  value:String
+defmethod print (o:OutputStream, e:FlagNotANumber) :
+  val fmt = "The value given to flag %~ (%~) is not a number."
+  print(o, fmt % [flag(e), value(e)])
 
 ;============================================================
 ;====================== Property List =======================
@@ -128,19 +172,44 @@ defmethod print (o:OutputStream, e:FileTypeException) :
 ;============================================================
 ;================ List Contents of Directory ================
 ;============================================================
-val DIR-BUFFER = Vector<String>()
-extern defn put_dir_entry (name:ptr<byte>) -> int :
-  add(DIR-BUFFER, String(name))
-  return 0
-extern list_dir: (ptr<byte>, ptr<(ptr<byte> -> ?)>) -> int
+
+extern free_stringlist : ptr<StringList> -> int
+lostanza deftype StringList :
+  n: int
+  capacity: int
+  strings: ptr<ptr<byte>>
+  
+extern list_dir: ptr<byte> -> ptr<StringList>
+public lostanza defn dir-files (dirname:ref<String>, include-parents?:ref<True|False>) -> ref<Tuple<String>> :
+  ;Call list dir
+  val list = call-c list_dir(addr!(dirname.chars))
+  val null = 0L as ptr<?>
+  if list == null: throw(DirException(dirname, linux-error-msg()))
+  ;Convert to vector
+  val strings = Vector<String>()
+  for (var i:int = 0, i < list.n, i = i + 1) :
+    add(strings, String(list.strings[i]))
+  ;Free stringlist
+  call-c free_stringlist(list)
+  ;Apply filter
+  if include-parents? == true : return to-tuple(strings)
+  else : return to-tuple(filter(fn(without-parents), strings))
+
 defn without-parents (name:String) : name != "." and name != ".."
-public lostanza defn dir-files (dirname:ref<String>, 
-                        include-parents?: ref<True|False>) -> ref<Tuple<String>> :
-  clear(DIR-BUFFER)
-  val r = call-c list_dir(addr!(dirname.chars), addr(put_dir_entry))
-  if r == -1 : throw(DirException(dirname, linux-error-msg()))
-  if include-parents? == true : return to-tuple(DIR-BUFFER)
-  else : return to-tuple(filter(fn(without-parents), DIR-BUFFER))
+
+;val DIR-BUFFER = Vector<String>()
+;extern defn put_dir_entry (name:ptr<byte>) -> int :
+;  add(DIR-BUFFER, String(name))
+;  return 0
+;extern list_dir: (ptr<byte>, ptr<(ptr<byte> -> ?)>) -> int
+;public lostanza defn dir-files (dirname:ref<String>, 
+;                                include-parents?: ref<True|False>) -> ref<Tuple<String>> :
+;  clear(DIR-BUFFER)
+;  val r = call-c list_dir(addr!(dirname.chars), addr(put_dir_entry))
+;  if r == -1 : throw(DirException(dirname, linux-error-msg()))
+;  if include-parents? == true : return to-tuple(DIR-BUFFER)
+;  else : return to-tuple(filter(fn(without-parents), DIR-BUFFER))
+
 public defn dir-files (dirname:String) : dir-files(dirname, false)
 
 public defstruct DirException <: IOException :
@@ -654,3 +723,75 @@ public defstruct EmptyPath <: PathException
 defmethod print (o:OutputStream, e:EmptyPath) :
   print(o, EP-MSG)
 val EP-MSG = "Could not determine project name. The given path is empty."
+
+;============================================================
+;================ Hexadecimal Conversion ====================
+;============================================================
+val HEX-CHARS = ['0' '1' '2' '3' '4' '5' '6' '7' '8' '9'
+                 'A' 'B' 'C' 'D' 'E' 'F']
+defn hex (b:Byte) :
+  val c1 = HEX-CHARS[to-int(b) >> 4]
+  val c2 = HEX-CHARS[to-int(b) & 0xF]
+  String([c1, c2])
+defn hexint (c:Char) :
+  if c >= '0' and c <= '9' :
+    to-int(c) - to-int('0')
+  else if c >= 'A' and c <= 'F' :
+    10 + to-int(c) - to-int('A')
+  else :
+    fatal("Invalid hexadecimal character: %_" % [c])
+defn hexint (c1:Char, c2:Char) :
+  hexint(c1) << 4 + hexint(c2)
+defn hexchar (c1:Char, c2:Char) :
+  to-char(hexint(c1, c2))
+
+;============================================================
+;=================== C-Identifier Decoder ===================
+;============================================================
+
+public defn c-decode (s:String) :
+  if suffix?(s, "_") :
+    val n = length(s) - 1
+    val buffer = StringBuffer()
+    let loop (i:Int = 0) :
+      if i < n :
+        val c = s[i]
+        if c == '_' :
+          if i + 2 < n :
+            add(buffer, hexchar(s[i + 1], s[i + 2]))
+            loop(i + 3)
+          else :
+            fatal("Illegally encoded identifier.")
+        else :
+          add(buffer, c)
+          loop(i + 1)
+    to-string(buffer)
+  else :
+    s
+
+;============================================================
+;==================== C-Identifier Encoder ==================
+;============================================================
+
+public defn c-encode (s:String) :
+  defn valid? (c:Char, include-underscore?:True|False) :
+    (c >= '0' and c <= '9') or
+    (c >= 'a' and c <= 'z') or
+    (c >= 'A' and c <= 'Z') or
+    (c == '_' and include-underscore?)
+  defn encode () :
+    val buffer = StringBuffer()
+    for c in s do :
+      if valid?(c, false) :
+        add(buffer, c)
+      else :
+        add(buffer, '_')
+        print(buffer, hex(to-byte(c)))
+    add(buffer, '_')
+    to-string(buffer)
+  if suffix?(s, "_") : encode()
+  else if all?(valid?{_, true}, s) : s
+  else : encode()
+
+public defn c-encode (s:Symbol) :
+  c-encode(to-string(s))

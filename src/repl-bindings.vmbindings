@@ -1,0 +1,10 @@
+extern dlclose
+extern dlerror
+extern dlopen
+extern free_stringlist
+extern get_file_type
+extern list_dir
+extern sleep_us
+extern dlsym
+extern mkdir
+extern defn driver_main: (long) -> long

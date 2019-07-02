@@ -155,23 +155,6 @@ defn yageo-res-range (r-min:Double, r-max:Double, tol:Double, pkg:String) :
       if r >= r-min and r <= r-max :
         yageo-res-prt(r, tol, pkg)
 
-;for [r-min, r-max, tol, pkg] in yageo-res-ranges do :
-;  yageo-res-range(r-min, r-max, tol, pkg)
-
-;pcb-part-server yageo-res-server (part-req) :
-;  match(emodel(part-req)) :
-;    (r-mod:Resistor) :
-;      match(resistance(r-mod), tolerance(r-mod)) :
-;        (res-req:Double, tol-req:Double) :
-;          for [r-min, r-max, tol, pkg] in yageo-res-ranges do :
-;            if tol <= tol-req / 2.0 and r-min <= res-req and res-req <= r-max :
-;              val res-std = closest-std-val(res-req, tol)
-;              serve-part(yageo-res-prt(res-std, tol, pkg))
-;        (r,t) : false
-;    (o-mod) : false
-;serves :
-;  emodels = (Resistor())
-
 public pcb-part littlefuse-2090L-prt (i-hold:Double) :
   manufacturer = "Littelfuse Inc."
   mpn = switch(i-hold) :
@@ -332,22 +315,6 @@ defn yageo-cap-range (c-min:Double, c-max:Double, max-v:Double, pkg:String, temp
 ;for [c-min, c-max, max-v, pkg, temp, reel] in yageo-cap-ranges do :
 ;  yageo-cap-range(c-min, c-max, max-v, pkg, temp, reel)
 
-;pcb-part-server yageo-cap-server (part-req) :
-;  match(emodel(part-req)) :
-;    (c-mod:Capacitor) :
-;      match(capacitance(c-mod), tolerance(c-mod), max-voltage(c-mod)) :
-;        (cap-req:Double, tol-req:Double, volt-req:Double) :
-;          if 20.0 <= tol-req / 2.0 : 
-;            for [c-min, c-max, max-v, pkg, temp, reel] in yageo-cap-ranges do :
-;              if c-min <= cap-req and cap-req <= c-max and volt-req <= max-v :
-;                val cap-std = closest-std-val(cap-req, 20.0)
-;                val cap-serve = yageo-cap-prt(cap-std, 20.0, max-v, pkg, temp, reel)
-;                serve-part(cap-serve)
-;          else : false
-;        (c,t,v) : false
-;    (o-mod) : false
-;serves :
-;  emodels = (Capacitor())
 
 pcb-part kemet-C1206C106M8PACTU-prt :
   manufacturer = "KEMET"
@@ -492,6 +459,11 @@ pcb-part panasonic-cap-4uf7-prt:
   mpn = "EEE1VA4R7SR"
   package = CAPAE4300X5400
 
+pcb-part panasonic-cap-22uf-prt :
+  manufacturer = "Panasonic"
+  mpn = "35SVPF22M"
+  package = PANASONIC-CAP-SIZE-C
+
 pcb-part panasonic-cap-47uf-prt:
   manufacturer = "Panasonic"
   mpn = "EEE1EA470WP"
@@ -513,6 +485,11 @@ pcb-part panasonic-cap-1500uf-prt:
   package = CAPAE16000X16500
 
 ; ====== Inductors - Murata LQM series  ======
+pcb-part coilcraft-XAL6060-682MEB-prt :
+  manufacturer = "Coilcraft"
+  mpn = "XAL6060-682MEB"
+  package = INDM656636X610
+
 pcb-part murata-ind-4uh7-prt :
   manufacturer = "Murata"
   mpn = "LQM2HPN4R7MGCL"
@@ -555,6 +532,11 @@ pcb-part gen-led-prt :
   mpn = "LTST-C190GKT"
   package = LEDSC16080X80
 
+pcb-part osr-LG-L29K-F2J1-24-prt :
+  manufacturer = "Osram Opto"
+  mpn = "LG L29K-F2J1-24"
+  package = LEDSC16080X80
+
 pcb-part vishay-VLMKG3400-prt :
   manufacturer = "Vishay"
   mpn = "VLMKG3400-GS08"
@@ -569,6 +551,17 @@ pcb-part dialight-5511109F-prt :
   manufacturer = "Dialight"
   mpn = "5511109F"
   package = LED-5511109F-pkg
+
+pcb-part smc-SBRD10200TR-prt :
+  manufacturer = "SMC Diode solutions"
+  mpn = "SBRD10200TR"
+  package = TO228P970X238-3-pkg
+
+; 3A 40 - 100V  Schottky diode
+pcb-part on-S310FA-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "S310FA"
+  package = DIOM-3618X133
 
 pcb-part on-SMBJ14A-prt :
   manufacturer = "ON Semiconductor"
@@ -595,10 +588,47 @@ pcb-part mcc-SK88L-TP-prt :
   mpn = "SK88L-TP"
   package = DIOM-7162X200
 
+pcb-part  nexperia-PDZ5v6BGWJ-prt:
+  manufacturer = "Nexperia"
+  mpn = "PDZ5.6BGWJ"
+  package = SOD123
+  ;description = "DIODE ZENER 5.6V 365MW SOD123"
+
+pcb-part  nexperia-PDZ15BGWX-prt:
+  manufacturer = "Nexperia"
+  mpn = "PDZ15BGWX"
+  package = SOD123
+  ;description = "DIODE ZENER 15V 365MW SOD123"
+
+pcb-part  smc-DSS16UTR-prt:
+  manufacturer = "SMC"
+  mpn = "DSS16UTR"
+  package = SOD123
+  ;description = "DIODE SCHOTTKY 60V 1A SOD-123FL"
+
+pcb-part on-BAT54SLT1G-prt :
+  manufacturer = "ON Semiconductor"
+  mpn = "BAT54SLT1G"
+  package = SOT23-3N
+  ;description = "DIODE ARRAY SCHOTTKY 30V SOT23-3"
+
 pcb-part nexperia-PESD1CAN-UX-prt :
   manufacturer = "Nexperia"
   mpn = "PESD1CAN-UX"
   package = SOT65P235X100-3N
+
+; ====== PTC Fuses ======
+pcb-part belfuse-0ZCF0075AF2C-prt :
+  manufacturer = "Bel Fuse"
+  mpn = "0ZCF0075AF2C"
+  package = GENERIC-2920
+  ;description = "PTC RESET FUSE 60V 750MA 2920"
+
+pcb-part belfuse-0ZCJ0005FF2E-prt :
+  manufacturer = "Bel Fuse"
+  mpn = "0ZCJ0005FF2E"
+  package = GENERIC-1206
+  ;description = "PTC RESET FUSE 60V 50MA 1206"
 
 ; ====== Ferrite beads ======
 pcb-part tdk-fb-1k5-prt :
@@ -633,43 +663,137 @@ pcb-part abracon-ABM12-32-B2X-T3-prt :
   mpn = "ABM12-32.000MHZ-B2X-T3"
   package = XTAL-ABM12-pkg
 
+; ====== Oscillators  ======
+; MUST SPECIFY FREQUENCY IN THE ORDER NOTES
+; DIGIKEY MUST PROGRAM
+pcb-part si-SiT8208-prt :
+  manufacturer = "SiTime"
+  mpn = "SiT8208AC-XXXX"
+  package = si-SiT8208-pkg
+
 ; ====== Transistors ========
 pcb-part nxp-PMBT3904-prt :
   manufacturer = "Nexperia"
   mpn = "PMBT3904,235"
   package = SOT95P280X100-3N
+  ;description = "TRANS NPN 40V 0.2A SOT23"
 
 pcb-part nxp-2n7002p-prt :
   manufacturer = "Nexperia"
   mpn = "2N7002P,215"
   package = SOT95P280X100-3N
+  ;description = "MOSFET N-CH 60V 0.36A SOT-23"
 
 pcb-part di-2N7002A-7-prt :
   manufacturer = "Diodes Incorporated"
   mpn = "2N7002A-7"
   package = SOT95P280X100-3N
+  ;description = "MOSFET N-CH 60V 0.18A SOT23"
 
 pcb-part di-DMG1012UW-7-prt :
   manufacturer = "Diodes Incorporated"
   mpn = "DMG1012UW-7"
   package = SOT65P235X100-3N
+  ;description="MOSFET N-CH 20V 1A SOT323"
 
 pcb-part di-ZXMN6A09GTA-prt :
   manufacturer = "Diodes Incorporated"
   mpn = "ZXMN6A09GTA"
   package = SOT230P700X180-4N
+  ;description="MOSFET N-CH 60V 6.9A SOT223"
 
 pcb-part vishay-SQ4850EY-T1-GE3-prt :
   manufacturer = "Vishay"
   mpn = "SQ4850EY-T1-GE3"
   package = SOIC127P600X175-8N
+  ;description="MOSFET N-CH 60V 12A 8SOIC"
 
 pcb-part infineon-IPD50N04S4L08ATMA1-prt :
   manufacturer = "Infineon Technologies"
   mpn = "IPD50N04S4L08ATMA1"
   package = TO228P970X238-3-pkg
+  ;description="MOSFET N-CH 40V 50A TO252-3-313"
+
+pcb-part nexperia-PMV250EPEAR-prt :
+  manufacturer = "Nexperia"
+  mpn = "PMV250EPEAR"
+  package = SOT23-3N
+  ;description = "MOSFET P-CH 40V SOT23"
+
 
 ; ====== Miscellaneous Parts ======
+pcb-part ublox-max-8q-0-prt :
+  mpn = "MAX-8Q-0"
+  manufacturer = "U-Blox"
+  package = ublox-max-8q-0-pkg
+; uBLOX GPS
+
+pcb-part linx-712-CONUFL001-SMD-prt :
+  manufacturer = "Linx Technologies"
+  mpn = "712-CONUFL001"
+  package = linx-712-CONUFL001-SMD-pkg
+; RF Coaxial Connector
+
+pcb-part hiber-HBR-DS-18002-prt :
+  mpn = "HBR-DS-18002"
+  manufacturer = "Hiber"
+  package = hiber-HBR-DS-18002-pkg
+; hiber satellite modem
+
+pcb-part stmicro-STM32L433RCT6P-prt :
+  manufacturer = "ST Micro"
+  mpn = "STM32L433RCT6"
+  package = QFP50P1200X1200X160-64N
+; MCU 32-bit ARM Cortex M4 RISC 256KB Flash 3.3V 64-Pin LQFP Frame
+
+pcb-part stmicro-STM32F103CBT6-prt :
+  manufacturer = "ST Micro"
+  mpn = "STM32L433RCT6"
+  package = QFP50P900X900X160-48N
+; MCU 32-bit STM32F ARM Cortex M3 RISC 128KB Flash 2.5V/3.3V 48-Pin LQFP T/R
+
+pcb-part ndk-NX3225GD-800M-prt :
+  manufacturer = "NDK America"
+  mpn = "NX3225GD-8MHZ-STD-CRA-3"
+  package = ndk-NX3225GD-pkg
+; 8MHz ±50ppm Crystal 8pF 500 Ohms 2-SMD, No Lead
+
+pcb-part stmicro-EMIF02-USB03F2-prt :
+  manufacturer = "ST Micro"
+  mpn = "EMIF02-USB03F2"
+  package = BGA11N50P3X4
+; RC (Pi) EMI Filter 2nd Order Low Pass 2 Channel R = 33 Ohms, C = 20pF 11-WFBGA, FCBGA
+
+pcb-part hiber-v2-prt :
+  manufacturer = "Hiber"
+  mpn = "Hiber V2"
+  package = hiber-v2-pkg
+; hiber satellite modem
+
+pcb-part stmicro-LSM6DSLTR-prt :
+  manufacturer = "ST Micro"
+  mpn = "LSM6DSLTR"
+  package = PQFN50P300X250X86-14N
+; Accelerometer and Gyroscope Digital Output 1.8V 14-Pin LGA T/R
+
+pcb-part broadcom-APDS-9301-prt :
+  manufacturer = "Broadcom"
+  mpn = "APDS-9301-020"
+  package = broadcom-apds-9301-pkg
+; Miniature Ambient Light Photo Sensorwith Digital (I2C) Output
+
+pcb-part stmicro-SPBTLE-RFTR-prt :
+  manufacturer = "ST Micro"
+  mpn = "SPBTLE-RFTR"
+  package = stmicro-SPBTLE-RFTR-pkg
+; SPBTLE-RF Series 3.6 V 2.4 GHz Very Low Power Network Processor Module
+
+;Trinamic Stepper driver
+pcb-part trinamic-tmc2130-prt :
+  manufacturer = "Trinamic"
+  mpn = "TMC2130-LA"
+  package = UTQFN50P500X600X85-36
+
 pcb-part torex-XC6206P302MR-G-prt :
   manufacturer = "Torex Semiconductor"
   mpn = "XC6206P302MR-G"
@@ -714,6 +838,12 @@ pcb-part mps-MPM3630-prt :
   manufacturer = "Monolithic Power Systems Inc."
   mpn = "MPM3630GQV-P"
   package = mps-MPM3630-pkg
+
+;TI Boost converter
+pcb-part ti-TPS55340RTER-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "TPS55340RTER"
+  package = QFN50P300X300X100-16
 
 pcb-part microchip-MIC5225YM5-TR-prt :
   manufacturer = "Microchip"
@@ -786,6 +916,12 @@ pcb-part ti-OPA365AQDBVRQ1-prt :
   manufacturer = "Texas Instruments"
   mpn = "OPA365AQDBVRQ1"
   package = SOT95P280X145-5N
+
+;TI Op Amp
+pcb-part ti-OPA187IDBVR-prt :
+  manufacturer = "Texas Instruments"
+  mpn = "OPA187IDBVR"
+  package = SOT23-5N
 
 pcb-part ti-OPA374AIDBVR-prt :
   manufacturer = "Texas Instruments"
@@ -873,6 +1009,11 @@ pcb-part TC2030-MCP-NL-prt :
   manufacturer = "Tag-Connect"
   mpn = "TC2030-MCP-NL"
   package = TC2030-MCP-NL-pkg
+
+pcb-part TC2050-MCP-NL-prt :
+  manufacturer = "Tag-Connect"
+  mpn = "TC2050-MCP-NL"
+  package = TC2050-MCP-NL-pkg
 
 pcb-part XT-60-prt :
   manufacturer = "HexTronics"
@@ -1003,9 +1144,9 @@ pcb-part melexis-MLX90363-prt :
   mpn = "MLX90363"
   package = SOIC127P600X175-8N
 
-pcb-part isl-ISL32459E-prt :
+pcb-part isl-ISL32458E-prt :
   manufacturer = "Renesas"
-  mpn = "ISL32459E"
+  mpn = "ISL32458E"
   package = SOIC127PO650X300-8N
 
 pcb-part sp-SP3485-prt :
@@ -1091,10 +1232,10 @@ pcb-part BK-5033-prt :
   mpn = "BK-5033"
   package = J-MPD-BK-5033
 
-pcb-part rhom-SMLP34RGB-prt :
-  manufacturer = "RHOM Semiconductor"
+pcb-part rohm-SMLP34RGB-prt :
+  manufacturer = "rohm Semiconductor"
   mpn = "SMLP34RGB"
-  package = rhom-SMLP34RGB-fp
+  package = rohm-SMLP34RGB-fp
 
 pcb-part SX-3528-prt :
   manufacturer = "Songxin Light"
@@ -1181,21 +1322,21 @@ public pcb-part amphenol-delta-d-prt (n:Int) :
 public pcb-part JST-PH-prt (n:Int) :
   manufacturer = "JST"
   mpn = switch(n) :
-    2 :"B2B-PH-K-S"
-    3 :"B3B-PH-K-S"
-    4 :"B4B-PH-K-S"
-    5 : "B5B-PH-K-S"
-    6 : "B6B-PH-K-S"
-    7 : "B7B-PH-K-S"
-    8 : "B8B-PH-K-S"
-    9 : "B9B-PH-K-S"
-    10 : "B10B-PH-K-S"
-    11 : "B11B-PH-K-S"
-    12 : "B12B-PH-K-S"
-    13 : "B13B-PH-K-S"
-    14 : "B14B-PH-K-S"
-    15 : "B15B-PH-K-S"
-    16 : "B16B-PH-K-S"
+    2 :"B2B-PH-K-S(LF)(SN)"
+    3 :"B3B-PH-K-S(LF)(SN)"
+    4 :"B4B-PH-K-S(LF)(SN)"
+    5 : "B5B-PH-K-S(LF)(SN)"
+    6 : "B6B-PH-K-S(LF)(SN)"
+    7 : "B7B-PH-K-S(LF)(SN)"
+    8 : "B8B-PH-K-S(LF)(SN)"
+    9 : "B9B-PH-K-S(LF)(SN)"
+    10 : "B10B-PH-K-S(LF)(SN)"
+    11 : "B11B-PH-K-S(LF)(SN)"
+    12 : "B12B-PH-K-S(LF)(SN)"
+    13 : "B13B-PH-K-S(LF)(SN)"
+    14 : "B14B-PH-K-S(LF)(SN)"
+    15 : "B15B-PH-K-S(LF)(SN)"
+    16 : "B16B-PH-K-S(LF)(SN)"
     else: fatal("Incorrect n-pin for JST PH connector %_." % [n])
   package = {JST-PH-pkg(n)}
 
@@ -1267,10 +1408,11 @@ pcb-part cui-PJ-002BH-SMT-TR-prt :
 
 public pcb-part samtec-tsm-prt (n-pin:Int) :
   manufacturer = "Samtec"
-  if n-pin > 10 :
-    mpn = to-string("TSM-1%_-01-T-DV" % [n-pin])
+  val n-row = n-pin / 2
+  if n-row >= 10 :
+    mpn = to-string("TSM-1%_-01-T-DV-P" % [n-row])
   else :
-    mpn = to-string("TSM-10%_-01-T-DV" % [n-pin])
+    mpn = to-string("TSM-10%_-01-T-DV-P" % [n-row])
   package = {samtec-tsm-pkg(n-pin)}
 
 public pcb-part ipex-cabline-vs-prt (n:Int) :
@@ -1348,3 +1490,15 @@ pcb-part ironwood-C17829-socket-prt :
   manufacturer = "Ironwood"
   mpn = "C17829"
   package = ironwood-C17829-socket-pkg
+
+pcb-part marvell-88E1510-A0-NNB2C000-prt :
+  manufacturer = " Marvell"
+  mpn = "88E1510-A0-NNB2C000"
+  package = QFN50P700X700X85-48
+; Integrated 10/100/1000 Mbps Energy Efficient Ethernet Transceivers, 48-Pin QFN
+
+pcb-part pulse-J0G-0009NL-prt :
+  manufacturer = "Pulse Electronics Network"
+  mpn = "J0G-0009NL"
+  package = pulse-J0G-0009NL-pkg
+; 1 Port RJ45 Magjack Connector Through Hole 10/100/1000 Base-T, AutoMDIX

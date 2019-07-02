@@ -1,0 +1,251 @@
+defpackage rtm/ir-connections :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-utils
+  import rtm/ir-lower
+  import rtm/ir-gen
+  import rtm/utils
+  import rtm/ir/errors
+  import rtm/errors
+  import plugins/master
+  
+;============================================================
+;==================== Main Driver ===========================
+;============================================================
+
+;Returns true if the program contains high-level connections.
+public defn has-connections? (prog:Collection<TStmt>) -> True|False :
+  var has-connections? = false
+  within (ir-table, defm) = do-top-modules(prog) :
+    if any?({_ is ConnectionStmt}, stmts(defm)) :
+      has-connections? = true
+  has-connections?
+
+;Output:
+;  prog:List<TStmt>
+;  made-progress?:True|False
+;prog is the new program with one layer of connections expanded.
+;made-progress? is true if connections have been expanded.
+public defn expand-connections (prog:Collection<TStmt>) -> [List<TStmt>, True|False] :
+  ;Separate modules from rest of statements
+  val [module-stmts, non-module-stmts] = split!({_ is DefModule}, prog)
+  val module-table = to-hashtable(name, module-stmts as Seqable<DefModule>)
+
+  ;Track whether we made progress
+  var made-progress?:True|False = false
+
+  ;Expand the connection statements in all top-level modules
+  within (ir-table, defm) = do-top-modules(prog) :
+    let-var CURRENT-REFERENCE-TABLE = ReferenceTable(ir-table, defm) :
+      val defm* = 
+        within buffer = reopen-module(defm, true, false) :
+          val [connections, non-connections] = split!({_ is ConnectionStmt}, stmts(defm))
+          for s in non-connections do :
+            rtm/ir-gen/add-entry(buffer, `stmt, s)
+          for s in connections do :
+            if expand-connection(s as ConnectionStmt, buffer) :
+              made-progress? = true
+      module-table[name(defm*)] = defm*
+
+  ;Detect errors
+  within e = remove-errors() :
+    match(e:AmbConnection) :
+      println(e)
+      true
+  end-if-errors({_ is-not NoConnection})
+
+  ;Retrieve new top-level statements generated during expansion
+  val new-tstmts = ir-statements()
+
+  ;Weave together statements to form new program
+  val prog* = to-list $ cat-all $ [non-module-stmts, values(module-table), new-tstmts]
+  [prog*, made-progress?]
+
+;Register as driver entry point
+add-driver-entry-point(`expand-connections, expand-connections)
+
+;============================================================
+;================== Connection Table ========================
+;============================================================
+
+protected deftype DefConnection
+protected defmulti name (c:DefConnection) -> Symbol
+protected defmulti signature (c:DefConnection) -> DefConnectionSignature
+protected defmulti applicable? (c:DefConnection, args:Tuple<Ref|Tuple<Ref>>) -> True|False
+protected defmulti execute (c:DefConnection, buffer:rtm/ir-gen/Buffer, args:Tuple<Ref|Tuple<Ref>>) -> ?
+
+protected defstruct DefConnectionSignature <: Hashable&Equalable :
+  arg-tuple?: Tuple<True|False>
+defmethod hash (c:DefConnectionSignature) :
+  hash(arg-tuple?(c))
+defmethod equal? (a:DefConnectionSignature, b:DefConnectionSignature) :
+  arg-tuple?(a) == arg-tuple?(b)
+
+val CONNECTION-TABLE = HashTable<DefConnectionSignature, List<DefConnection>>(List())
+
+protected defn make-def-connection (c:DefConnection) :
+  update(CONNECTION-TABLE, cons{c, _}, signature(c))
+
+;Returns true if successful expansion
+protected defn expand-connection (c:ConnectionStmt, buffer:rtm/ir-gen/Buffer) -> True|False :
+  ;Find all applicable connections
+  val defcs = CONNECTION-TABLE[signature(args(c))]
+  val defcs* = to-tuple(filter(applicable?{_, args(c)}, defcs))
+
+  ;Retrieve properties of all relevant pins
+  defn pin-properties () :
+    val all-refs = unique $
+      for arg in args(c) seq-cat :
+        match(arg) :
+          (arg:Ref) : [arg]
+          (arg:Tuple<Ref>) : arg
+    to-tuple $ for r in all-refs seq :
+      PinPropertiesStmt(r, 0, properties(r))
+
+  ;When there are no connections, then issue a NoConnection error and
+  ;output the statement as is.
+  ;When there is exactly one connection, then execute the connection.
+  ;When there is more than one connection, expand the statement using
+  ;the first connection, but report an ambiguous connection error.
+  switch(length(defcs*)) :
+    0 :
+      rtm/ir-gen/add-entry(buffer, `stmt, c)
+      report-error(NoConnection(c, pin-properties()))
+      false
+    1 :
+      execute(defcs*[0], buffer, args(c))
+      true
+    else :
+      val defc = defcs*[0]
+      execute(defc, buffer, args(c))
+      report-error(AmbConnection(c, map(name,defcs*), name(defc), pin-properties()))
+      true
+
+;Retrieve the signature given the arguments
+defn signature (args:Tuple<Ref|Tuple<Ref>>) :
+  DefConnectionSignature(map({_ is Tuple}, args))
+
+;============================================================
+;================== Reference Table =========================
+;============================================================
+
+deftype ReferenceTable
+defmulti properties (t:ReferenceTable, r:Ref) -> Tuple<KeyValue<Symbol,?>>
+defmulti property? (t:ReferenceTable, r:Ref) -> True|False
+defmulti property (t:ReferenceTable, r:Ref) -> ?
+defmulti pin-type (t:ReferenceTable, r:Ref) -> PinType
+defmulti pin-type? (t:ReferenceTable, r:Ref) -> PinType|False
+defmulti pin? (t:ReferenceTable, r:Ref) -> True|False
+defmulti require? (t:ReferenceTable, r:Ref) -> Symbol|False
+defmulti expand-pin (t:ReferenceTable, r:Ref) -> Tuple<Ref>
+
+defn ReferenceTable (ir-table:IRTable, defm:DefModule) :
+  ;Retrieve type environment with module
+  val env = ModuleEnv(ir-table, name(defm))
+
+  ;Build pin properties table
+  val pin-props-table = HashTable<Ref,Tuple<KeyValue<Symbol,?>>>([])
+  val pin-prop-table = HashTable<Ref,?>()
+  val [pin-props, mapping] = pin-properties(ir-table, defm)
+  for s in pin-props do :
+    ;Store all properties in pin-props-table
+    pin-props-table[ref(s)] = entries(s)
+    ;Store individual properties in pin-prop-table
+    for entry in entries(s) do :
+      val prop-ref = FieldRef(ref(s), key(entry))
+      pin-prop-table[prop-ref] = value(entry)
+
+  ;Build mappings table
+  val mappings-table = to-hashtable<Ref,Ref>(mappings(mapping))
+  defn apply-mappings (r:Ref) :
+    get?(mappings-table, r, r)
+  defn apply-mappings-to-property (r:Ref) :
+    val head* = apply-mappings(head(r as FieldRef))
+    FieldRef(head*, name(r as FieldRef))
+
+  ;Build capabilities table
+  val requires-table = HashTable<Ref,Symbol>()
+  for s in requires(mtable(ir-table, name(defm))) do :
+    val name = name(s)
+    match(name:Symbol) :
+      val port-ref = FieldRef(inst(s), name)
+      val cap-name = /name(base(capability(s)))
+      for r-root in expand(port-ref, capability(s)) do :
+        for r in expand(env, r-root, true) do :
+          requires-table[r] = cap-name
+
+  ;Returns the PinType corresponding to the given reference.
+  ;Fatal error if the reference is not well-formed or if it does
+  ;not refer to a pin.
+  defn pin-type (r:Ref) -> PinType :
+    try :
+      match(ensure-wellformed(env, r)) :
+        (t:PinType) : t
+        (t) : fatal("Reference %_ is not a pin! It has type %_." % [r, t])
+    catch (e:Exception) :
+      fatal(e)
+
+  ;Returns the PinType corresponding to the given reference.
+  ;Returns false if it does not refer to a pin.
+  defn pin-type? (r:Ref) -> PinType|False :
+    try :
+      match(ensure-wellformed(env, r)) :
+        (t:PinType) : t
+        (t) : false
+    catch (e:Exception) :
+      fatal(e)
+
+  ;Fail if the reference r is not a pin.
+  defn ensure-pin! (r:Ref) :
+    #if-not-defined(OPTIMIZE) :
+      pin-type(r)
+    false
+
+  ;Fail if the reference r is not of right form for referring to a property.
+  ;Expected form is: R.property where R refers to a pin.
+  defn ensure-property! (r:Ref) :
+    fatal("Reference %_ is not a valid reference to a property." % [r]) when r is-not FieldRef
+    ensure-pin!(head(r))
+
+  ;Return reference table
+  new ReferenceTable :
+    defmethod properties (this, r:Ref) :
+      ensure-pin!(r)
+      pin-props-table[apply-mappings(r)]
+    defmethod property? (this, r:Ref) :
+      ensure-property!(r)
+      key?(pin-prop-table,apply-mappings-to-property(r))
+    defmethod property (this, r:Ref) :
+      ensure-property!(r)
+      pin-prop-table[apply-mappings-to-property(r)]
+    defmethod pin-type (this, r:Ref) :
+      pin-type(r)
+    defmethod pin-type? (this, r:Ref) :
+      pin-type?(r)
+    defmethod pin? (this, r:Ref) :
+      try :
+        match(ensure-wellformed(env,r)) :
+          (t:PinType) : true
+          (t) : false
+      catch (e:Exception) :
+        false
+    defmethod require? (this, r:Ref) :
+      ensure-pin!(r)
+      get?(requires-table, r)
+    defmethod expand-pin (this, r:Ref) :
+      to-tuple(expand(env, r))
+
+;============================================================
+;================== Current Reference Table =================
+;============================================================
+
+var CURRENT-REFERENCE-TABLE : ReferenceTable|False = false
+
+defn rt! () :
+  match(CURRENT-REFERENCE-TABLE) :
+    (t:ReferenceTable) : t
+    (t:False) : fatal("Not currently within connection. No properties calculated.")
+
+#for f in [properties, property?, property, pin-type, pin-type?, require?, pin?, expand-pin] :
+  public defn f (r:Ref) : f(rt!(), r)

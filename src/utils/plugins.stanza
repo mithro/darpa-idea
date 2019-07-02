@@ -5,32 +5,124 @@ defpackage plugins :
   import collections
   import rtm/errors
   import serialize
+  import jitpcb/dlopen
 
 ;============================================================
-;======================= PluginResult =======================
+;================ PluginDatastructures ======================
 ;============================================================
-
-public defstruct PluginResult :
-  result
-  seed: Long
-  errors: ErrorReport
 
 public defstruct PluginInit :
   version: [Int Int Int]
+  driver-main: Long
+
+public defstruct SystemState :
   seed: Long
   output-stream: OutputStream
   errors: ErrorReport
 
+public defstruct PluginArg :
+  state: SystemState
+  entry: Symbol
+  arg
+
+public defstruct PluginResult :
+  state: SystemState
+  result
+
 register-struct-serializers (o:OutputStream, i:InputStream) :
-  plugins/PluginResult :
-    result:?
-    seed: Long
-    errors: ErrorReport
-  plugins/PluginInit :
-    version: [Int Int Int]
+  plugins/SystemState :
     seed: Long
     output-stream: OutputStream
     errors: ErrorReport
+  plugins/PluginInit :
+    version: [Int Int Int]
+    driver-main: Long
+  plugins/PluginArg :
+    state: SystemState
+    entry: Symbol
+    arg: ?
+  plugins/PluginResult :
+    state: SystemState
+    result: ?
+
+;<doc>=======================================================
+;=============== Plugin Calling Convention ==================
+;============================================================
+
+When calling a plugin, we serialize a PluginArg and pass it to the
+plugin. The PluginArg contains the system state at the time of the
+call on the driver side. The slave is responsible for initializing the
+system state to the one given in the PluginArg packet.
+
+The slave returns either a serialized PluginResult or a serialized
+Exception. A PluginResult indicates successful execution, and it
+contains the system state upon finishing. An Exception indicates that
+something went wrong.
+
+Upon receiving the serialized return value from the slave, the driver
+is responsible either for: throwing the exception, or restoring the
+system state and returning the result.
+
+;============================================================
+;=======================================================<doc>
+
+public lostanza defn call-main (main:ref<DynamicSymbol>) -> ref<False> :
+  val f = main.value as ptr<((int, ptr<ptr<byte>>) -> int)>
+  call-c [f](clib/input_argc, clib/input_argv)
+  return false
+
+public lostanza defn serialized-call-one-sided (f:ref<DynamicSymbol>, arg:ref<?>) -> ref<False> :
+  val fptr = f.value as ptr<(ptr<ByteInputStream> -> int)>
+  call-c [fptr](to-ptr(serialize-to-stream(arg)))
+  return false
+
+public lostanza defn serialized-call (f:ref<DynamicSymbol>, entry:ref<Symbol>, arg:ref<?>) -> ref<?> :
+  return serialized-call(f.value as long, entry, arg)
+
+public lostanza defn serialized-call (f:ref<Long>, entry:ref<Symbol>, arg:ref<?>) -> ref<?> :
+  return serialized-call(f.value, entry, arg)
+  
+public lostanza defn serialized-call (f:long, entry:ref<Symbol>, arg:ref<?>) -> ref<?> :
+  ;Encode input packet into ByteInputStream
+  val plugin-arg = PluginArg(current-system-state(), entry, arg)
+
+  ;Call the callback
+  val fptr = f as ptr<(ptr<ByteInputStream> -> ptr<ByteInputStream>)>
+  val out-ptr = call-c [fptr](to-ptr(serialize-to-stream(plugin-arg)))
+  val plugin-res:ref<PluginResult|Exception> = deserialize-from-stream(out-ptr)
+
+  ;Check what is returned
+  match(plugin-res) :
+    (r:ref<PluginResult>) :
+      restore-system-state(state(r))
+      return result(r)
+    (r:ref<Exception>) :
+      return throw(r)
+
+public lostanza defn serialized-receive (entry-point:ref<(Symbol -> (? -> ?))>, in-ptr:ptr<ByteInputStream>) -> ptr<ByteInputStream> :
+  return to-ptr(receive(entry-point, to-ref(in-ptr)))
+
+defn receive (entry-point:Symbol -> (? -> ?), in-str:ByteInputStream) -> ByteInputStream :
+  defn execute-entry-point () -> PluginResult|Exception :
+    try :
+      val plugin-arg:PluginArg = deserialize(in-str)
+      restore-system-state(state(plugin-arg))
+      val entry-func = entry-point(entry(plugin-arg))
+      val result = entry-func(arg(plugin-arg))
+      PluginResult(current-system-state(), result)
+    catch (e:Exception) :
+      e
+  defn entry-point-fail () -> Exception :
+    Exception("Error occurred in plugin.")
+  serialize-to-stream $ execute-with-error-handler(execute-entry-point, entry-point-fail)
+
+defn current-system-state () :
+  SystemState(state(current-random()), current-output-stream(), error-report())
+
+defn restore-system-state (s:SystemState) :
+  srand(seed(s))
+  set-current-output-stream(output-stream(s))
+  report-error(errors(s))
 
 ;============================================================
 ;================== ByteInputStream =========================
@@ -39,6 +131,9 @@ register-struct-serializers (o:OutputStream, i:InputStream) :
 public lostanza deftype ByteInputStream <: InputStream :
   length: int
   data: ptr<byte>
+
+public lostanza defn ByteInputStream (b:ref<ByteBuffer>) -> ref<ByteInputStream> :
+  return new ByteInputStream{length(b).value, data(b)}
 
 lostanza defmethod get-byte (b:ref<ByteInputStream>) -> ref<Byte|False> :
   if b.length > 0 :
@@ -54,24 +149,24 @@ defmethod get-char (b:ByteInputStream) -> Char|False :
     (b:Byte) : to-char(b)
     (b:False) : false
 
-public lostanza defn ByteInputStream (b:ref<ByteBuffer>) -> ref<ByteInputStream> :
-  return new ByteInputStream{length(b).value, data(b)}
-
-public defn to-ByteInputStream (obj) -> ByteInputStream :
-  val b = ByteBuffer()
-  serialize(b, obj)
-  ByteInputStream(b)
-
-public defn to-ByteInputStream (obj1, obj2) -> ByteInputStream :
-  val b = ByteBuffer()
-  serialize(b, obj1)
-  serialize(b, obj2)
-  ByteInputStream(b)
-
-public lostanza defn to-ptr (b:ref<ByteInputStream>) -> ptr<ByteInputStream> :
+;Allocate a stable pointer and fill it with the contents with the given ref.
+lostanza defn to-ptr (b:ref<ByteInputStream>) -> ptr<ByteInputStream> :
   val p:ptr<ByteInputStream> = call-c clib/malloc(sizeof(ByteInputStream))
   [p] = ByteInputStream{b.length, b.data}
   return p
 
-public lostanza defn to-ref (b:ptr<ByteInputStream>) -> ref<ByteInputStream> :
-  return new ByteInputStream{b.length, b.data}
+;Wrap up the given pointer in a ref, and free the given pointer.
+lostanza defn to-ref (b:ptr<ByteInputStream>) -> ref<ByteInputStream> :
+  val str = new ByteInputStream{b.length, b.data}
+  call-c clib/free(b)
+  return str
+
+;Deserialize a value from the given stream
+public lostanza defn deserialize-from-stream (x:ptr<ByteInputStream>) -> ref<?> :
+  return deserialize(to-ref(x))
+
+;Serialize a value to a byte input stream
+public lostanza defn serialize-to-stream (x:ref<?>) -> ref<ByteInputStream> :
+  val buffer = ByteBuffer()
+  serialize(buffer, x)
+  return ByteInputStream(buffer)

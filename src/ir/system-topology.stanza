@@ -1,0 +1,295 @@
+defpackage system-topology :
+  import core
+  import collections
+  import rtm/ir
+  import rtm/ir-utils
+  import rtm/ir-reader
+  import rtm/ir/errors
+  import rtm/utils
+
+;============================================================
+;====================== Datastructure =======================
+;============================================================
+
+public defstruct SystemTopology :
+  instances: Tuple<Instance>
+  connections: Tuple<Connection>
+with:
+  printer => true
+
+public defstruct Instance :
+  name: Ref
+  component: Symbol
+with:
+  printer => true
+
+public defstruct Connection :
+  source: ConnectionEndpoint
+  dests: Tuple<ConnectionEndpoint>
+with:
+  printer => true
+  
+public defstruct ConnectionEndpoint :
+  inst: Ref
+  port: Ref
+  capability: Symbol|False
+with:
+  printer => true
+
+defn common-port (c:Connection) :
+  val common? = for d in dests(c) all? :
+    port(d) == port(source(c))
+  port(source(c)) when common?
+
+defn common-capability (c:Connection) :
+  val capabilities = to-tuple $ filter-by<Symbol>(
+    cat([capability(source(c))], seq(capability, dests(c))))
+  capabilities[0] when length(capabilities) == 1
+
+;============================================================
+;======================= Analysis ===========================
+;============================================================
+
+public defn analyze-system-topology (prog:Collection<TStmt>) -> SystemTopology :
+  ;Retrieve IRTable
+  val ir-table = IRTable(prog)
+
+  ;Retrieve main module
+  val main-module-name = modules[0] where :
+    val modules = to-tuple(top-modules(ir-table))
+    throw(NoTopLevel()) when empty?(modules)
+    throw(MultipleTopLevel()) when length(modules) > 1  
+
+  ;Retrieve mtable for main module
+  val mtable = mtable(ir-table, main-module-name)
+  val menv = ModuleEnv(ir-table, main-module-name)
+
+  ;Discover all instances in the `power schematic-layout group
+  val power-insts = HashSet<Ref>()
+  for stmt in schematic-groups(mtable) do :
+    if group(stmt) == `power :
+      ;Retrieve ref corresponding to instance or instance array.
+      val [inst, inst-type] = match(menv[ref(stmt)]) :
+        (t:PinType) :
+          val r = base(ref(stmt))
+          [r, menv[r] as InstType|InstArray]
+        (t:InstType|InstArray) :
+          [ref(stmt), t]
+      ;For all instances mentioned, put them in the set.
+      add-all(power-insts, expand(inst, inst-type))
+
+  ;Construct requirements table
+  val require-table = HashTable<Ref,Symbol>()
+  for r in requires(mtable) do :
+    match(name(r)) :
+      (name:Symbol) :
+        val capability-name = /name(base(capability(r)))
+        val ref = FieldRef(inst(r), name)
+        for ref in expand(ref, capability(r)) do :
+          for ref in expand(menv, ref, true) do :
+            require-table[ref] = capability-name
+      (name:False) :
+        false
+
+  ;Collect instances
+  val instances = Vector<Instance>()
+  val instance-ref-set = HashSet<Ref>()
+  for inst in insts(mtable) do :
+    for ref in expand(VarRef(name(inst)), type(inst)) do :
+      if not power-insts[ref] :
+        add(instances, Instance(ref, name(base(type(inst)))))
+        add(instance-ref-set, ref)
+
+  ;Strip reference until we reach an instance
+  defn* instance-base (r:Ref) :
+    if instance-ref-set[r] :
+      r
+    else :
+      match(r:FieldRef|IndexRef) :
+        instance-base(ref(r))
+
+  ;Collect connections
+  val connections = Vector<Connection>()
+  for c in /connections(mtable) do :
+    val refs = flatten(args(c))
+    defn endpoint? (r:Ref) :
+      val inst = instance-base(r)
+      match(inst:Ref) :
+        val port = tail(r, length(inst))
+        One(ConnectionEndpoint(inst, port, get?(require-table, r)))
+      else : None()
+    if not empty?(refs) :
+      val src = endpoint?(refs[0])
+      val dsts = to-tuple(seq(endpoint?, refs[1 to false]))
+      if none?(empty?, cat([src], dsts)) :
+        add(connections, Connection(value!(src), map(value!,dsts)))
+
+  ;Make topology structure
+  SystemTopology(to-tuple(instances),
+                 to-tuple(connections))
+
+;============================================================
+;================== Collapse Endpoint =======================
+;============================================================
+
+defstruct CollapsedConnection :
+  source: CollapsedEndpoint
+  dests: Tuple<CollapsedEndpoint>
+with:
+  printer => true
+
+defstruct CollapsedEndpoint :
+  id: Int with: (init => genid())
+  inst: Ref
+  ports: Tuple<Ref>
+  capabilities: Tuple<Symbol>
+with:
+  printer => true
+
+defn collapse-inst-endpoints (inst:Ref, es:Collection<ConnectionEndpoint>) :
+  val ports* = to-tuple(seq(port, es))
+  val capabilities* = to-tuple(unique(filter-by<Symbol>(seq(capability, es))))
+  CollapsedEndpoint(inst, ports*, capabilities*)  
+
+defn collapse (input-endpoints:Seqable<ConnectionEndpoint>) :
+  val endpoints = to-seq(input-endpoints)
+  val collapsed = Vector<CollapsedEndpoint>()
+  while not empty?(endpoints) :
+    val e0 = next(endpoints)
+    val es = take-while({inst(_) == inst(e0)}, endpoints)
+    add(collapsed, collapse-inst-endpoints(inst(e0), to-tuple(cat([e0], es))))
+  to-tuple(collapsed)
+
+defn collapse (c:Connection) :
+  val eps = collapse(cat([source(c)], dests(c)))
+  CollapsedConnection(eps[0], eps[1 to false])
+
+;============================================================
+;==================== Export to ELK =========================
+;============================================================
+
+public defn export-elk (o:OutputStream, topo:SystemTopology, hints:ELKSizingHints) :
+  ;Table mapping instance names to ELK node names
+  val node-names = HashTable-init<Ref,String>(make-name) where :
+    val counter = to-seq(1 to false)
+    defn make-name (r:Ref) : to-string("N%_" % [next(counter)])
+
+  ;Table holding ports for all instances
+  val inst-ports = ListTable<Ref,ElkPort>()
+
+  ;Collapse all connections
+  val connections* = map(collapse, connections(topo))
+
+  ;Retrieve all endpoints
+  defn all-endpoints () :
+    for c in connections* seq-cat :
+      cat([source(c)], dests(c))
+
+  ;Group all endpoints by instance
+  val inst-endpoints = group-by(inst, all-endpoints())
+  for entry in inst-endpoints do :
+    for (p in value(entry), i in 1 through false) do :
+      val port-name = to-string("P%_" % [id(p)])
+      val port-str = let :
+        val ps = ports(p)
+        val n = length(ps)
+        switch(n) :
+          1 : ps[0]
+          2 : "%_, %_" % [ps[0], ps[1]]
+          else : "%_, ..., %_" % [ps[0], ps[n - 1]]
+      val cap-str = let :
+        val cs = capabilities(p)
+        val n = length(cs)
+        switch(n) :
+          0 : ""
+          1 : " : %_" % [cs[0]]
+          2 : " : %_, %_" % [cs[0], cs[1]]
+          else : " : %_, ..., %_" % [cs[0], cs[n - 1]]
+      val port-label = to-string("%_%_" % [port-str, cap-str])
+      add(inst-ports, inst(p), ElkPort(port-name, port-label))
+
+  ;Printing functions
+  val o2 = IndentedStream(o)
+  val o3 = IndentedStream(o2)
+  defn P0 (x) : lnprint(o, x)
+  defn P1 (x) : lnprint(o2, x)
+  defn P2 (x) : lnprint(o3, x)
+
+  ;Print preamble
+  print(o, "algorithm:layered")
+  P0("elk.direction: RIGHT")
+
+  ;Print out nodes
+  for inst in instances(topo) do :
+    val ports = inst-ports[name(inst)]
+    P0("node %_ {" % [node-names[name(inst)]])
+    val [w,h] = compute-size(inst, ports, hints)
+    P1("layout [size: %_, %_]" % [w,h])
+    for p in ports do :
+      P1("port %_ {" % [name(p)])
+      P2("label %~" % [string(p)])
+      P1("}")
+    P1("label %~ {nodeLabels.placement: \"INSIDE V_CENTER H_CENTER\"}" % [to-string(name(inst))])
+    P1("label %~ {nodeLabels.placement: \"INSIDE V_CENTER H_CENTER\"}" % [to-string(component(inst))])
+    P0("}")
+    
+  ;Print out connections
+  val edge-counter = to-seq(1 to false)
+  for c in connections* do :
+    defn port-name (e:CollapsedEndpoint) : "%_.P%_" % [node-names[inst(e)], id(e)]
+    for d in dests(c) do :
+      P0("edge E%_: %_ -> %_" % [next(edge-counter), port-name(source(c)), port-name(d)])    
+
+defn compute-size (inst:Instance,
+                   ports:List<ElkPort>,
+                   hints:ELKSizingHints) :
+  ;Compute instance label length
+  val inst-label-length = max(
+    average-character-width(hints) * length(to-string(name(inst))),
+    average-character-width(hints) * length(to-string(component(inst))))
+  ;Compute total width of elk box
+  val width = 2 * padding(hints) + inst-label-length
+
+  ;Compute height of inst label
+  val inst-label-height = 3 * character-height(hints)
+  ;Compute height of all ports
+  val port-height = (2 * length(ports) - 1) * character-height(hints)
+  ;Compute total height of elk box
+  val height = max(port-height, inst-label-height) + 2 * padding(hints)
+
+  ;Return computed width and height
+  [width, height]
+
+defstruct ElkPort :
+  name: String
+  string: String
+
+;============================================================
+;===================== Utilities ============================
+;============================================================
+
+defn flatten (r:Tuple<Ref|Tuple>) :
+  val rs = Vector<Ref>()
+  let loop (r = r) :
+    match(r) :
+      (r:Seqable) : do(loop, r)
+      (r:Ref) : add(rs, r)
+  rs
+
+defn ListTable<K,V> () : HashTable<K,List<V>>(List())
+defn add<?K,?V> (t:HashTable<?K,List<?V>>, k:K, v:V) : update(t, cons{v, _}, k)
+
+;============================================================
+;===================== Main Driver ==========================
+;============================================================
+
+public defstruct ELKSizingHints :
+  average-character-width: Int
+  character-height: Int
+  padding: Int
+
+public defn export-system-topology-to-elkt (prog:Collection<TStmt>, filename:String, hints:ELKSizingHints) -> False :
+  val topo = analyze-system-topology(prog)
+  val out = FileOutputStream(filename)
+  try : export-elk(out, topo, hints)
+  finally : close(out)

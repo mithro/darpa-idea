@@ -5,8 +5,8 @@ defpackage components :
   import rtm/ir-gen
   import rtm/ir-utils
   import footprints
-  import interfaces
   import symbols
+  import interfaces
   import parts
 
 #use-added-syntax(ir-gen)
@@ -99,19 +99,30 @@ public defn cmp-pad-map (c-refs:Collection<Ref|False>&Lengthable) :
 ; Pad map from PinSpec
 
 ; TODO: make this work for all pin specs. Need to canonicalize pin spec
-; constructor to resovle pin mapping
+; constructor to resolve pin mapping
 public defn cmp-pad-map (ps:PinSpec) :
   val c-refs = Vector<Ref>()
   val p-refs = Vector<Ref>()
 
+  defn addToRefs (c : Ref, v : Int|Symbol|Seqable<Int|Symbol>) :
+    match(v) :
+      (v:Int) :
+        ;  pads in PinSpec are 1-indexed
+        add(c-refs, c)
+        add(p-refs, Ref("p")[v - 1])
+      (v:Symbol) :
+        add(c-refs, c)
+        add(p-refs, Ref(v))
+      (v:Seqable<Int|Symbol>) :
+        for pad in v do :
+          addToRefs(c, pad)
+      
+
   for side in [l-pins(ps) r-pins(ps) b-pins(ps) t-pins(ps)] do :
     match(side) :
-      (ckv:Collection<KeyValue<Ref,Int>>) :
+      (ckv:Collection<KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>>>) :
         for kv in ckv do :
-          add(c-refs, key(kv))
-          ;  pads in PinSpec are 1-indexed
-          add(p-refs, Ref("p")[value(kv) - 1])
-      (o) : false
+          addToRefs( key(kv), value(kv) )
   
   cmp-pad-map(c-refs, p-refs)
 
@@ -126,13 +137,16 @@ public defn make-pins (names:Collection<Symbol|String|Ref>) :
       pin {ref}
       ref
 
+    if length(unique(pin-refs)) != length(pin-refs) :
+      fatal("Pin names must be unique!")
+
     pin-refs
 
 public defn make-pins (ps:PinSpec) :
-  defn get-ref (r-in:Ref|KeyValue<Ref,Int>) :
+  defn get-ref (r-in:Ref|KeyValue<Ref,Int|Symbol>) :
     match(r-in) :
       (r:Ref) : r
-      (kv:KeyValue<Ref,Int>) : key(kv)
+      (kv:KeyValue<Ref,Int|Symbol>) : key(kv)
   
   defn false-to-empty (cf:Collection|False) :
     match(cf) :
@@ -189,6 +203,9 @@ public pcb-component gen-res-cmp (r-type:Symbol|False, res:Double, tol:Double, p
     "1206" : package = RESC3216X55
     "1206" : package = RESC6332X35
   reference-prefix = "R"
+
+public defn gen-res-cmp (res:Double, tol:Double, pkg:String) :
+  gen-res-cmp(false, res, tol, 0.0625, pkg)
 
 public defn gen-res-cmp (res:Double, tol:Double, pwr:Double) :
   gen-res-cmp(false, res, tol, 0.0625, "0402")
@@ -411,6 +428,22 @@ pcb-component panasonic-EEE-FK0J152P-cmp :
   part = panasonic-EEE-FK0J152P-prt
   reference-prefix = "C"
 
+pcb-component panasonic-cap-22uf-cmp :
+  pin a
+  pin c
+  package = PANASONIC-CAP-SIZE-C(a => p[0], c => p[1])
+  part = panasonic-cap-22uf-prt
+  emodel = Capacitor(22.0, 20.0, 35.0)
+  reference-prefix = "C"
+
+pcb-component panasonic-cap-47uf-cmp :
+  pin a
+  pin c
+  package = PANASONIC-CAP-SIZE-D(a => p[0], c => p[1])
+  part = panasonic-cap-47uf-prt
+  emodel = Capacitor(47.0, 20.0, 25.0)
+  reference-prefix = "C"
+
 ; Panasonic 100uF 25V 6.3mm Aluminum Electrolytic Capcitor
 pcb-component panasonic-EEE-1EA101XP-cmp :
   pin a
@@ -456,6 +489,7 @@ pcb-component panasonic-cap-1500uf-cmp :
 public pcb-component gen-ind-cmp (ind:Double, tol:Double, max-i:Double) :
   port p : pin[2]
   emodel = Inductor(ind, tol, max-i)
+  package = INDC2520X100 ;TODO: Dummy package assigned to make Key-In exporter work
   reference-prefix = "L"
 
 public defn gen-ind-cmp (ind:Double, tol:Double) :
@@ -538,8 +572,42 @@ public pcb-component littlefuse-2090L-cmp (i-hold:Double) :
   reference-prefix = "F"
   package = FUSC7351X160
 
-; ====== Crystals, Oscillators =================================================
+public pcb-component gen-ptc-cmp (i-hold:Double) :
+  port p : pin[2]
+  reference-prefix = "F"
+  if i-hold <= 0.050 :
+    part = belfuse-0ZCJ0005FF2E-prt
+    package = GENERIC-1206
+  else if i-hold <= 0.750 :
+    part = belfuse-0ZCF0075AF2C-prt
+    package = GENERIC-2920
+  else : fatal("Unsupported i-hold: %_" % [i-hold])
 
+; ====== Protection ============================================================
+pcb-component stmicro-EMIF02-USB03F2-cmp :
+  val ps = PinSpec(
+    [`d+in => `C1 `d-in => `D1] ; Left
+    [`d+out => `C3 `d-out => `D3 `pd1 => `B1 `pd2 => `C2] ; Right
+    [`gnd => `D2] ; Bottom
+    [`pup => `B2 `dz => `A2 `id => `A3 `vbus => `B3] ; Top
+  )
+  make-pins(ps)
+  part = stmicro-EMIF02-USB03F2-prt
+  package = BGA11N50P3X4(cmp-pad-map(ps))
+; RC (Pi) EMI Filter 2nd Order Low Pass 2 Channel R = 33 Ohms, C = 20pF 11-WFBGA, FCBGA
+
+; ====== Crystals, Oscillators =================================================
+pcb-component si-SiT8208-cmp :
+  val ps = PinSpec(
+    [`oe => 1]
+    [`out => 3]
+    [`gnd => 2]
+    [`vdd => 4])
+  make-pins(ps)
+  package = si-SiT8208-pkg(cmp-pad-map(ps))
+  symbol = {generic-box-sym(ps, `si-SiT8208)}
+  part = si-SiT8208-prt 
+  
 pcb-component txc-7B-12000MAAJ-T-cmp :
   port p : pin[2]
   port g : pin[2]
@@ -574,6 +642,13 @@ pcb-component abracon-ABM12-32-B2X-T3-cmp :
     [g[0] => 1 g[1] => 4])
   part = abracon-ABM12-32-B2X-T3-prt
   package = XTAL-ABM12-pkg(cmp-pad-map(ps))
+
+pcb-component ndk-NX3225GD-cmp :
+  port p : pin[2]
+  part = ndk-NX3225GD-800M-prt
+  package = ndk-NX3225GD-pkg
+  reference-prefix = "XTAL"
+  
 ; ====== Discrete Semiconductors (Diodes, Transistors) =========================
 
 public pcb-component gen-diode-cmp (d-type:Symbol|False) :
@@ -583,6 +658,37 @@ public pcb-component gen-diode-cmp (d-type:Symbol|False) :
     package = LEDSC16080X80(a => p[0], c => p[1])
     ; TODO: update with color spec
     part = gen-led-prt
+  reference-prefix = "D"
+
+; SBRD10200 Series 200 V 10 A Surface Mount Schottky Rectifier - TO-252-3
+pcb-component smc-SBRD10200TR-cmp :
+  port a : pin[2]
+  pin c
+  val ps = PinSpec([a[0] => 1, c => 2, a[1] => 3])
+  package = TO228P970X238-3-pkg(cmp-pad-map(ps))
+  part = smc-SBRD10200TR-prt
+  reference-prefix = "D"
+
+; 3 A, 100 V Surface Mount Schottky Barrier Rectifiers
+pcb-component on-S310FA-cmp :
+  pin a
+  pin c
+  package = DIOM-3618X133(a => p[0], c => p[1])
+  part = on-S310FA-prt
+  reference-prefix = "D"
+
+public pcb-component nexperia-PDZ5v6BGWJ-cmp:
+  pin a
+  pin c
+  package = SOD123(a => p[0], c => p[1])
+  part = nexperia-PDZ5v6BGWJ-prt
+  reference-prefix = "D"
+
+public pcb-component nexperia-PDZ15BGWX-cmp:
+  pin a
+  pin c
+  package = SOD123(a => p[0], c => p[1])
+  part = nexperia-PDZ15BGWX-prt
   reference-prefix = "D"
 
 pcb-component on-SMBJ14A-cmp :
@@ -606,6 +712,17 @@ pcb-component on-SD05T1G-cmp :
   part = on-SD05T1G-prt
   reference-prefix = "D"
 
+public pcb-component gen-zener-cmp (v-nom:Double) :
+  pin a
+  pin c
+  reference-prefix = "F"
+  ; TODO: Make this operate on ranges instead of matches
+  part = {
+    if      v-nom <= 05.6 : Ref("nexperia-PDZ5v6BGWJ-prt")
+    else if v-nom <= 15.0 : Ref("nexperia-PDZ15BGWX-prt")
+    else : fatal("Unsupported v-nom: %_" % [v-nom])}
+  package = SOD123(a => p[0], c => p[1])
+
 pcb-component on-BAS16SL-cmp :
   pin a
   pin c
@@ -618,6 +735,28 @@ pcb-component mcc-SK88L-TP-cmp :
   pin c
   package = DIOM-7162X200(a => p[0], c => p[1])
   part = mcc-SK88L-TP-prt
+  reference-prefix = "D"
+
+pcb-component smc-DSS16UTR-cmp :
+  pin a
+  pin c
+  part = smc-DSS16UTR-prt
+  reference-prefix = "D"
+  package = SOD123(a => p[0], c => p[1]) ; Why is this not repeat from the part def?
+
+public pcb-component on-BAT54SLT1G-cmp :
+  ; 2x BAT54 diode in series in single package
+  pin a  ; Anode   
+  pin ca ; Cathode&Anode
+  pin c  ; Cathode
+  val ps = PinSpec(
+    [c => 3]  ; Left
+    [a => 1]  ; Right
+    [ca => 2] ; Bottom
+    []
+  )
+  package = SOT23-3N(cmp-pad-map(ps))
+  part = on-BAT54SLT1G-prt
   reference-prefix = "D"
 
 pcb-component nexperia-PESD1CAN-UX-cmp :
@@ -641,6 +780,13 @@ pcb-component dialight-5511109F-cmp :
   pin c
   package = LED-5511109F-pkg(a => p[0], c => p[1])
   part = dialight-5511109F-prt
+  reference-prefix = "D"
+
+pcb-component osr-LG-L29K-F2J1-24-cmp :
+  pin a
+  pin c
+  package = LEDSC16080X80(a => p[0], c => p[1])
+  part = osr-LG-L29K-F2J1-24-prt
   reference-prefix = "D"
 
 pcb-component vishay-VLMKG3400-cmp :
@@ -677,7 +823,9 @@ public defn gen-diode-cmp () :
   gen-diode-cmp(false)
 
 public pcb-component gen-bjt-cmp (bjt-type:Symbol) :
-  port p : pin[3]
+  pin b
+  pin c
+  pin e
   reference-prefix = "Q"
 
 public defn gen-bjt-cmp () :
@@ -707,10 +855,14 @@ public defn gen-fet-cmp () :
 
 ; NPN transistor
 pcb-component nxp-PMBT3904-cmp :
-  port p : pin[3]
+  val ps = PinSpec(
+  [`b => 1 `e => 2 `c => 3]
+  false
+  )
+  make-pins(ps)
   reference-prefix = "Q"
   part = nxp-PMBT3904-prt
-  package = SOT95P280X100-3N
+  package = SOT95P280X100-3N(cmp-pad-map(ps))
 
 ; TODO: Make generic and assign with part solver
 ; N-FET
@@ -776,6 +928,17 @@ pcb-component infineon-IPD50N04S4L08ATMA1-cmp :
   part = infineon-IPD50N04S4L08ATMA1-prt
   package = TO228P970X238-3-pkg(cmp-pad-map(ps))
 
+pcb-component nexperia-PMV250EPEAR-cmp :
+  pin d
+  pin s
+  pin g
+  val ps = PinSpec(
+    [g => 1 s => 2 d => 3]
+    false )
+  reference-prefix = "Q"
+  part = nexperia-PMV250EPEAR-prt
+  package = SOT23-3N(cmp-pad-map(ps))
+
 ; ====== Chokes ======
 
 pcb-component bourns-DR331-513AE-cmp :
@@ -830,8 +993,8 @@ public pcb-component ti-LMV3XX-cmp (n:Int) :
   
   val [vs-_idx, vs+_idx, vi-_idxs, vi+_idxs, vo_idxs] = 
     switch(n) : 
-      1: [2, 5, [3], [1], [4]]
-      2: [4, 8, [2, 6], [3, 5], [1, 7]]
+      1: [ 2, 5,           [3],            [1],           [4]]
+      2: [ 4, 8,        [2, 6],         [3, 5],        [1, 7]]
       4: [11, 4, [2, 6, 9, 13], [3, 5, 10, 12], [1, 7, 8, 14]]
       else : fatal("Incorrect number of OpAmps for TI LMV3XX:%_." % [n])
 
@@ -842,14 +1005,6 @@ public pcb-component ti-LMV3XX-cmp (n:Int) :
     [vs+ => vs+_idx]
   )
   
-  ;symbol :
-  ;  unit(0) = power-supply-sym(vs- => vs-, vs+ => vs+)
-  ;  for i in 0 to n do :
-  ;    unit(i + 1) = multi-op-amp-sym(
-  ;      vi-[i] => vi-
-  ;      vi+[i] => vi+
-  ;      vo[i] => vo
-  ;    )
 
   switch(n) :
     1: package = SOT95P280X145-5N(cmp-pad-map(ps))
@@ -868,6 +1023,12 @@ public pcb-component ti-OPA374AIDBVR-cmp :
   
   part = ti-OPA374AIDBVR-prt
 
+; Op Amp Single Auto Zero Amplifier R-R O/P ±18V/36V 5-Pin SOT-23 T/R
+pcb-component ti-OPA187IDBVR-cmp :
+  val pin-refs = make-pins([`vo, `vs-, `vi+, `vi-, `vs+])
+  part = ti-OPA187IDBVR-prt
+  package = SOT23-5N(cmp-pad-map(pin-refs))
+
 ; TI low-distortion OpAmp
 pcb-component ti-OPA365AQDBVRQ1-cmp :
   val pin-refs = make-pins([`vo, `vs-, `vi+, `vi-, `vs+])
@@ -880,6 +1041,7 @@ pcb-component ti-OPA365AQDBVRQ1-cmp :
 ; ====== Logic Gates ===========================================================
 
 ; TI single open-drain buffer
+; Buffer, Non-Inverting 1 Element 1 Bit per Element Open Drain Output SC-70-5 
 pcb-component ti-SN74LVC1G07-cmp :
   val ps = PinSpec(
     [`a => 2]
@@ -910,17 +1072,6 @@ pcb-component ti-SN74LS07DR-cmp :
 
 ; ====== Connectors, Test Points, Holes ========================================
 
-public defn generic-l-box-sym (n:Int, name:Symbol|False) :
-  false
-
-public defn generic-l-box-sym (n:Int) :
-  generic-l-box-sym(n, false)
-
-public defn generic-lr-box-sym (n:Int, name:Symbol|False) :
-  false
-
-public defn generic-lr-box-sym (n:Int) :
-  generic-lr-box-sym(n, false)
 
 public defn n-ltb-pin-spec (n-l:Int, n-t:Int, n-b:Int, order:Symbol|False) -> PinSpec :
   PinSpec(
@@ -934,19 +1085,10 @@ public defn n-ltb-pin-spec (n-l:Int, n-t:Int, n-b:Int, order:Symbol|False) -> Pi
 public defn n-ltb-pin-spec (n-l:Int, n-t:Int, n-b:Int) -> PinSpec :
   n-ltb-pin-spec(n-l, n-t, n-b, false)
   
-public defn generic-ltb-box-sym (n-l:Int, n-t:Int, n-b:Int) :
-  false
 
 public pcb-component pin-header-cmp (n-pin:Int, n-row:Int, pin-pitch:Double, row-pitch:Double) :
   port p : pin[n-pin]
   package = {pin-header-pkg(n-pin, n-row, pin-pitch, row-pitch)}
-
-  val sym-name = to-symbol("pin-header-%_-%_R" % [n-pin, n-row])
-
-  val sym-gen = if n-row == 1 :
-    generic-l-box-sym
-  else :
-    generic-lr-box-sym
 
   reference-prefix = "J"
   part = {pin-header-prt(n-pin, n-row, pin-pitch, row-pitch)}
@@ -1108,7 +1250,6 @@ pcb-component te-1551920-2-cmp :
   part = te-1551920-2-prt
   reference-prefix = "J"
 
-
 ; Harwin pin header
 pcb-component harwin-M20-7812045-cmp :
   port p : pin[40]
@@ -1169,7 +1310,7 @@ public pcb-component samtec-qsh-cmp (n-row:Int) :
 pcb-component cui-PJ-002BH-SMT-TR-cmp :
   val ps = PinSpec(
     [],
-    [`center-0 => 1, `center-1 => 4, `sleeve => 2, `detect => 3]
+    [`pin-0 => 1, `pin-1 => 4, `barrel => 2, `detect => 3]
   )
   make-pins(ps)
   package = cui-PJ-002BH-SMT-TR-pkg(cmp-pad-map(ps))
@@ -1183,7 +1324,8 @@ public pcb-component samtec-tsm-cmp (n-pin:Int) :
   part = {samtec-tsm-prt(n-pin)}
   reference-prefix = "J"
 
-; Right angle SMA
+; Vertical SMD SMA connector 
+; SMA Connector Jack, Female Socket 50Ohm Surface Mount Solder 
 pcb-component molex-732511350-cmp :
   val ps = PinSpec(
     [`sig => 1, `gnd-0 => 2, `gnd-1 => 3, `gnd-2 => 4, `gnd-3 => 5]
@@ -1193,7 +1335,8 @@ pcb-component molex-732511350-cmp :
   package = molex-732511350-pkg(cmp-pad-map(ps))
   reference-prefix = "J"
 
-; End-launch SMA
+; End-launch SMA edge mount
+; SMA Connector Jack, Female Socket 50Ohm Board Edge, End Launch Solder 
 pcb-component johnson-142-0701-801-cmp :
   val ps = PinSpec(
     [`sig => 1, `gnd-0 => 2, `gnd-1 => 3, `gnd-2 => 4, `gnd-3 => 5]
@@ -1221,6 +1364,11 @@ public pcb-component test-point-pads-cmp (pad-r: Double, mask-r: Double, point-l
   ; Include this to suppress part warnings
   part = {test-point-pads-prt(pad-r, mask-r, point-locs, bounding-courtyard)}
 
+  match(pin-currents):
+    (l:List<Double>) :
+      for i in 0 to length(l) do :
+        max-current-draw(p[i]) = l[i]
+    (f) : false
 
 public defn test-point-pads-cmp (pad-r: Double, mask-r: Double, point-locs: List<[Double,Double]>, bounding-courtyard:True|False) :
   test-point-pads-cmp(pad-r, mask-r, point-locs, bounding-courtyard, false)
@@ -1247,12 +1395,16 @@ pcb-component TC2030-MCP-NL-cmp :
   part = TC2030-MCP-NL-prt
   package = TC2030-MCP-NL-pkg
 
+pcb-component TC2050-MCP-NL-cmp :
+  port p : pin[10]
+  part = TC2050-MCP-NL-prt
+  package = TC2050-MCP-NL-pkg
+
 ; TODO: Hole symbol
 public pcb-component mounting-hole-cmp (drill-r:Double, pad-r: Double, mask-r:Double) :
-  port p : pin[1]
-  package = {plated-hole-pkg(drill-r, pad-r, mask-r)}
+  ;port p : pin[1]
+  package = {non-plated-hole-pkg(drill-r, mask-r)}
   reference-prefix = "H"
-  part = {plated-hole-prt(drill-r, pad-r, mask-r)}
 
 public defn mounting-hole-cmp (drill-r:Double, pad-r:Double) :
   mounting-hole-cmp(drill-r, pad-r, pad-r + 0.35)
@@ -1345,6 +1497,9 @@ pcb-component ti-LP2985-33DBVR-cmp :
   package = SOT95P280X145-5N(cmp-pad-map(ps))
   part = ti-LP2985-33DBVR-prt
 
+; LDK130 30 mA Low Drop Voltage Regulators (LDO)
+; STMicroelectronics' LDK130 is a 300 mA automotive low quiescent current and low noise LDO in a SOT23-5L package
+; Max 5.5V in
 public pcb-component stm-LDK130MXXRY-cmp (voltage:Double) :
   val ps = PinSpec(
     [`vin => 1 `en => 3]
@@ -1407,9 +1562,13 @@ val vreg-ps = PinSpec(
     [`gnd => 2]
 )
 
+; IC REG LINEAR 9V 1A DPAK 
+; Linear Voltage Regulator IC Positive Fixed 1 Output 1A D-Pak 
 pcb-component on-KA7809ERTM-cmp :
   make-pins(vreg-ps)
 
+; IC VREF SERIES 2.5V 8SOIC 
+; Series, Buried Zener Voltage Reference IC ±0.12% 8-SOIC 
 pcb-component maxim-MAX6225BCSA+-cmp :
   val ps = PinSpec(
     [`vin+ => 2 `nr => 3]
@@ -1431,7 +1590,32 @@ pcb-component recom-R-78B5-0-1-0-cmp :
   part = recom-R-78B5-0-1-0-prt
   package = recom-R-78B-1-0-pkg(cmp-pad-map(vreg-ps))
 
-;TI 3-17V vin, 3A buck regulator
+; Integrated, 5-A 40-V Wide Input Range Boost/SEPIC/Flyback DC-DC Regulator 16-WQFN -40 to 150
+pcb-component ti-TPS55340RTER-cmp :
+  port sw : pin[3]
+  port p-gnd : pin[3]
+  port nc : pin[2]
+  pin vin 
+  pin en 
+  pin ss 
+  pin sync 
+  pin agnd 
+  pin comp 
+  pin fb 
+  pin freq 
+  pin pad 
+
+  val ps = PinSpec(
+    [vin => 2 en => 3  freq => 9 ss => 4]
+    [sw[0] => 1 sw[1] => 16 sw[2] => 15 fb => 8 comp => 7 sync => 5]
+    [nc[0] => 10 nc[1] => 14 agnd => 6 p-gnd[0] => 11 p-gnd[1] => 12 p-gnd[2] => 13 pad => 17]
+  )
+  package = QFN50P300X300X100-16(cmp-pad-map(ps))
+  part = ti-TPS55340RTER-prt
+
+; TI 3-17V vin, 3A buck regulator
+; IC REG BUCK ADJUSTABLE 3A 16QFN 
+; Buck Switching Regulator IC Positive Adjustable 0.9V 1 Output 3A 16-VFQFN Exposed Pad 
 pcb-component ti-TLV62130A-cmp :
   port sw : pin[3]
   port p-gnd : pin[2]
@@ -1502,6 +1686,9 @@ pcb-component omron-G3VM-61FR1-TR05-cmp :
   package = omron-g3vm-pkg(cmp-pad-map(ps))
 
 ; Adjustable linear regulator
+; IC REG LIN POS ADJ 3A DDPAK 
+; Linear Voltage Regulator IC Positive Adjustable 1 Output 3A DDPAK/TO-263-5 
+; Input up to 5.5V
 pcb-component ti-LP38501TSX-ADJ-cmp :
   val ps = PinSpec(
     [`in => 2, `en => 1]
@@ -1514,6 +1701,10 @@ pcb-component ti-LP38501TSX-ADJ-cmp :
   part = ti-LP38501TSX-ADJ-prt
 
 ; Adjustable linear regulator
+; IC REG LIN POS ADJ 150MA SOT23-5 
+; Linear Voltage Regulator IC 1 Output 150mA SOT-23-5 
+; input up to 16V
+; output up to 14V
 pcb-component microchip-MIC5225YM5-TR-cmp :
   val ps = PinSpec(
     [`in => 1, `en => 3]
@@ -1526,6 +1717,10 @@ pcb-component microchip-MIC5225YM5-TR-cmp :
   part = microchip-MIC5225YM5-TR-prt
 
 ; Adjustable linear regulator
+; IC REG LIN POS ADJ 200MA SOT223 
+; Linear Voltage Regulator IC 1 Output 200mA SOT-223-3 
+; Input up to 40V
+; Output up to 38V
 pcb-component linear-LT3082EST-cmp :
   val ps = PinSpec(
     [`in => 3]
@@ -2456,6 +2651,7 @@ pcb-component beaglebone-black-cmp :
 
 
 ; ====== Miscellaneous Components ==============================================
+; Battery management chip
 pcb-component microchip-MCP73831-cmp :
   val ps = PinSpec(
     [`vdd => 4 `prog => 5]
@@ -2774,6 +2970,7 @@ public pcb-component analog-AD5160BRJZX-RL7-cmp (r-val:Double) :
   package = SOT65P280X145-8N(cmp-pad-map(ps))
   part = {analog-AD5160BRJZX-RL7-prt(r-val)}
 
+
 ; Analog Devices level shifters
 public pcb-component ad-ADG330X-cmp (n:Int) :
   pin vcca
@@ -2979,6 +3176,32 @@ pcb-component mcp-MCP9700A-cmp :
   part = microchip-MCP9700A-prt
   package = SOT95P237X95-3(cmp-pad-map(ps))
 
+pcb-component stmicro-LSM6DSLTR-cmp :
+  val ps = PinSpec(
+    [`SDO => 1 `CS => 12 `SCL => 13  `SDA => 14]
+    [`INT1 => 4 `INT2 => 9 `SDx => 2 `SCx => 3]
+    [`GND0 => 6 `GND1 => 7]
+    [`VDD => 8 `VDDIO => 5])
+  make-pins(ps)
+  part = stmicro-LSM6DSLTR-prt
+  ;[strip]
+  symbol = {generic-box-sym(ps, `stmicro-LSM6DSLTR)}
+  ;[strip]
+  package = PQFN50P300X250X86-14N(cmp-pad-map(ps))
+
+pcb-component broadcom-APDS-9301-cmp :
+  val ps = PinSpec(
+    [`ADR-SEL => 3 `SCL => 4  `SDA => 5]
+    [`INT => 6]
+    [`GND => 2]
+    [`VDD => 1])
+  make-pins(ps)
+  part = broadcom-APDS-9301-prt
+  ;[strip]
+  symbol = {generic-box-sym(ps, `broadcom-APDS-9301)}
+  ;[strip]
+  package = broadcom-apds-9301-pkg(cmp-pad-map(ps))
+
 ; TI current sense amplifier
 ; assume the -D model with a SOIC-8
 pcb-component ti-INA240-cmp :
@@ -3059,16 +3282,8 @@ pcb-component ti-TPS62177-cmp :
   package = WSON-10-TPS62177(cmp-pad-map(ps))
   part = ti-TPS62177-prt
 
-pcb-component panasonic-cap-47uf-cmp :
-  pin a
-  pin c
-  package = PANASONIC-CAP-SIZE-D(a => p[0], c => p[1])
-  part = panasonic-cap-47uf-prt
-  emodel = Capacitor(47.0, 20.0, 25.0)
-  reference-prefix = "C"
-
 ; dimmer RGB LED
-pcb-component rhom-SMLP34RGB-cmp :
+pcb-component rohm-SMLP34RGB-cmp :
   val ps = PinSpec(
     [`anode => 1]
     []
@@ -3076,8 +3291,8 @@ pcb-component rhom-SMLP34RGB-cmp :
     [])
   reference-prefix = "D"
   make-pins(ps)
-  package = rhom-SMLP34RGB-fp(cmp-pad-map(ps))
-  part = rhom-SMLP34RGB-prt
+  package = rohm-SMLP34RGB-fp(cmp-pad-map(ps))
+  part = rohm-SMLP34RGB-prt
 
 pcb-component bourns-res-0ohm100-cmp :
   port p : pin[2]
@@ -3085,8 +3300,8 @@ pcb-component bourns-res-0ohm100-cmp :
   reference-prefix = "R"
   package = RESC6332X35
 
-; ISL32459E RS-485 transceiver 
-pcb-component isl-ISL32459E-cmp :
+; ISL32458E RS-485 transceiver 
+pcb-component isl-ISL32458E-cmp :
   val ps = PinSpec(
     [`receiver-out => 1 `receiver-out-en_n => 2 `driver-en => 3 `driver-in => 4]
     [`gnd => 5 `d+ => 6 `d- => 7 `vcc => 8]
@@ -3094,10 +3309,16 @@ pcb-component isl-ISL32459E-cmp :
     []
   )
 
+  for name in ["receiver-out" "receiver-out-en_n" "driver-en" "driver-in"] do :
+    properties(Ref(name)) :
+      voltage => 3.3
+      family => `LVCMOS 
+      vio-pin => Ref("vcc")
+
   make-pins(ps)
 
   package = SOIC127PO650X300-8N(cmp-pad-map(ps))
-  part = isl-ISL32459E-prt
+  part = isl-ISL32458E-prt
 
 ; SP3485 RS-485 transceiver 
 pcb-component sp-SP3485-cmp :
@@ -3122,6 +3343,18 @@ pcb-component ti-SN74LVC1G66DCKR-cmp :
   reference-prefix = "S"
   package = SOT23-5N(cmp-pad-map(ps))
   part = ti-SN74LVC1G66DCKR-prt
+
+; Motor Driver, Stepper, QFN-36
+pcb-component trinamic-tmc2130-cmp :
+  val ps = PinSpec(
+    [`clk => 1 `csn-cfg3 => 2 `sck-cf2 => 3 `sdi-cfg1 => 4 `sdo-cfg0 => 5 `spi-mode => 10 `vccio => 8  `step => 6 `dir => 7 `drv-enn-cfg6  => 22 `dcen-cfg4 => 18 `dcin-cfg5 => 19 `ain-iref => 23]
+    [`dco => 17 `diag0 => 20 `diag1 => 21 `oa1 => 34 `oa2 => 32 `ob1 => 13 `ob2 => 15 `bra => 33 `brb => 14]
+    [`nc => 9 `pgnd0 =>12 `pgnd1 => 35 `agnd => 24 `tst-mode => 36 `pad => 37]
+    [`vs0 => 16 `vs1 => 31 `vcc => 26 `vsa => 30 `vcp => 29`cpo => 27 `cpi => 28 `vout-5 => 25]
+  )
+  make-pins(ps)
+  package = UTQFN50P500X600X85-36(cmp-pad-map(ps))
+  part = trinamic-tmc2130-prt
 
 ; DRV8312 three phase motor driver
 pcb-component ti-DRV8312-cmp :
@@ -3196,6 +3429,7 @@ pcb-component st-LSM6DS3US-cmp :
 
   make-pins(ps)
 
+  ;package = PQFN80P300X500X79-14(cmp-pad-map(ps))
   package = LGA-14L(cmp-pad-map(ps))
   part = st-LSM6DS3US-prt
 
@@ -3213,6 +3447,725 @@ pcb-component melexis-MLX90363-cmp :
   package = SOIC127P600X175-8N(cmp-pad-map(ps))
   part = melexis-MLX90363-prt
 
+
+pcb-component stmicro-STM32F103CBT6-cmp :
+  pin BOOT0
+  pin NRST
+  pin OSC_IN
+  pin OSC_OUT
+  pin PA0
+  pin PA1
+  pin PA10
+  pin PA11
+  pin PA12
+  pin PA13
+  pin PA14
+  pin PA15
+  pin PA2
+  pin PA3
+  pin PA4
+  pin PA5
+  pin PA6
+  pin PA7
+  pin PA8
+  pin PA9
+  pin PB0
+  pin PB1
+  pin PB10
+  pin PB11
+  pin PB12
+  pin PB13
+  pin PB14
+  pin PB15
+  pin PB2
+  pin PB3
+  pin PB4
+  pin PB5
+  pin PB6
+  pin PB7
+  pin PB8
+  pin PB9
+  pin PC13
+  pin PC14
+  pin PC15
+  pin VBAT
+  port VDD : pin[3]
+  pin VDDA
+  port VSS : pin[3]
+  pin VSSA
+
+  val ps = PinSpec(
+    [NRST => 7 VDDA => 9 VSSA => 8 BOOT0 => 44 OSC_IN => 5 OSC_OUT => 6]
+    [PA0 => 10 PA1 => 11 PA10 => 31 PA11 => 32 PA12 => 33 PA13 => 34 PA14 => 37
+     PA15 => 38 PA2 => 12 PA3 => 13 PA4 => 14 PA5 => 15 PA6 => 16 PA7 => 17
+      PA8 => 29 PA9 => 30 PB0 => 18 PB1 => 19 PB10 => 21 PB11 => 22
+    PB12 => 25 PB13 => 26 PB14 => 27 PB15 => 28 PB2 => 20 PB3 => 39 PB4 => 40
+     PB5 => 41 PB6 => 42 PB7 => 43 PB8 => 45 PB9 => 46 PC13 => 2 PC14 => 3
+      PC15 => 4]
+    [VSS[0] => 23 VSS[1] => 35 VSS[2] => 47]
+    [VDD[0] => 24 VDD[1] => 36 VDD[2] => 48 VBAT => 1])
+
+  supports adc :  
+    adc => PA0
+  supports adc :  
+    adc => PA1
+  supports adc :  
+    adc => PA2
+  supports adc :  
+    adc => PA3
+  supports adc :  
+    adc => PA4
+  supports adc :  
+    adc => PA5
+  supports adc :  
+    adc => PA6
+  supports adc :  
+    adc => PA7
+  supports adc :  
+    adc => PB0
+  supports adc :  
+    adc => PB1
+
+  supports dio :
+    dio => PA0
+  supports dio :
+    dio => PA1
+  supports dio :
+    dio => PA10
+  supports dio :
+    dio => PA11
+  supports dio :
+    dio => PA12
+  supports dio :
+    dio => PA13
+  supports dio :
+    dio => PA14
+  supports dio :
+    dio => PA15
+  supports dio :
+    dio => PA2
+  supports dio :
+    dio => PA3
+  supports dio :
+    dio => PA4
+  supports dio :
+    dio => PA5
+  supports dio :
+    dio => PA6
+  supports dio :
+    dio => PA7
+  supports dio :
+    dio => PA8
+  supports dio :
+    dio => PA9
+  supports dio :
+    dio => PB0
+  supports dio :
+    dio => PB1
+  supports dio :
+    dio => PB10
+  supports dio :
+    dio => PB11
+  supports dio :
+    dio => PB12
+  supports dio :
+    dio => PB13
+  supports dio :
+    dio => PB14
+  supports dio :
+    dio => PB15
+  supports dio :
+    dio => PB2
+  supports dio :
+    dio => PB3
+  supports dio :
+    dio => PB4
+  supports dio :
+    dio => PB5
+  supports dio :
+    dio => PB6
+  supports dio :
+    dio => PB7
+  supports dio :
+    dio => PB8
+  supports dio :
+    dio => PB9
+  supports dio :
+    dio => PC13
+  supports dio :
+    dio => PC14
+  supports dio :
+    dio => PC15
+
+  supports i2c :
+    option : 
+      i2c.scl => PB6
+      i2c.sda => PB7
+    option :   
+      i2c.scl => PB8
+      i2c.sda => PB9    
+  supports i2c :
+    i2c.scl => PB10
+    i2c.sda => PB11
+
+  supports spi :
+    option :
+      spi.mosi => PA7
+      spi.miso => PA6
+      spi.sck => PA5
+      spi.ss => PA4
+    option :    
+      spi.mosi => PB5
+      spi.miso => PB4
+      spi.ss => PA15
+      spi.sck => PB3
+  supports spi :
+    spi.miso => PB14
+    spi.mosi => PB15
+    spi.ss => PB12
+    spi.sck => PB13
+
+  supports pwm :
+    option :  
+      pwm => PA0
+    option :  
+      pwm => PA15
+  supports pwm :
+    option :  
+      pwm => PA1
+    option :  
+      pwm => PB3
+  supports pwm :
+    option :  
+      pwm => PA2
+    option :  
+      pwm => PB10
+  supports pwm :
+    option :  
+      pwm => PA3
+    option :  
+      pwm => PB11
+  supports pwm :
+    option :  
+      pwm => PA6
+    option :  
+      pwm => PB4
+  supports pwm :
+    option :  
+      pwm => PA7
+    option :  
+      pwm => PB5
+  supports pwm :  
+    pwm => PA8
+  supports pwm :  
+    pwm => PA9
+  supports pwm :  
+    pwm => PA10
+  supports pwm :  
+    pwm => PA11
+  supports pwm :  
+    pwm => PA12
+  supports pwm :  
+    pwm => PB0
+  supports pwm :  
+    pwm => PB1
+  supports pwm :  
+    pwm => PB6
+  supports pwm :  
+    pwm => PB7
+  supports pwm :  
+    pwm => PB8
+  supports pwm :  
+    pwm => PB9
+
+  supports uart :
+    option :
+      uart.rx => PA10
+      uart.tx => PA9
+    option :
+      uart.rx => PB7
+      uart.tx => PB6
+  supports uart :
+    uart.rx => PA3
+    uart.tx => PA2
+  supports uart :
+    uart.rx => PB11
+    uart.tx => PB10
+
+  supports usb-2 :
+    usb-2.dat- => PA11
+    usb-2.dat+ => PA12
+
+  supports jtag :
+    jtag.tck => PA14
+    jtag.tdi => PA15
+    jtag.tdo => PB3
+    jtag.tms => PA13
+    jtag.trstn => PB4
+
+  supports swd :
+    swd.swdio => PA13
+    swd.swclk => PA14
+    swd.reset => NRST
+    swd.swo => PB3
+
+  package = QFP50P900X900X160-48N(cmp-pad-map(ps))
+  part = stmicro-STM32F103CBT6-prt
+
+pcb-component stmicro-STM32L433RCT6P-cmp :
+  pin NRST
+  pin PA0
+  pin PA1
+  pin PA10
+  pin PA11
+  pin PA12
+  pin PA13
+  pin PA14
+  pin PA15
+  pin PA2
+  pin PA3
+  pin PA4
+  pin PA5
+  pin PA6
+  pin PA7
+  pin PA8
+  pin PA9
+  pin PB0
+  pin PB1
+  pin PB10
+  pin PB11
+  pin PB12
+  pin PB13
+  pin PB14
+  pin PB15
+  pin PB2
+  pin PB3
+  pin PB4
+  pin PB5
+  pin PB6
+  pin PB7
+  pin PB8
+  pin PB9
+  pin PC0
+  pin PC1
+  pin PC10
+  pin PC11
+  pin PC12
+  pin PC13
+  pin PC14
+  pin PC15
+  pin PC2
+  pin PC3
+  pin PC4
+  pin PC5
+  pin PC6
+  pin PC7
+  pin PC8
+  pin PC9
+  pin PD2
+  pin PH0
+  pin PH1
+  pin PH3
+  pin VBAT
+  pin VDD0
+  pin VDD1
+  pin VDD2
+  pin VDD3
+  pin VDDA
+  pin VSS0
+  pin VSS1
+  pin VSS2
+  pin VSS3
+  pin VSSA
+
+  val ps = PinSpec(
+    [NRST => 7 VDDA => 13 VSSA => 12]
+    [PA0 => 14 PA1 => 15 PA10 => 43 PA11 => 44 PA12 => 45 
+    PA13 => 46 PA14 => 49 PA15 => 50 PA2 => 16 PA3 => 17 
+    PA4 => 20 PA5 => 21 PA6 => 22 PA7 => 23 PA8 => 41 PA9 => 42 
+    PB0 => 26 PB1 => 27 PB10 => 29 PB11 => 30 PB12 => 33 PB13 => 34 
+    PB14 => 35 PB15 => 36 PB2 => 28 PB3 => 55 PB4 => 56 PB5 => 57 
+    PB6 => 58 PB7 => 59 PB8 => 61 PB9 => 62 PC0 => 8 PC1 => 9 
+    PC10 => 51 PC11 => 52 PC12 => 53 PC13 => 2 PC14 => 3 PC15 => 4 
+    PC2 => 10 PC3 => 11 PC4 => 24 PC5 => 25 PC6 => 37 PC7 => 38 PC8 => 39 
+    PC9 => 40 PD2 => 54 PH0 => 5 PH1 => 6 PH3 => 60] 
+    [VSS0 => 18 VSS1 => 31 VSS2 => 47 VSS3 => 63]
+    [VBAT => 1 VDD0 => 19 VDD1 => 32 VDD2 => 48 VDD3 => 64])
+
+  supports dio :
+    dio => PA0 
+  supports dio :
+    dio => PA1 
+  supports dio :
+    dio => PA10 
+  supports dio :
+    dio => PA11 
+  supports dio :
+    dio => PA12 
+  supports dio :
+    dio => PA13 
+  supports dio :
+    dio => PA14 
+  supports dio :
+    dio => PA15 
+  supports dio :
+    dio => PA2 
+  supports dio :
+    dio => PA3 
+  supports dio :
+    dio => PA4 
+  supports dio :
+    dio => PA5 
+  supports dio :
+    dio => PA6 
+  supports dio :
+    dio => PA7 
+  supports dio :
+    dio => PA8 
+  supports dio :
+    dio => PA9 
+  supports dio :
+    dio => PB0 
+  supports dio :
+    dio => PB1 
+  supports dio :
+    dio => PB10 
+  supports dio :
+    dio => PB11 
+  supports dio :
+    dio => PB12 
+  supports dio :
+    dio => PB13 
+  supports dio :
+    dio => PB14 
+  supports dio :
+    dio => PB15 
+  supports dio :
+    dio => PB2 
+  supports dio :
+    dio => PB3 
+  supports dio :
+    dio => PB4 
+  supports dio :
+    dio => PB5 
+  supports dio :
+    dio => PB6 
+  supports dio :
+    dio => PB7 
+  supports dio :
+    dio => PB8 
+  supports dio :
+    dio => PB9 
+  supports dio :
+    dio => PC0 
+  supports dio :
+    dio => PC1 
+  supports dio :
+    dio => PC10 
+  supports dio :
+    dio => PC11 
+  supports dio :
+    dio => PC12 
+  supports dio :
+    dio => PC13 
+  supports dio :
+    dio => PC14 
+  supports dio :
+    dio => PC15 
+  supports dio :
+    dio => PC2 
+  supports dio :
+    dio => PC3 
+  supports dio :
+    dio => PC4 
+  supports dio :
+    dio => PC5 
+  supports dio :
+    dio => PC6 
+  supports dio :
+    dio => PC7 
+  supports dio :
+    dio => PC8 
+  supports dio :
+    dio => PC9 
+  supports dio :
+    dio => PD2 
+  supports dio :
+    dio => PH0 
+  supports dio :
+    dio => PH1 
+  supports dio :
+    dio => PH3 
+
+  supports adc :
+    adc => PC0
+  supports adc :
+    adc => PA5
+  supports adc :
+    adc => PA6
+  supports adc :
+    adc => PA7
+  supports adc :
+    adc => PC4
+  supports adc :
+    adc => PC5
+  supports adc :
+    adc => PB0
+  supports adc :
+    adc => PB1
+  supports adc :
+    adc => PC1
+  supports adc :
+    adc => PC2
+  supports adc :
+    adc => PC3
+  supports adc :
+    adc => PA0
+  supports adc :
+    adc => PA1
+  supports adc :
+    adc => PA2
+  supports adc :
+    adc => PA3
+  supports adc :
+    adc => PA4
+
+  supports can :
+    option :
+      can.rx => PA11
+      can.tx => PA12
+    option :
+      can.rx => PB8
+      can.tx => PB9
+
+  supports pwm :
+    option :
+      pwm => PB12
+    option :
+      pwm => PA9
+  supports pwm :
+    option :
+      pwm => PA2
+    option :
+      pwm => PB14
+  supports pwm :
+    option :
+      pwm => PA1
+    option :
+      pwm => PB13
+  supports pwm :
+    option :
+      pwm => PA3
+    option :
+      pwm => PB15
+  supports pwm :
+    pwm => PB5
+  supports pwm :
+    option :
+      pwm => PA6
+    option :
+      pwm => PB8
+  supports pwm :
+    pwm => PB6
+  supports pwm :
+    option :
+      pwm => PA6
+    option :
+      pwm => PB12
+  supports pwm :
+    pwm => PA11
+  supports pwm :
+    pwm => PA11
+  supports pwm :
+    option :
+      pwm => PA6
+    option :
+      pwm => PB12
+  supports pwm :
+    pwm => PA8
+  supports pwm :
+    option :
+      pwm => PA7
+    option :
+      pwm => PB13
+  supports pwm :
+    pwm => PA9
+  supports pwm :
+    option :
+      pwm => PB0
+    option :
+      pwm => PB14
+  supports pwm :
+    pwm => PA10
+  supports pwm :
+    option :
+      pwm => PB1
+    option :
+      pwm => PB15
+  supports pwm :
+    pwm => PA11
+  supports pwm :
+    pwm => PA12
+  supports pwm :
+    option :
+      pwm => PA0
+    option :
+      pwm => PA5
+    option :
+      pwm => PA15
+  supports pwm :
+    option :
+      pwm => PA1
+    option :
+      pwm => PB3
+  supports pwm :
+    option :
+      pwm => PA2
+    option :
+      pwm => PB10
+  supports pwm :
+    option :
+      pwm => PA3
+    option :
+      pwm => PB11
+  supports pwm :
+    option :
+      pwm => PA0
+    option :
+      pwm => PA5
+    option :
+      pwm => PA15
+
+  supports i2c :
+    option :
+      i2c.scl => PA9 
+      i2c.sda => PA10 
+    option :
+      i2c.scl => PB6 
+      i2c.sda => PB7 
+    option :
+      i2c.scl => PB8
+      i2c.sda => PB9
+
+  supports i2c :
+    option :
+      i2c.scl => PB10 
+      i2c.sda => PB11 
+    option :
+      i2c.scl => PB13
+      i2c.sda => PB14 
+
+  supports i2c :
+    option :
+      i2c.scl => PC0 
+      i2c.sda => PC1
+    option :
+      i2c.scl => PA7
+      i2c.sda =>  PB4 
+
+  supports can :
+    option :
+      can.rx => PA11
+      can.tx => PA12 
+    option :
+      can.rx =>  PB8
+      can.tx => PB9
+
+  supports spi :
+    option :
+      spi.miso => PA6 
+      spi.mosi => PA7 
+      spi.sck => PA1 
+      spi.ss => PA4 
+    option :
+      spi.mosi => PA12 
+      spi.miso => PA11 
+      spi.sck => PA5 
+      spi.ss => PB0 
+    option :
+      spi.mosi => PB5
+      spi.miso => PB4
+      spi.sck => PB3
+      spi.ss => PA15
+
+  supports spi :
+    option :
+      spi.miso => PC2 
+      spi.mosi => PC3 
+      spi.sck => PB10 
+      spi.ss => PB12 
+    option :
+      spi.miso => PB14
+      spi.mosi => PB15
+      spi.sck => PB13
+      spi.ss => PB9
+
+  supports spi :
+    option :
+      spi.miso => PC11 
+      spi.mosi => PC12 
+      spi.sck => PC10 
+      spi.ss => PA4 
+    option :
+      spi.miso => PB4
+      spi.mosi => PB5
+      spi.ss => PA15
+      spi.sck => PB3
+
+  supports uart :
+    option :
+      uart.rx => PA10 
+      uart.tx => PA9 
+    option :
+      uart.rx => PB7
+      uart.tx => PB6
+
+  supports uart :
+    option :
+      uart.rx => PA3 
+      uart.tx => PA2
+    option :
+      uart.rx => PA15
+      uart.tx => PA2
+
+  supports uart :
+    option :
+      uart.rx => PC5 
+      uart.tx => PC4 
+    option :
+      uart.rx => PB11 
+      uart.tx => PB10 
+    option :
+      uart.rx => PC11
+      uart.tx => PC10
+
+  supports usb-2 :
+    usb-2.dat- => PA11
+    usb-2.dat+ => PA12
+
+  supports sd :
+    sd.clk => PC12
+    sd.cmd => PD2
+    sd.dat[0] => PC8
+    sd.dat[1] => PC9
+    sd.dat[2] => PC10
+    sd.dat[3] => PC11
+
+  supports swd :
+    swd.swdio => PA13
+    swd.swclk => PA14
+    swd.reset => NRST
+    swd.swo   => PB3
+
+  supports jtag :
+    jtag.tck => PA14
+    jtag.tdi => PA15
+    jtag.tdo => PB3
+    jtag.tms => PA13
+    jtag.trstn => PB4
+
+  package = QFP50P1200X1200X160-64N(cmp-pad-map(ps))
+  part = stmicro-STM32L433RCT6P-prt
 
 ; STM32 microcontroller
 pcb-component stmicro-STM32F405RG-cmp :
@@ -3502,6 +4455,12 @@ pcb-component stmicro-STM32F405RG-cmp :
   package = LQFP64(cmp-pad-map(ps))
   part = stmicro-STM32F405RG-prt
 
+pcb-component coilcraft-XAL6060-682MEB-cmp :
+  port p : pin[2]
+  emodel = Inductor(6.8, 20.0, 9.2)
+  package = INDM656636X610
+  part = coilcraft-XAL6060-682MEB-prt
+  reference-prefix = "L"
 
 pcb-component coilcraft-LPS4018-103MRB-cmp :
   port p : pin[2]
@@ -3544,3 +4503,573 @@ public pcb-component molex-microfit-3-cmp (n:Int) :
   package = {molex-microfit-3-pkg(n)}
   part = {molex-microfit-3-prt(n)}
   reference-prefix = "J"
+
+
+pcb-component zcu106-cmp:
+  ; This is an FMC interface to a carrier board
+  ;;;;;;;;;;;;;;;;;;;;;
+  ; THIS SECTION AUTO-GENERATED
+
+  val ps = PinSpec(
+    [`dp0-c2m-n    => `C3  , `dp0-c2m-p     => `C2  , `dp0-m2c-n     => `C7  , `dp0-m2c-p     => `C6  , 
+    `dp1-c2m-n     => `A23 , `dp1-c2m-p     => `A22 , `dp1-m2c-n     => `A3  , `dp1-m2c-p     => `A2  , 
+    `dp2-c2m-n     => `A27 , `dp2-c2m-p     => `A26 , `dp2-m2c-n     => `A7  , `dp2-m2c-p     => `A6  , 
+    `dp3-c2m-n     => `A31 , `dp3-c2m-p     => `A30 , `dp3-m2c-n     => `A11 , `dp3-m2c-p     => `A10 , 
+    `dp4-c2m-n     => `A35 , `dp4-c2m-p     => `A34 , `dp4-m2c-n     => `A15 , `dp4-m2c-p     => `A14 , 
+    `dp5-c2m-n     => `A39 , `dp5-c2m-p     => `A38 , `dp5-m2c-n     => `A19 , `dp5-m2c-p     => `A18 , 
+    `dp6-c2m-n     => `B37 , `dp6-c2m-p     => `B36 , `dp6-m2c-n     => `B17 , `dp6-m2c-p     => `B16 , 
+    `dp7-c2m-n     => `B33 , `dp7-c2m-p     => `B32 , `dp7-m2c-n     => `B13 , `dp7-m2c-p     => `B12 , 
+    `la00-n-cc     => `G7  , `la00-p-cc     => `G6  , `la01-n-cc     => `D9  , `la01-p-cc     => `D8  , 
+    `la02-n        => `H8  , `la02-p        => `H7  , `la03-n        => `G10 , `la03-p        => `G9  , 
+    `la04-n        => `H11 , `la04-p        => `H10 , `la05-n        => `D12 , `la05-p        => `D11 , 
+    `la06-n        => `C11 , `la06-p        => `C10 , `la07-n        => `H14 , `la07-p        => `H13 , 
+    `la08-n        => `G13 , `la08-p        => `G12 , `la09-n        => `D15 , `la09-p        => `D14 , 
+    `la10-n        => `C15 , `la10-p        => `C14 , `la11-n        => `H17 , `la11-p        => `H16 , 
+    `la12-n        => `G16 , `la12-p        => `G15 , `la13-n        => `D18 , `la13-p        => `D17 , 
+    `la14-n        => `C19 , `la14-p        => `C18 , `la15-n        => `H20 , `la15-p        => `H19 , 
+    `la16-n        => `G19 , `la16-p        => `G18 , `la17-n-cc     => `D21 , `la17-p-cc     => `D20 , 
+    `la18-n-cc     => `C23 , `la18-p-cc     => `C22 , `la19-n        => `H23 , `la19-p        => `H22 , 
+    `la20-n        => `G22 , `la20-p        => `G21 , `la21-n        => `H26 , `la21-p        => `H25 , 
+    `la22-n        => `G25 , `la22-p        => `G24 , `la23-n        => `D24 , `la23-p        => `D23 , 
+    `la24-n        => `H29 , `la24-p        => `H28 , `la25-n        => `G28 , `la25-p        => `G27 , 
+    `la26-n        => `D27 , `la26-p        => `D26 , `la27-n        => `C27 , `la27-p        => `C26 , 
+    `la28-n        => `H32 , `la28-p        => `H31 , `la29-n        => `G31 , `la29-p        => `G30 , 
+    `la30-n        => `H35 , `la30-p        => `H34 , `la31-n        => `G34 , `la31-p        => `G33 , 
+    `la32-n        => `H38 , `la32-p        => `H37 , `la33-n        => `G37 , `la33-p        => `G36 , ]
+    [ `clk0-m2c-n  => `H5  , `clk0-m2c-p    => `H4  , `clk1-m2c-n    => `G3  , `clk1-m2c-p    => `G2  , 
+    `ga0           => `C34 , `ga1           => `D35 , `gbtclk0-m2c-n => `D5  , `gbtclk0-m2c-p => `D4  , 
+    `gbtclk1-m2c-n => `B21 , `gbtclk1-m2c-p => `B20 , `pg-c2m        => `D1  , `pg-m2c        => `F1  , 
+    `prsnt-m2c-l   => `H2  , `scl           => `C30 , `sda           => `C31 , `tck           => `D29 , 
+    `tdi           => `D30 , `tdo           => `D31 , `tms           => `D33 , ]
+    [ `gnd => [ `E11 `C36 `A25 `A40 `D2 `G14 `K39 `A12 `G23 `A5 `A20 `G35 `E32 `D13 `K18 `C12 `C20 `F15 `D22 `C32 `C17 `E23 `H3 `B15 `H15 `K15 `D39 `H18 `K27 `C25 `B23 `D37 `F39 `H12 `F33 `A24 `B10 `B3 `G26 `F6 `E35 `G20 `H9 `J1 `B18 `J35 `J11 `D28 `E8 `D6 `F21 `F3 `F2 `K6 `D16 `D3 `G17 `J20 `C28 `B7 `B26 `E1 `G1 `A16 `B34 `G29 `A17 `B11 `F18 `F30 `C38 `A37 `H36 `B38 `C40 `A21 `K33 `E26 `A29 `G32 `B14 `J23 `B27 `G38 `A4 `C33 `K36 `H21 `H39 `E5 `J32 `H33 `J40 `K3 `D25 `A9 `E40 `B22 `F24 `G40 `F12 `F9 `E14 `E20 `C24 `C5 `D10 `K9 `H24 `A8 `G8 `A1 `K24 `E29 `A28 `D7 `J17 `J8 `C21 `G5 `C13 `H27 `J38 `C4 `E17 `A36 `B35 `F36 `B30 `B31 `J5 `C29 `D19 `B19 `H30 `F27 `B2 `J4 `K21 `B39 `E4 `C9 `G11 `G4 `J14 `K12 `A33 `H6 `J26 `C16 `K30 `E38 `C1 `A32 `J29 `A13 `C8 `K2 `B6 ], ]
+    [ `v12p0 => [ `C37 `C35 ], `v3p3 => [ `D38 `D36 `C39 `D40 ], `v3p3vaux => `D32, `vadj => [ `E39 `G39 `F40 `H40 ], ]
+  )
+  make-pins(ps)
+  supports i2c:
+    i2c.scl => Ref(`scl)
+    i2c.sda => Ref(`sda)
+  supports jtag-no-rst:
+    jtag-no-rst.tck => Ref(`tck)
+    jtag-no-rst.tdi => Ref(`tdi)
+    jtag-no-rst.tdo => Ref(`tdo)
+    jtag-no-rst.tms => Ref(`tms)
+  supports lvds-clk:
+    lvds-clk.n => Ref(`la00-n-cc)
+    lvds-clk.p => Ref(`la00-p-cc)
+  supports lvds-clk:
+    lvds-clk.n => Ref(`la01-n-cc)
+    lvds-clk.p => Ref(`la01-p-cc)
+  supports lvds-clk:
+    lvds-clk.n => Ref(`la17-n-cc)
+    lvds-clk.p => Ref(`la17-p-cc)
+  supports lvds-clk:
+    lvds-clk.n => Ref(`la18-n-cc)
+    lvds-clk.p => Ref(`la18-p-cc)
+  supports lvds:
+    lvds.n => Ref(`clk0-m2c-n)
+    lvds.p => Ref(`clk0-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`clk1-m2c-n)
+    lvds.p => Ref(`clk1-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp0-c2m-n)
+    lvds.p => Ref(`dp0-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp0-m2c-n)
+    lvds.p => Ref(`dp0-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp1-c2m-n)
+    lvds.p => Ref(`dp1-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp1-m2c-n)
+    lvds.p => Ref(`dp1-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp2-c2m-n)
+    lvds.p => Ref(`dp2-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp2-m2c-n)
+    lvds.p => Ref(`dp2-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp3-c2m-n)
+    lvds.p => Ref(`dp3-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp3-m2c-n)
+    lvds.p => Ref(`dp3-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp4-c2m-n)
+    lvds.p => Ref(`dp4-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp4-m2c-n)
+    lvds.p => Ref(`dp4-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp5-c2m-n)
+    lvds.p => Ref(`dp5-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp5-m2c-n)
+    lvds.p => Ref(`dp5-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp6-c2m-n)
+    lvds.p => Ref(`dp6-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp6-m2c-n)
+    lvds.p => Ref(`dp6-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`dp7-c2m-n)
+    lvds.p => Ref(`dp7-c2m-p)
+  supports lvds:
+    lvds.n => Ref(`dp7-m2c-n)
+    lvds.p => Ref(`dp7-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`gbtclk0-m2c-n)
+    lvds.p => Ref(`gbtclk0-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`gbtclk1-m2c-n)
+    lvds.p => Ref(`gbtclk1-m2c-p)
+  supports lvds:
+    lvds.n => Ref(`la00-n-cc)
+    lvds.p => Ref(`la00-p-cc)
+  supports lvds:
+    lvds.n => Ref(`la01-n-cc)
+    lvds.p => Ref(`la01-p-cc)
+  supports lvds:
+    lvds.n => Ref(`la02-n)
+    lvds.p => Ref(`la02-p)
+  supports lvds:
+    lvds.n => Ref(`la03-n)
+    lvds.p => Ref(`la03-p)
+  supports lvds:
+    lvds.n => Ref(`la04-n)
+    lvds.p => Ref(`la04-p)
+  supports lvds:
+    lvds.n => Ref(`la05-n)
+    lvds.p => Ref(`la05-p)
+  supports lvds:
+    lvds.n => Ref(`la06-n)
+    lvds.p => Ref(`la06-p)
+  supports lvds:
+    lvds.n => Ref(`la07-n)
+    lvds.p => Ref(`la07-p)
+  supports lvds:
+    lvds.n => Ref(`la08-n)
+    lvds.p => Ref(`la08-p)
+  supports lvds:
+    lvds.n => Ref(`la09-n)
+    lvds.p => Ref(`la09-p)
+  supports lvds:
+    lvds.n => Ref(`la10-n)
+    lvds.p => Ref(`la10-p)
+  supports lvds:
+    lvds.n => Ref(`la11-n)
+    lvds.p => Ref(`la11-p)
+  supports lvds:
+    lvds.n => Ref(`la12-n)
+    lvds.p => Ref(`la12-p)
+  supports lvds:
+    lvds.n => Ref(`la13-n)
+    lvds.p => Ref(`la13-p)
+  supports lvds:
+    lvds.n => Ref(`la14-n)
+    lvds.p => Ref(`la14-p)
+  supports lvds:
+    lvds.n => Ref(`la15-n)
+    lvds.p => Ref(`la15-p)
+  supports lvds:
+    lvds.n => Ref(`la16-n)
+    lvds.p => Ref(`la16-p)
+  supports lvds:
+    lvds.n => Ref(`la17-n-cc)
+    lvds.p => Ref(`la17-p-cc)
+  supports lvds:
+    lvds.n => Ref(`la18-n-cc)
+    lvds.p => Ref(`la18-p-cc)
+  supports lvds:
+    lvds.n => Ref(`la19-n)
+    lvds.p => Ref(`la19-p)
+  supports lvds:
+    lvds.n => Ref(`la20-n)
+    lvds.p => Ref(`la20-p)
+  supports lvds:
+    lvds.n => Ref(`la21-n)
+    lvds.p => Ref(`la21-p)
+  supports lvds:
+    lvds.n => Ref(`la22-n)
+    lvds.p => Ref(`la22-p)
+  supports lvds:
+    lvds.n => Ref(`la23-n)
+    lvds.p => Ref(`la23-p)
+  supports lvds:
+    lvds.n => Ref(`la24-n)
+    lvds.p => Ref(`la24-p)
+  supports lvds:
+    lvds.n => Ref(`la25-n)
+    lvds.p => Ref(`la25-p)
+  supports lvds:
+    lvds.n => Ref(`la26-n)
+    lvds.p => Ref(`la26-p)
+  supports lvds:
+    lvds.n => Ref(`la27-n)
+    lvds.p => Ref(`la27-p)
+  supports lvds:
+    lvds.n => Ref(`la28-n)
+    lvds.p => Ref(`la28-p)
+  supports lvds:
+    lvds.n => Ref(`la29-n)
+    lvds.p => Ref(`la29-p)
+  supports lvds:
+    lvds.n => Ref(`la30-n)
+    lvds.p => Ref(`la30-p)
+  supports lvds:
+    lvds.n => Ref(`la31-n)
+    lvds.p => Ref(`la31-p)
+  supports lvds:
+    lvds.n => Ref(`la32-n)
+    lvds.p => Ref(`la32-p)
+  supports lvds:
+    lvds.n => Ref(`la33-n)
+    lvds.p => Ref(`la33-p)
+  supports bar-pin :
+    bar-pin => Ref(`la00-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la00-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la01-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la01-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la17-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la17-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la18-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la18-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`clk0-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`clk0-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`clk1-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`clk1-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp0-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp0-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp0-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp0-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp1-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp1-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp1-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp1-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp2-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp2-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp2-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp2-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp3-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp3-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp3-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp3-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp4-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp4-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp4-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp4-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp5-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp5-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp5-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp5-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp6-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp6-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp6-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp6-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp7-c2m-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp7-c2m-p)
+  supports bar-pin :
+    bar-pin => Ref(`dp7-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`dp7-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`gbtclk0-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`gbtclk0-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`gbtclk1-m2c-n)
+  supports bar-pin :
+    bar-pin => Ref(`gbtclk1-m2c-p)
+  supports bar-pin :
+    bar-pin => Ref(`la00-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la00-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la01-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la01-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la02-n)
+  supports bar-pin :
+    bar-pin => Ref(`la02-p)
+  supports bar-pin :
+    bar-pin => Ref(`la03-n)
+  supports bar-pin :
+    bar-pin => Ref(`la03-p)
+  supports bar-pin :
+    bar-pin => Ref(`la04-n)
+  supports bar-pin :
+    bar-pin => Ref(`la04-p)
+  supports bar-pin :
+    bar-pin => Ref(`la05-n)
+  supports bar-pin :
+    bar-pin => Ref(`la05-p)
+  supports bar-pin :
+    bar-pin => Ref(`la06-n)
+  supports bar-pin :
+    bar-pin => Ref(`la06-p)
+  supports bar-pin :
+    bar-pin => Ref(`la07-n)
+  supports bar-pin :
+    bar-pin => Ref(`la07-p)
+  supports bar-pin :
+    bar-pin => Ref(`la08-n)
+  supports bar-pin :
+    bar-pin => Ref(`la08-p)
+  supports bar-pin :
+    bar-pin => Ref(`la09-n)
+  supports bar-pin :
+    bar-pin => Ref(`la09-p)
+  supports bar-pin :
+    bar-pin => Ref(`la10-n)
+  supports bar-pin :
+    bar-pin => Ref(`la10-p)
+  supports bar-pin :
+    bar-pin => Ref(`la11-n)
+  supports bar-pin :
+    bar-pin => Ref(`la11-p)
+  supports bar-pin :
+    bar-pin => Ref(`la12-n)
+  supports bar-pin :
+    bar-pin => Ref(`la12-p)
+  supports bar-pin :
+    bar-pin => Ref(`la13-n)
+  supports bar-pin :
+    bar-pin => Ref(`la13-p)
+  supports bar-pin :
+    bar-pin => Ref(`la14-n)
+  supports bar-pin :
+    bar-pin => Ref(`la14-p)
+  supports bar-pin :
+    bar-pin => Ref(`la15-n)
+  supports bar-pin :
+    bar-pin => Ref(`la15-p)
+  supports bar-pin :
+    bar-pin => Ref(`la16-n)
+  supports bar-pin :
+    bar-pin => Ref(`la16-p)
+  supports bar-pin :
+    bar-pin => Ref(`la17-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la17-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la18-n-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la18-p-cc)
+  supports bar-pin :
+    bar-pin => Ref(`la19-n)
+  supports bar-pin :
+    bar-pin => Ref(`la19-p)
+  supports bar-pin :
+    bar-pin => Ref(`la20-n)
+  supports bar-pin :
+    bar-pin => Ref(`la20-p)
+  supports bar-pin :
+    bar-pin => Ref(`la21-n)
+  supports bar-pin :
+    bar-pin => Ref(`la21-p)
+  supports bar-pin :
+    bar-pin => Ref(`la22-n)
+  supports bar-pin :
+    bar-pin => Ref(`la22-p)
+  supports bar-pin :
+    bar-pin => Ref(`la23-n)
+  supports bar-pin :
+    bar-pin => Ref(`la23-p)
+  supports bar-pin :
+    bar-pin => Ref(`la24-n)
+  supports bar-pin :
+    bar-pin => Ref(`la24-p)
+  supports bar-pin :
+    bar-pin => Ref(`la25-n)
+  supports bar-pin :
+    bar-pin => Ref(`la25-p)
+  supports bar-pin :
+    bar-pin => Ref(`la26-n)
+  supports bar-pin :
+    bar-pin => Ref(`la26-p)
+  supports bar-pin :
+    bar-pin => Ref(`la27-n)
+  supports bar-pin :
+    bar-pin => Ref(`la27-p)
+  supports bar-pin :
+    bar-pin => Ref(`la28-n)
+  supports bar-pin :
+    bar-pin => Ref(`la28-p)
+  supports bar-pin :
+    bar-pin => Ref(`la29-n)
+  supports bar-pin :
+    bar-pin => Ref(`la29-p)
+  supports bar-pin :
+    bar-pin => Ref(`la30-n)
+  supports bar-pin :
+    bar-pin => Ref(`la30-p)
+  supports bar-pin :
+    bar-pin => Ref(`la31-n)
+  supports bar-pin :
+    bar-pin => Ref(`la31-p)
+  supports bar-pin :
+    bar-pin => Ref(`la32-n)
+  supports bar-pin :
+    bar-pin => Ref(`la32-p)
+  supports bar-pin :
+    bar-pin => Ref(`la33-n)
+  supports bar-pin :
+    bar-pin => Ref(`la33-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp0-m2c-n)
+    pcie-lane.in.p => Ref(`dp0-m2c-p)
+    pcie-lane.out.n => Ref(`dp0-c2m-n)
+    pcie-lane.out.p => Ref(`dp0-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp1-m2c-n)
+    pcie-lane.in.p => Ref(`dp1-m2c-p)
+    pcie-lane.out.n => Ref(`dp1-c2m-n)
+    pcie-lane.out.p => Ref(`dp1-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp2-m2c-n)
+    pcie-lane.in.p => Ref(`dp2-m2c-p)
+    pcie-lane.out.n => Ref(`dp2-c2m-n)
+    pcie-lane.out.p => Ref(`dp2-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp3-m2c-n)
+    pcie-lane.in.p => Ref(`dp3-m2c-p)
+    pcie-lane.out.n => Ref(`dp3-c2m-n)
+    pcie-lane.out.p => Ref(`dp3-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp4-m2c-n)
+    pcie-lane.in.p => Ref(`dp4-m2c-p)
+    pcie-lane.out.n => Ref(`dp4-c2m-n)
+    pcie-lane.out.p => Ref(`dp4-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp5-m2c-n)
+    pcie-lane.in.p => Ref(`dp5-m2c-p)
+    pcie-lane.out.n => Ref(`dp5-c2m-n)
+    pcie-lane.out.p => Ref(`dp5-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp6-m2c-n)
+    pcie-lane.in.p => Ref(`dp6-m2c-p)
+    pcie-lane.out.n => Ref(`dp6-c2m-n)
+    pcie-lane.out.p => Ref(`dp6-c2m-p)
+  supports pcie-lane:
+    pcie-lane.in.n => Ref(`dp7-m2c-n)
+    pcie-lane.in.p => Ref(`dp7-m2c-p)
+    pcie-lane.out.n => Ref(`dp7-c2m-n)
+    pcie-lane.out.p => Ref(`dp7-c2m-p)
+  symbol = {generic-box-sym(ps, `FMC)}
+  package = ASP-134488-01-pkg(cmp-pad-map(ps))
+
+pcb-component marvell-88E1510-A0-NNB2C000-cmp :
+  port mdi : diff-pair[4]
+  port rgmii : rgmii
+  port hsdac : diff-pair
+  port led : pin[3]
+  pin clk125
+  pin xtal-in
+  pin xtal-out
+  pin mdio
+  pin mdc
+  pin config
+  pin nRESET
+  pin RSET
+  pin VSS
+  pin VDDO
+  pin DVDD
+  pin DVDD-OUT
+  pin AVDDC18 
+  pin AVDD18 
+  pin AVDD18-OUT 
+  pin AVDD33 
+  pin REG-IN 
+  pin REGCAP1 
+  pin REGCAP2 
+
+  val ps = PinSpec(
+    [rgmii.rx-ctrl => 37 rgmii.rx-clk => 40
+     rgmii.rxd[0] => 38 rgmii.rxd[2] => 39 
+     rgmii.rxd[1] => 41 rgmii.rxd[3] => 42
+     rgmii.tx-ctrl => 2 rgmii.tx-clk => 47
+     rgmii.txd[0] => 44 rgmii.txd[2] => 45 
+     rgmii.txd[1] => 48 rgmii.txd[3] => 1
+     mdio => 5 mdc => 4 config => 11 
+     nRESET => 12 RSET => 25]
+    [mdi[0].D_P => 24 mdi[0].D_N => 23
+     mdi[1].D_P => 20 mdi[1].D_N => 19 
+     mdi[2].D_P => 18 mdi[2].D_N => 17 
+     mdi[3].D_P => 14 mdi[3].D_N => 13
+     hsdac.D_P => 27 hsdac.D_N => 26
+     led[0] => 10 led[1] => 9 led[2] => 8
+     clk125 => 6
+     xtal-in => 29 xtal-out => 28]
+     [VSS => 49]
+     [VDDO => [7 43 46] DVDD => [3 36] 
+     DVDD-OUT => 34 AVDDC18 => 30 AVDD18 => [15 22] 
+     AVDD18-OUT => 33 AVDD33 => [16 21] REG-IN => 31 
+     REGCAP1 => 32 REGCAP2 => 35]
+    )
+  package = QFN50P700X700X85-48(cmp-pad-map(ps))
+  part = marvell-88E1510-A0-NNB2C000-prt
+
+pcb-component pulse-J0G-0009NL-cmp :
+  port trd : trd[4]
+  pin shield
+
+  val ps = PinSpec(
+    [trd[0].trd.D_P => 11 trd[0].trd.D_N => 10 trd[0].common => 12
+     trd[1].trd.D_P => 4 trd[1].trd.D_N => 5 trd[1].common => 6
+     trd[2].trd.D_P => 3 trd[2].trd.D_N => 2 trd[2].common => 1
+     trd[3].trd.D_P => 8 trd[3].trd.D_N => 9 trd[3].common => 7]
+    []
+    [shield => [18 19]])
+
+  supports ethernet-1000 :
+    ethernet-1000.mdi[0] => trd[0].trd
+    ethernet-1000.mdi[1] => trd[1].trd
+    ethernet-1000.mdi[2] => trd[2].trd
+    ethernet-1000.mdi[3] => trd[3].trd
+
+  package = pulse-J0G-0009NL-pkg(cmp-pad-map(ps))
+  part = pulse-J0G-0009NL-prt

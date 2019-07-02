@@ -8,18 +8,23 @@ defpackage rtm/ir-lower :
   import rtm/errors
   import stz/algorithms with :
     prefix(FreeList) => stz-
-  import plugins/slave
+  import rtm/property-merge
 
 ;============================================================
 ;===================== Standard Passes ======================
 ;============================================================
 
-public defn lower (prog:List<TStmt>, flattener:RefFlattener, gen-power?:True|False, print-post-power?:True|False) -> Collection<TStmt> :
+public defn lower (prog:List<TStmt>, flattener:RefFlattener) -> Collection<TStmt> :
   ;Remove all errors that this pass is detecting
-  remove-errors({_ is DuplicateReferenceDesignator | 
-                      NoPackageForInst |
-                      InappropriatePart |
-                      NoAppropriatePart})
+  remove-errors({_ is InappropriatePart
+                    | NoAppropriatePart
+                    | DuplicateReferenceDesignator
+                    | NoPackageForInst
+                    | NoPoseForInst
+                    | NoSideForInst
+                    | NoPoseForInst
+                    | NoSideForInst
+  })
   end-if-errors()
 
   ;Construct irtable
@@ -29,53 +34,225 @@ public defn lower (prog:List<TStmt>, flattener:RefFlattener, gen-power?:True|Fal
     prog
 
   ;Solve
-  val prog* =
-    add-reference-designators $
-    inline-modules{ir-table, _, flattener} $
-    update-ir-table $
-    inline-attaches{ir-table, _, flattener} $
-    update-ir-table $
-    expand-nets{ir-table, _} $
-    solve-mappings{ir-table, _} $
-    prog
-
-  ;Generate power supplies if requested
-  if gen-power? : prog*
-  else : prog*
-
-public defn lower (prog:List<TStmt>, flattener:RefFlattener, print-post-power?:True|False) -> Collection<TStmt> :
-  lower(prog, flattener, true, print-post-power?)
-
-public defn lower (prog:List<TStmt>, flattener:RefFlattener) -> Collection<TStmt> :
-  lower(prog, flattener, true, false)
+  check-schematic-groups $
+  check-inst-poses $
+  add-reference-designators $  
+  inline-modules{ir-table, _, flattener} $
+  update-ir-table $
+  expand-nets{ir-table, _} $
+  solve-mappings{ir-table, _} $
+  prog
 
 public defn lower (prog:List<TStmt>) :
-  lower(prog, DefaultFlattener(), false)
+  lower(prog, DefaultFlattener())
+
+;<doc>=======================================================
+;============== Retrieve All Pin Properties =================
+;============================================================
+
+PEntry levels:
+  For each PinPropertiesStmt at level l:
+    if statement is inherited from a DefComponent then:
+      statements within support options are at level INT-MAX - 1
+      statements at DefComponent level are at level INT-MAX
+    else if statement is at the module level then:
+      statements within support options are at level (2 * l)
+      statements at module level are at level (2 * l + 1)
+
+;============================================================
+;=======================================================<doc>    
+
+public defn pin-properties (ir-table:IRTable, m:DefModule) -> [Tuple<PinPropertiesStmt>, Mapping] :
+  ;Tables
+  val supported-by-stmts = Vector<SupportedByStmt>()
+  val source-table = HashTable<Ref,InstStmt|InstSupportsStmt>()
+  val option-table = HashTable<Ref,SupportOption>()
+  val pentries = Vector<PEntry>()
+
+  ;Overall algorithm
+  defn driver () :
+    build-tables()      
+    compute-pin-properties()    
+
+  ;Fill out supported-by-stmts, source-table, and module-option-table
+  defn build-tables () :
+    for s in stmts(m) do :
+      match(s) :
+        (s:SupportedByStmt) :
+          add(supported-by-stmts, s)
+        (s:InstStmt) :
+          val inst-name = Ref(name(s))
+          defn prefix-inst (r:Ref) :
+            dot(inst-name, r)
+          defn prefix-inst (s:PinPropertiesStmt) :
+            sub-ref(s, prefix-inst(ref(s)))
+          defn prefix-inst (m:Mapping) :
+            Mapping $ for entry in mappings(m) map :
+              key(entry) => prefix-inst(value(entry))
+          defn prefix-inst (o:SupportOption) :
+            SupportOption(
+              prefix-inst(id(o) as Ref),
+              requires(o),
+              map(prefix-inst, properties(o)),
+              prefix-inst(mapping(o)))
+          source-table[inst-name] = s
+          val ctable = ctable(ir-table, component(s))
+          for p in seq(prefix-inst, pin-properties(ctable)) do :
+            make-pentry(entries(p), ref(p), INT-MAX)
+          for s in supports(ctable) do :
+            for o in seq(prefix-inst, options(s)) do :
+              option-table[id(o) as Ref] = o
+        (s:InstSupportsStmt) :
+          source-table[inst(s)] = s
+          for o in options(s) do :
+            option-table[dot(inst(s), id(o) as Ref)] = o
+        (s:PinPropertiesStmt) :
+          make-pentry(entries(s), ref(s), 2 * level(s) + 1)
+        (s) : false
+
+  ;Make a SinglePin PEntry out of given arguments
+  defn make-pentry (entries:Tuple<KeyValue<Symbol,?>>, ref:Ref, level:Int) :
+    val entry = new PEntry :
+      defmethod properties (this) : entries
+      defmethod ref (this) : ref
+      defmethod level (this) : level
+      defmethod type (this) : SinglePin()
+      defmethod print (o:OutputStream, this) :
+        print(o, "PEntry(%_, %_, %_)" % [ref, level, entries])
+    add(pentries, entry) 
+  
+  ;Retrieve bindings and properties given by supported-by statement
+  ;return: (props:List<PinPropertiesStmt>, from-component?:True|False) -> ?
+  defn get-bindings+properties (return:(List<PinPropertiesStmt>, True|False) -> ?, s:SupportedByStmt) -> Mapping :
+    ;First retrieve the instance from which the port was requested.
+    ;It will either be an inst or an inst-supports.
+    match(source-table[base(ref(s))]) :
+      (src:InstStmt) :
+        ;Retrieve the SupportOption corresponding to
+        ;component C and option-id(s).
+        val option = option-table[option-id(s)]
+        val bindings* = apply-mappings(ref(s), mapping(option))
+        return(properties(option), true)
+        bindings*
+      (src:InstSupportsStmt) :
+        ;First build table with nested bindings
+        val binding-table = HashTable<Ref,Ref>()
+        for s in nested-supports(s) do :
+          val mappings = mappings(get-bindings+properties(return, s))
+          for entry in mappings do :
+            binding-table[key(entry)] = value(entry)
+        
+        ;Retrieve the SupportOption corresponding to option-id(s).
+        val option = option-table[option-id(s)]
+        val properties* = sub-bindings(properties(option), binding-table)
+        val mappings* = sub-bindings(mapping(option), binding-table)
+        val bindings* = apply-mappings(ref(s), mappings*)
+        return(properties*, false)
+        bindings*        
+
+  ;Make appropriate remappings in the given Supports properties using the
+  ;given binding table.
+  defn sub-bindings (ss:List<PinPropertiesStmt>, bindings:Table<Ref,Ref>) :
+    for s in ss map :
+      sub-ref(s, get?(bindings, ref(s), ref(s)))
+      
+  ;Make appropriate remappings in the given capability mappings using the
+  ;given bindings table
+  defn sub-bindings (m:Mapping, bindings:Table<Ref,Ref>) :
+    Mapping $ for entry in mappings(m) map :
+      val v = value(entry)
+      key(entry) => get?(bindings,v,v)
+
+  ;Apply the capability mappings given in m:
+  ;e.g. i2c.sda => insta.p[0]
+  ;     i2c.scl => instb.p[4]
+  ;to the given port:
+  ;e.g. myinst.mic
+  ;Output should be:
+  ;e.g. myinst.mic.sda => insta.p[0]
+  ;     myinst.mic.scl => instb.p[4]
+  defn apply-mappings (port:Ref, m:Mapping) :
+    Mapping $ for entry in mappings(m) map :
+      sub-head(key(entry), port) => value(entry)
+  
+  ;Compute pin properties, and mappings
+  defn compute-pin-properties () :
+    ;Accumulate all computed mappings
+    val all-bindings = Vector<KeyValue<Ref,Ref>>()
+    
+    ;pentries list already holds entries inherited by non-supports properties
+    ;Now add the properties from the supports statements.
+    for s in supported-by-stmts do :
+      val bindings = 
+        within (pin-props, from-component?) = get-bindings+properties(s) :
+          for p in pin-props do :
+            val level = (INT-MAX - 1) when from-component?
+                   else 2 * level(p) 
+            make-pentry(/entries(p), ref(p), level)
+      add-all(all-bindings, mappings(bindings))
+    val properties* = to-tuple(merge-pin-properties(ir-table, pentries))
+
+    ;Return new properties and bindings
+    [properties*, Mapping(to-list(all-bindings))]
+
+  ;Launch algorithm
+  driver()
 
 ;============================================================
 ;==================== Post Lower ============================
 ;============================================================
 
+;Substitute concrete pins
+public defn substitute-concrete-pins (prog:Collection<TStmt>) :
+  ;Substitute all concrete pins annotated by supported-by statements.
+  defn sub-pins (ir-table:IRTable, m:DefModule) :
+    ;First compute the pin properties and mapping
+    ;annotated by the supported-by statements.
+    val [pin-props, mapping] = pin-properties(ir-table, m)
+
+    ;Next create the function 'sub-bindings' for processing a MStmt
+    ;by substituting all the annotated bindings.
+    val binding-table = to-hashtable<Ref,Ref>(mappings(mapping))
+    defn sub-bindings (s:MStmt) :
+      defn sub-binding (r:Ref) : get?(binding-table, r, r)
+      map-scope-refs(sub-binding, s)
+
+    val stmts* = Vector<MStmt>()
+    for s in stmts(m) do :
+      match(s) :
+        ;Remove previous statements
+        (s:PinPropertiesStmt) : false
+        (s:InstSupportsStmt) : false
+        (s:RequireStmt) : false
+        (s:SupportsStmt) : false
+        (s:SupportedByStmt) : false
+        ;Substitute binding for other statements
+        (s) : add(stmts*, sub-bindings(s))        
+    add-all(stmts*, pin-props)
+    sub-stmts(m, to-list(stmts*))
+
+  ;Apply transformations on all top-level modules
+  within (ir-table, defm) = map-top-modules(prog) :
+    post-lower(ir-table, sub-pins(ir-table, defm))    
+
 ;Final lowering pass to be done after requirements and concrete pins have been assigned.
-public defn post-lower (ir-table:IRTable, m:DefModule) :
+defn post-lower (ir-table:IRTable, m:DefModule) :
   ;Retrieve tables
   val mtable = MTable(m)
   val menv = ModuleEnv(ir-table, name(m))
 
-  ;Remove supports and requires statements
-  defn remove-supports-requires (stmts:Seqable<MStmt>) :
-    filter({_ is-not InstSupportsStmt|RequireStmt|SupportsStmt}, stmts)
 
   ;Construct new statements
   val stmts* = to-list $
+    undot-refs{ir-table, _, KicadFlattener()} $
     group-nets{ir-table, _, false} $
-    remove-supports-requires $
     stmts(m)
   sub-stmts(m, stmts*)
 
 ;============================================================
 ;===================== Mapping Solver =======================
 ;============================================================
+
 defn solve-mappings (env:TypeEnv, m:Mapping, defaults:Seqable<Ref>) -> Mapping :
   val mt = MappingTable(env, true, mentries) where :
     val mentries = Vector<MapEntry>()
@@ -105,45 +282,89 @@ defn solve-mappings (ir-table:IRTable, m:DefModule) :
     seq(Ref{name(_)}, pins(cmtable(ir-table, c-name)))
 
   ;Substitute new statements
-  val stmts* = for s in stmts(m) map :
+  val stmts* = Vector<MStmt>()
+  val pin-stmts = IntTable<List<PinPropertiesStmt>>(List())
+  for s in stmts(m) do :
     match(s) :
       (s:PackageStmt) :
         match(package(s)) :
           ([pak, m]:[Symbol Mapping]) :
             val m* = solve-mappings(InstEnv(ref(s)), m, inst-pins(ref(s)))
-            sub-package(s, [pak, m*])
-          (f:False) : s
+            add(stmts*, sub-package(s, [pak, m*]))
+          (f:False) :
+            add(stmts*, s)
       (s:RequireStmt) :
-        solve-mappings(ir-table, s)
+        add(stmts*, solve-mappings(ir-table, s))
       (s:SupportsStmt) :
-        solve-mappings(ir-table, s)
-      (s) : s
-  sub-stmts(m, stmts*)
+        add(stmts*, solve-mappings(ir-table, env, s))
+      (s:InstSupportsStmt) :
+        add(stmts*, solve-mappings(ir-table, env, s))
+      (s:PinPropertiesStmt) :
+        update(pin-stmts, cons{s, _}, level(s))
+      (s) :
+        add(stmts*, s)
+  for entry in pin-stmts do :
+    add-all(stmts*, expand-properties(env, value(entry), key(entry)))
+  sub-stmts(m, to-list(stmts*))
 
 defn solve-mappings (ir-table:IRTable, c:DefComponent) :
   val env = ComponentEnv(ir-table, name(c))
   val pin-refs = map(Ref{name(_)}, pins(c))
-  val stmts* = for s in stmts(c) map :
+  val stmts* = Vector<CStmt>()
+  val pin-stmts = Vector<PinPropertiesStmt>()
+  for s in stmts(c) do :
     match(s) :
       (s:DefaultPackageStmt) :
-        sub-mapping(s, solve-mappings(env, mapping(s), pin-refs))
+        add(stmts*, sub-mapping(s, solve-mappings(env, mapping(s), pin-refs)))
       (s:SupportsStmt) :
-        solve-mappings(ir-table, s)
+        add(stmts*, solve-mappings(ir-table, env, s))
+      (s:PinPropertiesStmt) :
+        add(pin-stmts, s)
       (s) :
-        s
-  sub-stmts(c, stmts*)
+        add(stmts*, s)
+  add-all(stmts*, expand-properties(env, pin-stmts))
+  sub-stmts(c, to-list(stmts*))
 
 defn solve-mappings (ir-table:IRTable, r:RequireStmt) :
   val lhs-env = CapabilityEnv(ir-table, Ref(name(r)), capability(r))
   sub-mapping(r, solve-mappings(lhs-env, mapping(r)))
 
-defn solve-mappings (ir-table:IRTable, s:SupportsStmt) :
+defn solve-mappings (ir-table:IRTable, env:TypeEnv, s:InstSupportsStmt) :
+  val supports* = solve-mappings(ir-table, env, supports-stmt(s))
+  InstSupportsStmt(inst(s), supports*)
+
+defn solve-mappings (ir-table:IRTable, env:TypeEnv, s:SupportsStmt) :
   val lhs-env = CapabilityEnv(ir-table, Ref(capability(s)), Capability(capability(s)))
   val options* = for option in options(s) map :
+    val id* = make-default-id(id(option))
     val requires* = map(solve-mappings{ir-table, _}, requires(option))
     val mapping* = solve-mappings(lhs-env, mapping(option))
-    sub-requires(sub-mapping(option, mapping*), requires*)
+    val properties* = expand-properties(SupportOptionEnv(env, option), properties(option))
+    sub-mapping{_, mapping*} $
+    sub-requires{_, requires*} $
+    sub-id{_, id*} $
+    sub-properties{_, properties*} $
+    option
   sub-options(s, options*)
+
+defn make-default-id (id:Ref|False) :
+  match(id:Ref) : id
+  else : Ref(gensym(`s))
+
+defn expand-properties (env:TypeEnv, ps:Seqable<PinPropertiesStmt>) :
+  expand-properties(env, ps, 0)
+
+defn expand-properties (env:TypeEnv, ps:Seqable<PinPropertiesStmt>, level:Int) :
+  val pentries = for s in ps seq :
+    new PEntry :
+      defmethod properties (this) : entries(s)
+      defmethod ref (this) : ref(s)
+      defmethod level (this) : level
+      defmethod type (this) : env[ref(s)] as PinType
+  val penv = new PEnv<PinPropertiesStmt> :
+    defmethod expand (this, r:Ref, t:PinType) : expand(env, r, t)
+    defmethod make-entry (this, r:Ref, es:Tuple<KeyValue<Symbol,?>>) : PinPropertiesStmt(r, level, es)
+  to-list(merge-properties(penv, pentries))
 
 defn solve-mappings (ir-table:IRTable, prog:Seqable<TStmt>) :
   to-list $ for s in prog seq :
@@ -183,150 +404,11 @@ defn expand-nets (ir-table:IRTable, m:DefModule) :
   sub-stmts(m, stmts*)
 
 ;============================================================
-;===================== Attach Inlining ======================
-;============================================================
-defn applicable? (ir-table:IRTable, a:DefAttach, types:List<RefType>) :
-  if length(args(a)) == length(types) :
-    val env = TestAttachEnv(ir-table, a, types)
-    for p in pins(a) all? :
-      try :
-        match(ensure-wellformed(env, ref(p))) :
-          (t:PinType) : t == type(p)
-          (t) : false
-      catch (e:Exception) :
-        false
-
-defn inline-attaches (ir-table:IRTable, prog:Collection<TStmt>, flattener:RefFlattener) :
-  ;Track inlining depth
-  val max-depth = 64
-  val inlining-stack = Vector<InlineCall>()
-  defn track-inlining-stack<?T> (f:() -> ?T, stmt:AttachStmt, ctxt:TContext) :
-    if length(inlining-stack) < max-depth :
-      dynamic-wind(
-        fn () : add(inlining-stack, InlineCall(stmt,ctxt))
-        f
-        fn (f) : pop(inlining-stack))
-    else :
-      reverse!(inlining-stack)
-      throw(MaxInliningDepthError(max-depth, to-tuple(inlining-stack)))
-
-  ;Inline attaches in an attachment
-  val attach-cache = HashTable<[Symbol,Int], DefAttach>()
-  defn inline-attaches (a:DefAttach, i:Int) :
-    match(get?(attach-cache, [name(a),i])) :
-      (a:DefAttach) :
-        a
-      (f:False) :
-        val a = @inline-attaches(a)
-        attach-cache[[name(a), i]] = a
-        a
-  defn @inline-attaches (a:DefAttach) :
-    ;Accumulate new statements
-    val stmts* = Vector<MStmt>()
-    defn yield (s:MStmt) : add(stmts*, s)
-
-    ;Environment
-    val env = AttachEnv(ir-table, a, MTable(name(a), List(), stmts(a)))
-    val counter = to-seq(0 to false)
-    for s in stmts(a) do :
-      match(s:AttachStmt) :
-        within track-inlining-stack(s, AttachContext(name(a), args(a))) :
-          inline(env, s, next(counter), yield)
-      else : yield(s)
-
-    ;Substitute new statements
-    sub-stmts(a, to-list(stmts*))
-
-  ;Inline attaches in a module
-  defn inline-attaches (m:DefModule) :
-    ;Accumulate new statements
-    val stmts* = Vector<MStmt>()
-    defn yield (s:MStmt) : add(stmts*, s)
-
-    ;Module environment
-    val env = ModuleEnv(ir-table, name(m))
-    val counter = to-seq(0 to false)
-    for s in stmts(m) do :
-      match(s:AttachStmt) :
-        within track-inlining-stack(s, ModuleContext(name(m))) :
-          inline(env, s, next(counter), yield)
-      else : yield(s)
-
-    ;Substitute new statements
-    sub-stmts(m, to-list(stmts*))
-
-  ;Inline a single attach statement
-  defn inline (env:TypeEnv, s:AttachStmt, index:Int, yield:MStmt -> ?) :
-    ;Retrieve the types of the arguments
-    val arg-types = map({env[_]}, args(s))
-
-    ;Look through all the available attachments
-    ;(pre-inlining), and figure out which one is applicable.
-    val applicable = to-list $
-      for (a0 in attaches(ir-table, attach(s)), i in 0 to false) seq? :
-        if applicable?(ir-table, a0, arg-types) : One([a0, i])
-        else : None()
-
-    ;If there is only one applicable, then we inline it (see below)
-    ;Otherwise, issue an appropriate error.
-    switch(length(applicable)) :
-      0 :
-        report-error(NoSuitableAttachment(attach(s), args(s), arg-types))
-        yield(s)
-      1 :
-        inline-stmts(head(applicable))
-      else :
-        report-error(MultipleSuitableAttachments(attach(s), args(s), arg-types))
-        yield(s)
-    where :
-      ;To inline the attachment, we have to substitute all
-      ;bindings for the given refs in the statements in the attachment,
-      ;and salt any definitions made in the attachment.
-      defn inline-stmts ([a0,i]:[DefAttach, Int]) :
-        val a = inline-attaches(a0, i)
-
-        ;Construct the rename mapping
-        val rename-table = to-hashtable<Symbol,Ref> $
-          for (x in args(a), r in args(s)) seq :
-            x => r
-        defn salt (name:Symbol) :
-          val name* = flatten(flattener, dot(Ref(attach(s))[index], Ref(name)))
-          rename-table[name] = Ref(name*)
-          name*
-        defn salt (name:False) :
-          name
-        defn rename (r:Ref) :
-          val name = name!(base(r))
-          match(get?(rename-table, name)) :
-            (r*:Ref) : sub-head(r, r*)
-            (f:False) : r
-
-        ;Rename all scope refs and salt any definitions
-        for s in stmts(a) do :
-          yield $ match(map-scope-refs(rename,s)) :
-            (s:NetStmt) : sub-name(s, salt(name(s)))
-            (s:NodeStmt) : sub-name(s, salt(name(s)))
-            (s:InstStmt) : sub-name(s, salt(name(s)))
-            (s) : s
-
-  ;Inline all modules and attaches
-  val stmts* = Vector<TStmt>()
-  for s in prog do :
-    match(s) :
-      (s:DefAttach) : false
-      (s:DefModule) : add(stmts*, inline-attaches(s))
-      (s) : add(stmts*, s)
-  for attaches in attaches(ir-table) do :
-    for (a in attaches, i in 0 to false) do :
-      add(stmts*, inline-attaches(a, i))
-  stmts*
-
-;============================================================
 ;================== Module Inlining =========================
 ;============================================================
 defn inline-modules (ir-table:IRTable, prog:Collection<TStmt>, flattener:RefFlattener) :
   ;Discover top-level modules
-  val top-modules = map<Symbol>(module, makeboards(ir-table))
+  val top-modules = to-tuple(top-modules(ir-table))
 
   ;Collected program
   val module-table = HashTable<Symbol,DefModule|DefComponent>()
@@ -364,14 +446,28 @@ defn inline-modules (ir-table:IRTable, prog:Collection<TStmt>, flattener:RefFlat
         match(s) :
           (s:InstStmt) :
             val component = name(base(type(s)))
+            val refs = expand(Ref(name(s)), type(s))
             match(inline-module(component)) :
               (m:DefModule) :
-                val refs = expand(Ref(name(s)), type(s))
                 for ref in refs do :
                   for stmt in cat(pins(m), stmts(m)) do :
                     yield(dot(ref, stmt))
               (m:DefComponent) :
                 yield(s)
+          (s:SchematicGroupStmt) :
+            ;Two cases:
+            ;Case 1: Ref refers to a pin
+            ;  Expand pin reference.
+            ;Case 2: Ref refers to an instance(s) of a module/component
+            ;  Expand schematic group
+            match(env[ref(s)]) :
+              ;Case 1
+              (t:PinType) :
+                val refs* = expand(env, ref(s), t)
+                do(yield{sub-ref(s, _)}, refs*)
+              (t:InstType|InstArray) :
+                val refs* = all-insts(ref(s))
+                do(yield{sub-ref(s, _)}, refs*)
           (s) :
             yield(s)
 
@@ -388,10 +484,11 @@ defn inline-modules (ir-table:IRTable, prog:Collection<TStmt>, flattener:RefFlat
     match(module-table[name]) :
       (c:DefComponent) : c
       (m:DefModule) : inline(m)
-
+      
   ;Inline all modules, and perform merges
   to-tuple $ for s0 in prog seq :
     match(s0:DefModule) :
+      val env = ModuleEnv(ir-table, name(s0))
       val s = inline-module(name(s0)) as DefModule
       val stmts* =
         to-list $
@@ -406,7 +503,7 @@ defn inline-modules (ir-table:IRTable, prog:Collection<TStmt>, flattener:RefFlat
 defn dot (r:Ref, s:MStmt|Pin) :
   match(s) :
     (s:Pin) : InlinedStmt(1, r, NodeStmt(name(s), type(s)))
-    (s:InlinedStmt) : InlinedStmt(level(s) + 1, dot(r, ref(s)), stmt(s))
+    (s:InlinedStmt) : InlinedStmt(inline-level(s) + 1, dot(r, ref(s)), stmt(s))
     (s:MStmt) : InlinedStmt(1, r, s)
 
 ;============================================================
@@ -441,15 +538,15 @@ defn resolve-class-selectors (ss:Seqable<MStmt>) :
 ;================== Inlined Statements ======================
 ;============================================================
 defstruct InlinedStmt <: MStmt :
-  level: Int with: (as-method => true)
+  inline-level: Int with: (as-method => true)
   ref: Ref
   stmt: MStmt with: (updater => sub-stmt)
 
 defmethod print (o:OutputStream, s:InlinedStmt) :
   print(o, "inlined(%_): %_" % [ref(s), stmt(s)])
 
-defmulti level (m:MStmt) -> Int
-defmethod level (m:MStmt) : 0
+defmulti inline-level (m:MStmt) -> Int
+defmethod inline-level (m:MStmt) : 0
 
 defn inlined-stmt (s:MStmt) :
   match(s:InlinedStmt) : stmt(s)
@@ -469,6 +566,14 @@ defn inlined (f:MStmt -> List<Ref>, s:MStmt) :
     (s:InlinedStmt) : map(dot{ref(s), _}, f(stmt(s)))
     (s:MStmt) : f(s)
 
+defn inlined-anchor (s:MStmt) :
+  val a = anchor(inlined-stmt(s) as PackageStmt)
+  match(s, a) :
+    (s:InlinedStmt, a:False) : ref(s)
+    (s:InlinedStmt, a:Ref) : dot(ref(s), a)
+    (s, a) : a
+
+
 defn inlined-ref! (s:MStmt) :
   inlined-ref?(s) as Ref
 
@@ -476,7 +581,8 @@ defn inlined-ref? (s:MStmt) :
   val mref = match(inlined-stmt(s)) :
     (mst:InstStmt|NodeStmt) : Ref(name(mst))
     (mst:InstSupportsStmt|RequireStmt) : inst(mst)
-    (mst:PackageStmt|ReferenceStmt|EModelStmt|PartStmt|NetStmt) : ref(mst)
+    (mst:PackageStmt|EModelStmt|PartStmt|ReferenceStmt|
+         NetStmt|SchematicGroupStmt|PinPropertiesStmt) : ref(mst)     
     (mst) : fatal("No reference in %_" % [mst])
   match(s:InlinedStmt, mref:Ref) : dot(ref(s), mref)
   else : mref
@@ -502,9 +608,11 @@ defn RefNetStmt (ref:Ref|False, refs:List<Ref>) :
 defn make-merges (ss:Seqable<MStmt>, flattener:RefFlattener) :
   ;Table groups
   val package-name = MergeTable<Ref,[Symbol,Mapping]>(override)
+  val package-pose = RelativeTable()
   val emodels = MergeTable<Ref,EModel>(merge)
   val parts = MergeTable<Ref,PartStmt|InlinedStmt>(override)
   val ref-designators = MergeTable<Ref,ReferenceStmt|InlinedStmt>(override)
+  val schematic-groups = MergeTable<[Ref, Int|False],SchematicGroupStmt|InlinedStmt>(override)
   val insts = HashSet<Ref>()
 
   generate<MStmt> :
@@ -516,18 +624,26 @@ defn make-merges (ss:Seqable<MStmt>, flattener:RefFlattener) :
     for s in ss do :
       match(inlined-stmt(s)) :
         (mst:PackageStmt) :
-          val [r, l] = [inlined-ref!(s), level(s)]
+          val [r, l] = [inlined-ref!(s), inline-level(s)]
           attempt:
             package-name[r,l] = package(mst) as? [Symbol, Mapping]
+          attempt :
+            val ps = match(pose(mst)) :
+              (p:False) : side(mst) as? Side
+              (p:Pose) : p
+            package-pose[r,l] = RelEntry(ps, inlined-anchor(s))
         (mst:EModelStmt) :
-          emodels[inlined-ref!(s), level(s)] = model(mst)
+          emodels[inlined-ref!(s), inline-level(s)] = model(mst)
         (mst:PartStmt) :
-          parts[inlined-ref!(s), level(s)] = s as PartStmt|InlinedStmt
+          parts[inlined-ref!(s), inline-level(s)] = s as PartStmt|InlinedStmt
         (mst:ReferenceStmt) :
-          ref-designators[inlined-ref!(s), level(s)] = s as ReferenceStmt|InlinedStmt
+          ref-designators[inlined-ref!(s), inline-level(s)] = s as ReferenceStmt|InlinedStmt
+        (mst:SchematicGroupStmt) :
+          schematic-groups[[inlined-ref!(s), unit(mst)], inline-level(s)] = s as SchematicGroupStmt|InlinedStmt
         (mst:InstStmt) :
           for r in expand(inlined-ref!(s), type(mst)) do :
             add(insts, r)
+            set-inst(package-pose, r)
           yield(s)
         (mst) :
           yield(s)
@@ -539,16 +655,22 @@ defn make-merges (ss:Seqable<MStmt>, flattener:RefFlattener) :
         attempt: pose(t[r] as? RelEntry)
       defn anchor? (t:RelativeTable, r:Ref) :
         attempt: anchor(t[r] as? RelEntry)
-      yield?(PackageStmt?(ref, package-name[ref]))
+      yield?(PackageStmt?(ref, package-name[ref], pose, side,
+                          anchor?(package-pose, ref))) where :
+        val [pose, side] = split-pose-side?(pose?(package-pose, ref))
 
     for [inst, emodel] in kvs(emodels) do :
       yield(EModelStmt(inst, emodel))
-    do(yield{value(_)}, parts)      
+    do(yield{value(_)}, parts)
     do(yield{value(_)}, ref-designators)
-    
-defn PackageStmt? (r:Ref, nm:[Symbol,Mapping]|False) :
-  match(nm:False) : false
-  else : PackageStmt(r, true, nm)
+    do(yield{value(_)}, schematic-groups)
+
+
+
+defn PackageStmt? (r:Ref, nm:[Symbol,Mapping]|False, pose:Pose|False, side:Side|False, anchor:Ref|False) :
+  match(nm:False, pose:False, side:False) : false
+  else : PackageStmt(r, true, nm, pose, side, anchor)
+
 
 defn apply-pose-side (a:Pose|Side, b:Pose|Side) :
   match(a, b) :
@@ -711,40 +833,76 @@ defn group-nets (ir-table:IRTable, ss:Seqable<MStmt>, keep-nodes?:True|False) :
   val stmts = Vector<MStmt>()
   val net-stmts = Vector<InlinedStmt|NetStmt>()
   val node-stmts = Vector<InlinedStmt|NodeStmt>()
-  val node-set = HashSet<Ref>()
+  val node-set = HashSet<Ref>()  
   for s in ss do :
     add(stmts, s)
     match(inlined-stmt(s)) :
       (mst:NetStmt) :
         add(net-stmts, s as NetStmt|InlinedStmt)
       (mst:NodeStmt) :
-        add(node-set, inlined-ref!(s))
+        val r = inlined-ref!(s)
+        add-all(node-set, expand(ir-table, r, type(mst)))
       (mst) : false
 
   ;Construct Net Table
   val net-table = NetTable(net-stmts)
-  
+
+
   ;Find the earliest, highest-level, named net reference for a given net group
   ;Returns false if there is no single named net in this group.
   defn net-ref (g:NetGroup) -> Ref|False :
-    defn less-net? (a:Int, b:Int) :
+    ; Figure out the name of the NetGroup g
+    ; Names are decided in the following priority:
+    ; 1. Explicit net names
+    ; 2. Module pin/port names (higher level modules take precedence)
+    ; 3. Part(PCBComponent) pin/port names
+
+    ;Compares net index a against net index b.
+    ;Returns true if we should prioritize net a's name over net b's.
+    ;Returns false if we should prioritize net b's name over net a.
+    defn less-net? (a:Int, b:Int) -> True|False :
+      ; Retrieve nets at index a and b (na, and nb)
       val na = net-stmts[a]
       val nb = net-stmts[b]
+      ;Retrieve the net name (which is a Ref because we're still in the middle of inlining).
+      ;ra, rb are the names of nets a and b respectively.
+      ;They are false if the nets don't have names.
       val ra = ref(inlined-stmt(na) as NetStmt)
       val rb = ref(inlined-stmt(nb) as NetStmt)
+      ;If either of these has a name, and the other one doesn't. Then prioritize that one.
       val c = match(ra, rb) :
         (refa:Ref, refb:False) : -1
         (refa:False, refb:Ref) : 1
         (refa, refb) : 0
+      ; The net closer to the top of the hierarchy takes precedence
       if c == 0 :
-        val l1 = level(net-stmts[a])
-        val l2 = level(net-stmts[b])
+        ;Retrieve the levels of nets a and b (l1 and l2)
+        val l1 = inline-level(net-stmts[a])
+        val l2 = inline-level(net-stmts[b])
+        ;If they are the same level, then prioritize the net
+        ;that occurs earlier (the one with the smaller index).
         if l1 == l2 : a < b
+        ;Otherwise, prioritize net a if it is at a lower level (closer to the top
+        ;of the hierarchy).
         else : l1 < l2
+      ; Default: Just pick a net to take precedence
       else :
         c == -1
+
+    ;Find the highest priority net (which is the 'minimum' set
+    ;according to the comparison function defined above.)
     val i = minimum(nets(g), less-net?)
-    inlined-ref?(net-stmts[i])
+
+    ;Retrieve the name of net i
+    val net-ref = inlined-ref?(net-stmts[i])
+    ;Return the name if it is not false
+    match(net-ref:Ref) :
+      net-ref
+    else :
+      ;Otherwise, we calculate a name from one of the pins on
+      ;the net.
+      val r = minimum(refs(g), {length(_) < length(_)})
+      FieldRef(r, `net)
 
   ;If the given reference is a node, then return another reference on the same net.
   ;Otherwise return the given node.
@@ -760,16 +918,6 @@ defn group-nets (ir-table:IRTable, ss:Seqable<MStmt>, keep-nodes?:True|False) :
     else :
       r
 
-  ;If the given statement contains references to nodes, replace them with another reference on the same net.
-  ;If that node is not on a net, then return false.
-  ;The rails statements are the only statements we expect to see with possible references to nodes.
-  defn map-nodes (s:MStmt) :
-    attempt :
-      defn node-ref! (r:Ref) : node-ref(r) as? Ref
-      for s in s map-inlined :
-        match(s) :
-          (s:NetStmt|NodeStmt) : fatal("Unexpected statement.")
-          (s) : s    
 
   ;Generate statements
   generate<MStmt> :
@@ -778,7 +926,9 @@ defn group-nets (ir-table:IRTable, ss:Seqable<MStmt>, keep-nodes?:True|False) :
     if keep-nodes? :
       ;Yield rest of stmts
       for s in stmts do :
-        yield(s) when inlined-stmt(s) is-not NetStmt
+        match(inlined-stmt(s)) :
+          (_:NetStmt) : false
+          (_) : yield(s)
       ;Yield nets
       for g in groups(net-table) do :
         ;Yield the net and geoms
@@ -787,8 +937,10 @@ defn group-nets (ir-table:IRTable, ss:Seqable<MStmt>, keep-nodes?:True|False) :
     else :
       ;Yield rest of stmts
       for s in stmts do :
-        if inlined-stmt(s) is-not NetStmt|NodeStmt :
-          yield?(map-nodes(s))
+        match(inlined-stmt(s)) :
+          (_:NetStmt|NodeStmt) : false
+          (_:PinPropertiesStmt) : yield(s) when not node-set[inlined-ref!(s)]
+          (_) : yield(s)
       ;Yield nets
       for g in groups(net-table) do :
         val refs* = to-list(filter({not node-set[_]}, refs(g)))
@@ -818,20 +970,28 @@ defmethod print (o:OutputStream, n:NetGroup) :
 ;refs in the group.
 defn NetTable (nets:Vector<NetStmt|InlinedStmt>) -> NetTable :
   ;UFSets
+  ; genid guarantees a unique integer every time it's called
   defn make-set () : UFSet(genid())
-  val net-sets = to-tuple(repeatedly(make-set, length(nets)))
+  ; Make a UFSet for every net statement
+  val net-sets = HashTable-init<Ref|Int,UFSet<Int>>(make-set{})
   val ref-sets = HashTable-init<Ref,UFSet<Int>>(make-set{})
 
+  defn get-net-set (net:NetStmt|InlinedStmt, net-i:Int):
+    match(inlined-ref?(net)):
+      (name:Ref) : net-sets[name]
+      (name:False) : net-sets[net-i]
+
   ;Add to sets
-  for (net in nets, net-set in net-sets) do :
+  for (net in nets, net-i in 0 to false) do :
+    val net-set = get-net-set(net, net-i)
     for ref in inlined(refs{_ as NetStmt}, net) do :
       merge!(net-set, ref-sets[ref])
 
   ;Collect nets and refs
   val net-groups = IntTable<List<Int>>(List())
   val ref-groups = IntTable<List<Ref>>(List())
-  for (net-set in net-sets, i in 0 to false) do :
-    update(net-groups, cons{i, _}, root-value(net-set))
+  for (net in nets, net-i in 0 to false) do :
+    update(net-groups, cons{net-i, _}, root-value(get-net-set(net, net-i)))
   for entry in ref-sets do :
     val [ref, ref-set] = [key(entry), value(entry)]
     update(ref-groups, cons{ref, _}, root-value(ref-set))
@@ -841,7 +1001,9 @@ defn NetTable (nets:Vector<NetStmt|InlinedStmt>) -> NetTable :
     defmethod groups (this) :
       for entry in ref-groups seq :
         val id = key(entry)
-        NetGroup(id, net-groups[id], ref-groups[id])
+        val net-refs = ref-groups[id]
+        if empty?(net-refs) : fatal("Invalid empty net %_" % [id])
+        NetGroup(id, net-groups[id], net-refs)
     defmethod group-id (this, r:Ref) :
       root-value(ref-sets[r])
     defmethod group (this, id:Int) :
@@ -850,10 +1012,16 @@ defn NetTable (nets:Vector<NetStmt|InlinedStmt>) -> NetTable :
 ;============================================================
 ;======================= Undot ==============================
 ;============================================================
+;TODO: Note that instances are still flattened here.
+;      which we shouldn't do. 
 
 defn undot-refs (ir-table:IRTable, ss:Seqable<MStmt>, f:RefFlattener) :
   ;Stores the flattened version of each reference
   val ref-table = HashTable<Ref, VarRef>()
+
+  ;Add to rename table
+  defn rename-to (r:Ref, r2:VarRef) :
+    ref-table[r] = r2
 
   ;Rename using the ref table
   defn rename (r:Ref) :
@@ -877,31 +1045,24 @@ defn undot-refs (ir-table:IRTable, ss:Seqable<MStmt>, f:RefFlattener) :
     match(s:InlinedStmt) :
       defn dot (r:Ref) : /dot(ref(s), r)
       defn dot (sym:Symbol) : flatten(f, /dot(ref(s), Ref(sym)))
-      defn dot (r:False) : ref(s)
-      defn dot (r:RequireStmt) :
-        sub-mapping(sub-inst(r, inst*), mapping*) where :
-          val inst* = dot(inst(r))
-          val mapping* = dot-rhs(mapping(r))
-      defn dot-rhs (m:Mapping) :
-        Mapping $ for e in mappings(m) map :
-          key(e) => dot(value(e))
-
-      match(stmt(s)) :
+      defn dot (o:SupportOption) :
+        val properties* = map(add-level, properties(o))
+        sub-properties(o, properties*)
+      defn add-level (p:PinPropertiesStmt) :
+        sub-level(p, inline-level(s) + level(p))
+      match(map-scope-refs(dot, stmt(s))) :
+        (st:SupportsStmt) : InstSupportsStmt(ref(s), capability(st), map(dot,options(st)))
+        (st:InstSupportsStmt) : InstSupportsStmt(dot(inst(st)), capability(st), map(dot,options(st)))
         (st:InstStmt) : sub-name(st, dot(name(st)))
         (st:NodeStmt) : sub-name(st, dot(name(st)))
-        (st:SupportsStmt) :
-          val options* = for option in options(st) map :
-            val requires* = map(dot, requires(option))
-            val mapping* = dot-rhs(mapping(option))
-            sub-mapping(sub-requires(option, requires*), mapping*)
-          InstSupportsStmt(ref(s), capability(st), options*)
-        (st:InstSupportsStmt) : fatal("Unreachable Statement.")
-        (st:RequireStmt) : dot(st)
-        (st:NetStmt) : NetStmt(flatten(f, dot(ref*(st))), map(dot, refs(st)))
-        (st:MStmt) : map-scope-refs(dot, st)
+        (st:SchematicGroupStmt) : sub-group(st, dot(group(st)))
+        (st:NetStmt) : sub-name(st, flatten(f,dot(ref*(st))))
+        (st:PinPropertiesStmt) : add-level(st)
+        (st) : st
     else :
       match(s) :
-        (s:NetStmt) : NetStmt(flatten(f, ref*(s)), refs(s))
+        (s:NetStmt) :
+          NetStmt(flatten(f, ref*(s)), refs(s))
         (s) : s
 
   generate<MStmt> :
@@ -909,22 +1070,25 @@ defn undot-refs (ir-table:IRTable, ss:Seqable<MStmt>, f:RefFlattener) :
       match(flatten-inlined(s0)) :
         (s:NetStmt) :
           match(inlined-ref?(s0)) :
-            (ref:Ref) : ref-table[ref] = Ref(name(s))
+            (ref:Ref) : rename-to(ref, Ref(name(s)))
             (ref:False) : false
           yield(sub-refs(s, map(rename, refs(s))))
         (s:NodeStmt) :
-          val nodes = expand(ir-table, inlined-ref!(s0), type(s))
-          for node in nodes do :
-            val name = flatten(f, node)
-            ref-table[node] = Ref(name)
-            yield(NodeStmt(name, SinglePin()))
+          val ref = inlined-ref!(s0)
+          rename-to(ref, Ref(name(s)))
+          yield(s)
         (s:InstStmt) :
           val insts = expand(inlined-ref!(s0), type(s))
           val base-t = base(type(s))
           for inst in insts do :
             val name = flatten(f, inst)
-            ref-table[inst] = Ref(name)
+            rename-to(inst, Ref(name))
             yield(InstStmt(name, base-t))
+        (s:InstSupportsStmt) :
+          val inst* = VarRef(flatten(f, inst(s)))
+          rename-to(inst(s), inst*)
+          val s* = map-scope-refs(rename, s) as InstSupportsStmt
+          yield(sub-inst(s*, inst*))
         (s) :
           yield(map-scope-refs(rename, s))
 
@@ -938,6 +1102,7 @@ defn resolve-defaults (irtable:IRTable, ss:Seqable<MStmt>) :
   val packages = HashTable<Ref,PackageStmt>()
   val emodels = HashTable<Ref,EModelStmt>()
   val parts = HashTable<Ref,PartStmt>()
+  val estates = HashTable<Ref,EStateStmt>()
 
   ;Determines whether the default pin mapping is appropriate
   ;for the given component and package.
@@ -947,7 +1112,7 @@ defn resolve-defaults (irtable:IRTable, ss:Seqable<MStmt>) :
     for port in pins(ctable(irtable, component)) do :
       val pins = expand(irtable, Ref(name(port)), type(port))
       add-all(component-pins, pins)
-      
+
     ;Remove pins that have associated package pad
     for p in pads(ptable(irtable, package-name)) do :
       remove(component-pins, ref(p))
@@ -970,7 +1135,7 @@ defn resolve-defaults (irtable:IRTable, ss:Seqable<MStmt>) :
               if package(pkgstmt) is False : sub-package(pkgstmt, pkg)
               else : pkgstmt
             (_:False) :
-              PackageStmt(Ref(name(inst)), true, pkg)
+              PackageStmt(Ref(name(inst)), true, pkg, false, false, false)
         (_:False) :
           pkgstmt
     else : pkgstmt
@@ -986,6 +1151,7 @@ defn resolve-defaults (irtable:IRTable, ss:Seqable<MStmt>) :
         (s:EModelStmt) : emodels[ref(s)] = s
         (s:PartStmt) : parts[ref(s)] = s
         (s:InstStmt) : (insts[Ref(name(s))] = s, yield(s))
+        (s:EStateStmt) : (estates[ref(s)] = s, yield(s))
         (s) : yield(s)
     for inst in keys(insts) do :
       val ctable = ctable(irtable, component(insts[inst]))
@@ -993,6 +1159,7 @@ defn resolve-defaults (irtable:IRTable, ss:Seqable<MStmt>) :
       ;Yield the part statement
       val part-stmt = merge-default(inst, get?(parts, inst), default-part(ctable))
       yield?(part-stmt)
+
 
       ;Yield the package statement
       let :
@@ -1005,7 +1172,12 @@ defn resolve-defaults (irtable:IRTable, ss:Seqable<MStmt>) :
       ;Grab emodel from part if appropriate
       match(emodel-stmt:False, part-stmt:PartStmt) :
         val m = emodel(part(irtable, part(part-stmt)))
-        match(m:EModel) : yield(EModelStmt(inst, m))      
+        match(m:EModel) : yield(EModelStmt(inst, m))
+
+      ;Yield electrical states
+      for stmt in /estates(ctable) do :
+        val pin = dot(inst, ref(stmt))
+        yield(sub-ref(stmt, pin)) when not key?(estates, pin)
 
 ;============================================================
 ;===================== Merging Functions ====================
@@ -1044,9 +1216,10 @@ defn merge (a:EModel, b:EModel) :
     (a, b) :
       fatal("Cannot merge %_ with %_." % [a, b])
 
+
 defn merge-default (ref:Ref, a:PackageStmt|False, b:DefaultPackageStmt) :
   match(package(a)) :
-    (pa:False) : PackageStmt(ref, true, [package(b), mapping(b)])
+    (pa:False) : PackageStmt(ref, true, [package(b), mapping(b)], pose(a), side(a), anchor(a))
     (sb) : a
 
 defn merge-default (ref:Ref, a:EModelStmt|False, b:DefaultEModelStmt) :
@@ -1103,13 +1276,67 @@ defn add-reference-designators (prog:Collection<TStmt>) :
     sub-stmts(defm, to-list(cat(stmts(defm), ref-stmts)))
 
 ;============================================================
+;================ Check Package Poses =======================
+;============================================================
+
+defn check-inst-poses (prog:Collection<TStmt>) :
+  val ir-table = IRTable(prog)
+  within defm = do-top-modules(ir-table, prog) :
+    val m = name(defm)
+    val mtable = mtable(ir-table, m)
+    for inst in insts(mtable) do :
+      match(package?(mtable, name(inst))) :
+        (stmt:PackageStmt) :
+          if package(stmt) is False :
+            report-error(NoPackageForInst(m, name(inst), component(inst)))
+          if pose(stmt) is False :
+            report-error(NoPoseForInst(m, name(inst), component(inst)))
+          if side(stmt) is False :
+            report-error(NoSideForInst(m, name(inst), component(inst)))
+        (stmt:False) :
+          report-error(NoPackageForInst(m, name(inst), component(inst)))
+          report-error(NoPoseForInst(m, name(inst), component(inst)))
+          report-error(NoSideForInst(m, name(inst), component(inst)))
+
+  prog
+
+
+;============================================================
+;=============== Check Schematic Group Bounds ===============
+;============================================================
+
+defn check-schematic-groups (prog:Collection<TStmt>) :
+  within (ir-table, m) = do-top-modules(prog) :
+    val mtable = mtable(ir-table, name(m))
+    defn num-units (inst:Ref) -> Int|False :
+      false
+    for s in schematic-groups(mtable) do :
+      val inst = base(ref(s))
+      match(num-units(inst), unit(s)) :
+        (num-units:Int, unit:Int) :
+          report-error(SchematicGroupOutOfBounds(inst, num-units, unit)) when unit >= num-units
+        (num-units, unit) : false
+  prog
+
+;============================================================
 ;========================= Utilities ========================
 ;============================================================
+defn merge-pin-properties (ir-table:IRTable,
+                           pentries:Seqable<PEntry>) ->
+                           Seqable<PinPropertiesStmt> :
+  val penv = new PEnv<PinPropertiesStmt> :
+    defmethod expand (this, r:Ref, t:PinType) :
+      expand(ir-table, r, t)
+    defmethod make-entry (this, r:Ref, entries:Tuple<KeyValue<Symbol,?>>) :
+      PinPropertiesStmt(r, 0, entries)
+  merge-properties(penv, pentries)
 
 defn value?<?T,?S> (f: T -> ?S, x:Maybe<?T>) :
   if not empty?(x) :
     f(value!(x))
 
+
+defn symbol (x:False) : x
 defn package (x:False) : x
 defn pose (x:False) : x
 defn side (x:False) : x

@@ -62,6 +62,7 @@ defn graphviz-string () :
     do(print-pnode{o2, _, _}, 1 to false, pnodes)
     println(o, "}")
 
+  clear(STAR-NODES)
   new Printable :
     defmethod print (o:OutputStream, this) :
       print-file(o)

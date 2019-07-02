@@ -1,4 +1,4 @@
-defpackage dlopen :
+defpackage jitpcb/dlopen :
   import core
   import collections
 
@@ -17,7 +17,6 @@ extern dlclose : (ptr<?>) -> int
 public lostanza deftype DynamicLibrary :
   name: ref<String>
   value: ptr<?>
-  marker: ref<LivenessMarker>
 
 public lostanza deftype DynamicSymbol :
   lib: ref<DynamicLibrary>
@@ -26,11 +25,14 @@ public lostanza deftype DynamicSymbol :
 public lostanza defn name (dl:ref<DynamicLibrary>) -> ref<String> :
   return dl.name
 
+public lostanza defn free (dl:ref<DynamicLibrary>) -> ref<False> :
+  val ret = call-c dlclose(dl.value)
+  if ret != 0 : throw-dl-error()
+  return false  
+
 ;============================================================
 ;====================== Wrappers ============================
 ;============================================================
-
-lostanza val null:ptr<?> = 0L as ptr<?>
 
 public lostanza defn dl-open (filename:ref<String>) -> ref<DynamicLibrary> :
   #if-defined(PLATFORM-OS-X) :
@@ -45,14 +47,14 @@ public lostanza defn dl-open (filename:ref<String>) -> ref<DynamicLibrary> :
       val dlflags = 0
       fatal("dl-open not supported on this platform.")
   val ptr = call-c dlopen(addr!(filename.chars), dlflags)
+  val null = 0L as ptr<?>
   if ptr == null : throw-dl-error()
 
-  val tracker = LivenessTracker(new Long{ptr as long})
-  add(FINALIZERS, tracker)
-  return new DynamicLibrary{filename, ptr, marker!(tracker)}
+  return new DynamicLibrary{filename, ptr}
 
 public lostanza defn dl-sym (dl:ref<DynamicLibrary>, name:ref<String>) -> ref<DynamicSymbol> :
   val ptr = call-c dlsym(dl.value, addr!(name.chars))
+  val null = 0L as ptr<?>
   if ptr == null : throw(SymbolLoadError(dl, name))
   return new DynamicSymbol{dl, ptr}
 
@@ -63,26 +65,10 @@ public lostanza defn dl-sym (dl:ref<DynamicLibrary>, name:ref<String>) -> ref<Dy
 lostanza defn throw-dl-error () -> ref<Void> :
   return throw(DLError(String(call-c dlerror())))
 
-
-public defstruct DLError <: Exception: (msg)
+public defstruct DLError <: Exception: (msg:String)
 public defmethod print (o:OutputStream, e:DLError) :
   print(o, msg(e))
 
 defn SymbolLoadError (dl:DynamicLibrary, sym-name:String) :
-  DLError("Error loading symbol %~ from dynamic library %~." % [sym-name, name(dl)])
+  DLError(to-string("Error loading symbol %~ from dynamic library %~." % [sym-name, name(dl)]))
 
-;============================================================
-;====================== Finalization ========================
-;============================================================
-
-lostanza defn dl-close (ptr:ref<Long>) -> ref<False> :
-  val ret = call-c dlclose(ptr.value as ptr<?>)
-  if ret != 0 : throw-dl-error()
-  return false
-
-val FINALIZERS = Vector<LivenessTracker<Long>>()
-within add-gc-notifier() :
-  for f in FINALIZERS remove-when :
-    if marker(f) is False :
-      dl-close(value(f))
-      true

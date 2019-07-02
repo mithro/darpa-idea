@@ -25,11 +25,31 @@ pcb-bundle uart :
   pin rx
   pin tx
 
+pcb-bundle fullduplex-uart :
+  pin rx
+  pin tx
+
+pcb-bundle fullduplex-uart-w-enable :
+  pin rx
+  pin tx
+  pin en
+
+pcb-bundle pci-lane :
+  port tx : diff-pair
+  port rx : diff-pair
+
+; Parallel style serdes, which has a data and clock pair which much be length matched
+pcb-bundle serdes-par :
+  port clk : diff-pair
+  port data : diff-pair
+
 ; these are indeed called "A" and "B" or "D-" and "D+" as a secondary option
 ; https://en.wikipedia.org/wiki/RS-485
 pcb-bundle rs485 :
   pin d-
   pin d+
+
+pcb-capability rs485:rs485
 
 pcb-bundle can :
   pin rx
@@ -38,6 +58,26 @@ pcb-bundle can :
 pcb-bundle i2c :
   pin sda
   pin scl
+
+val spi-bundles = HashTable<Symbol, Seqable>()
+defn generate-spi-bundles ():
+  val prefix = `spi-
+  val m-or-s = [`master- `slave]
+  val dir    = [`bi      `in     `out]
+  val common-pins = [`ss `sck]
+  spi-bundles[`spi-master]     = cat( common-pins, [`mosi  `miso] )
+  spi-bundles[`spi-master-in]  = cat( common-pins, [`miso] )
+  spi-bundles[`spi-master-out] = cat( common-pins, [`mosi] )
+  spi-bundles[`spi-slave]      = cat( common-pins, [`mosi  `miso] )
+  spi-bundles[`spi-slave-in]   = cat( common-pins, [`mosi] )
+  spi-bundles[`spi-slave-out]  = cat( common-pins, [`miso] )
+  for kv in spi-bundles do:
+    val k = key   $ kv
+    val v = value $ kv
+    pcb-bundle {Ref(k)}:
+      for pname in v do:
+        pin {Ref(pname)}
+generate-spi-bundles()
 
 pcb-bundle spi :
   pin mosi
@@ -68,6 +108,56 @@ pcb-bundle edp :
   pin hpd0
   pin lcd-bl-en
   pin lcd-bl-pwm
+
+pcb-bundle sd :
+  port dat : pin[4]
+  pin clk 
+  pin cmd
+
+pcb-bundle jtag :
+  pin tck
+  pin tdi
+  pin tdo
+  pin tms
+  pin trstn
+
+pcb-bundle jtag-no-rst :
+  pin tck
+  pin tdi
+  pin tdo
+  pin tms
+
+pcb-bundle lvds :
+  pin n
+  pin p
+
+; clock-capable lvds.  Signal-wise it's the same as lvds
+pcb-bundle lvds-clk :
+  pin n
+  pin p
+
+pcb-bundle pcie-lane :
+  port in  : lvds
+  port out : lvds
+
+pcb-bundle rgmii :
+  port txd : pin[4]
+  port rxd : pin[4]
+  pin tx-clk
+  pin tx-ctrl
+  pin rx-clk
+  pin rx-ctrl
+
+pcb-bundle trd :
+  port trd : diff-pair
+  pin common
+
+pcb-bundle ethernet-1000 :
+  port mdi : diff-pair[4]
+
+pcb-capability ethernet-1000 : ethernet-1000
+pcb-capability rgmii : rgmii
+pcb-capability lvds : lvds
 
 ;==== Capabilities =============================================================
 
@@ -101,15 +191,24 @@ CAPABILITY-TABLE[`edio] = `pin
 CAPABILITY-TABLE[`iv-sense] = `iv-sense
 CAPABILITY-TABLE[`pass] = `pin
 CAPABILITY-TABLE[`uart] = `uart
+CAPABILITY-TABLE[`fullduplex-uart-w-enable] = `fullduplex-uart-w-enable
 ;CAPABILITY-TABLE[`rs485] = `rs485
+CAPABILITY-TABLE[`sd] = `sd
+CAPABILITY-TABLE[`jtag] = `jtag
+CAPABILITY-TABLE[`jtag-no-rst] = `jtag-no-rst
 CAPABILITY-TABLE[`can] = `can
 CAPABILITY-TABLE[`i2c] = `i2c
 CAPABILITY-TABLE[`i2c-0] = `i2c
 CAPABILITY-TABLE[`spi] = `spi
+for spi-name in keys $ spi-bundles do:
+  CAPABILITY-TABLE[spi-name] = spi-name
 CAPABILITY-TABLE[`usb-2] = `usb-2
 CAPABILITY-TABLE[`swd] = `swd
 CAPABILITY-TABLE[`diff-pair] = `diff-pair
 CAPABILITY-TABLE[`edp] = `edp
+;CAPABILITY-TABLE[`lvds] = `lvds
+CAPABILITY-TABLE[`lvds-clk] = `lvds-clk
+CAPABILITY-TABLE[`pcie-lane] = `pcie-lane
 ; Dummy capabiltiy for crossbar use
 CAPABILITY-TABLE[`bar-pin] = `pin
 
