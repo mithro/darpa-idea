@@ -401,13 +401,9 @@ defn check-definitions (prog:Seqable<TStmt>, intermediate-lowering?:True|False) 
       (s:DefStmt) :
         val k = [ns(s), name(s)]
         if key?(nametable, k) :
-<<<<<<< HEAD
           defn duplicates-allowed? (tag:Symbol|False, old-tag:Symbol|False) :
             (tag == `inst-supports or tag == `net) and (old-tag == tag)            
           if not duplicates-allowed?(tag(s), nametable[k]) :
-=======
-          if tag(s) != `inst-supports and tag(s) != `net and ns(s) is-not AttachNS :
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
             report-error(AlreadyDefined(ns(s), nametable[k], name(s)))
         else :
           nametable[k] = tag(s)

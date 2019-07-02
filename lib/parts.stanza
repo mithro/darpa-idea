@@ -155,13 +155,6 @@ defn yageo-res-range (r-min:Double, r-max:Double, tol:Double, pkg:String) :
       if r >= r-min and r <= r-max :
         yageo-res-prt(r, tol, pkg)
 
-<<<<<<< HEAD
-=======
-;for [r-min, r-max, tol, pkg] in yageo-res-ranges do :
-;  yageo-res-range(r-min, r-max, tol, pkg)
-
-
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 public pcb-part littlefuse-2090L-prt (i-hold:Double) :
   manufacturer = "Littelfuse Inc."
   mpn = switch(i-hold) :
@@ -670,7 +663,6 @@ pcb-part abracon-ABM12-32-B2X-T3-prt :
   mpn = "ABM12-32.000MHZ-B2X-T3"
   package = XTAL-ABM12-pkg
 
-<<<<<<< HEAD
 ; ====== Oscillators  ======
 ; MUST SPECIFY FREQUENCY IN THE ORDER NOTES
 ; DIGIKEY MUST PROGRAM
@@ -679,8 +671,6 @@ pcb-part si-SiT8208-prt :
   mpn = "SiT8208AC-XXXX"
   package = si-SiT8208-pkg
 
-=======
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ; ====== Transistors ========
 pcb-part nxp-PMBT3904-prt :
   manufacturer = "Nexperia"
@@ -732,7 +722,6 @@ pcb-part nexperia-PMV250EPEAR-prt :
 
 
 ; ====== Miscellaneous Parts ======
-<<<<<<< HEAD
 pcb-part ublox-max-8q-0-prt :
   mpn = "MAX-8Q-0"
   manufacturer = "U-Blox"
@@ -799,8 +788,6 @@ pcb-part stmicro-SPBTLE-RFTR-prt :
   package = stmicro-SPBTLE-RFTR-pkg
 ; SPBTLE-RF Series 3.6 V 2.4 GHz Very Low Power Network Processor Module
 
-=======
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ;Trinamic Stepper driver
 pcb-part trinamic-tmc2130-prt :
   manufacturer = "Trinamic"
@@ -1503,7 +1490,6 @@ pcb-part ironwood-C17829-socket-prt :
   manufacturer = "Ironwood"
   mpn = "C17829"
   package = ironwood-C17829-socket-pkg
-<<<<<<< HEAD
 
 pcb-part marvell-88E1510-A0-NNB2C000-prt :
   manufacturer = " Marvell"
@@ -1516,5 +1502,3 @@ pcb-part pulse-J0G-0009NL-prt :
   mpn = "J0G-0009NL"
   package = pulse-J0G-0009NL-pkg
 ; 1 Port RJ45 Magjack Connector Through Hole 10/100/1000 Base-T, AutoMDIX
-=======
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa

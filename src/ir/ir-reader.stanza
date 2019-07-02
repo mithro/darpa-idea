@@ -197,19 +197,11 @@ defsyntax rtm-ir :
   defrule cstmt! = (?x:#cstmt) : x
   fail-if cstmt! = () : RTME(closest-info(), "Component statement expected here.")
 
-<<<<<<< HEAD
   public defproduction ref! : Ref
   defrule ref! = (?x:#ref) : x
   fail-if ref! = () : RTME(closest-info(), "Reference expected here.")
 
   public defproduction ref$ : Ref
-=======
-  defproduction ref! : Ref
-  defrule ref! = (?x:#ref) : x
-  fail-if ref! = () : RTME(closest-info(), "Reference expected here.")
-
-  defproduction ref$ : Ref
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   fail-if ref$ = (#ref ?rest) : RTME(closest-info(rest), "Unexpected input here.")
   defrule ref$ = (?x:#ref!) : x
 
@@ -238,11 +230,7 @@ defsyntax rtm-ir :
   public defproduction tstmt : TStmt
 
   ;===== References =====
-<<<<<<< HEAD
   public defproduction ref : Ref
-=======
-  defproduction ref : Ref
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   defrule ref = (?name:#id) : Ref(name)
   defrule ref = (?r:#ref . ?name:#id!) : FieldRef(r,name)
   defrule ref = (?r:#ref[?i:#non-neg-int$]) : IndexRef(r, i)

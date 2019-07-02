@@ -12,11 +12,7 @@ defpackage symbols :
 ; The following functions expect sizes and coordinates in "Symbol Units" which 
 ; is the expected grid size in schematics. For Kicad this is 50 mil, or 1.27 mm
 
-<<<<<<< HEAD
 public val UNIT-TO-MM = 2.54
-=======
-val UNIT-TO-MM = 2.54
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 public defn unit-point (x:Double, y:Double, scale:Double) :
   point(scale * x, scale * y)
@@ -83,11 +79,6 @@ defmethod print (o:OutputStream, bpl:BoxPinLocs) :
   for pl in pin-locs(bpl) do :  
     println(o2, pl)
 
-<<<<<<< HEAD
-=======
-public deftype PinSpecType <: Hashable & Equalable
-
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 public defstruct PinSpec <: Hashable & Equalable :
   l-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>
   r-pins: Tuple<Ref|KeyValue<Ref,Int|Symbol|Seqable<Int|Symbol>|Seqable<Int|Symbol|Seqable<Int|Symbol>>>>

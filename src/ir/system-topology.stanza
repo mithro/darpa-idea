@@ -149,26 +149,7 @@ with:
 defn collapse-inst-endpoints (inst:Ref, es:Collection<ConnectionEndpoint>) :
   val ports* = to-tuple(seq(port, es))
   val capabilities* = to-tuple(unique(filter-by<Symbol>(seq(capability, es))))
-<<<<<<< HEAD
   CollapsedEndpoint(inst, ports*, capabilities*)  
-=======
-  CollapsedEndpoint(inst, ports*, capabilities*)
-  
-;defn shared-prefix (a:Ref|False, b:Ref) -> Ref|False :
-;  defn shared-prefix (a:Ref, b:Ref) :
-;    if a == b :
-;      a
-;    else :
-;      match(a:FieldRef|IndexRef, b:FieldRef|IndexRef) : shared-prefix(a,b)
-;      else : false
-;  match(a:Ref) :
-;    val la = length(a)
-;    val lb = length(b)
-;    switch(la, lb) :
-;      0 : shared-prefix(a,b)
-;      -1 : shared-prefix(a, base(b,la))
-;      1 : shared-prefix(base(a,lb), b)       
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 defn collapse (input-endpoints:Seqable<ConnectionEndpoint>) :
   val endpoints = to-seq(input-endpoints)
@@ -187,11 +168,7 @@ defn collapse (c:Connection) :
 ;==================== Export to ELK =========================
 ;============================================================
 
-<<<<<<< HEAD
 public defn export-elk (o:OutputStream, topo:SystemTopology, hints:ELKSizingHints) :
-=======
-public defn export-elk (o:OutputStream, topo:SystemTopology) :
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   ;Table mapping instance names to ELK node names
   val node-names = HashTable-init<Ref,String>(make-name) where :
     val counter = to-seq(1 to false)
@@ -244,17 +221,11 @@ public defn export-elk (o:OutputStream, topo:SystemTopology) :
 
   ;Print out nodes
   for inst in instances(topo) do :
-<<<<<<< HEAD
     val ports = inst-ports[name(inst)]
     P0("node %_ {" % [node-names[name(inst)]])
     val [w,h] = compute-size(inst, ports, hints)
     P1("layout [size: %_, %_]" % [w,h])
     for p in ports do :
-=======
-    P0("node %_ {" % [node-names[name(inst)]])
-    P1("layout [size: 400, 400]")
-    for p in inst-ports[name(inst)] do :
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
       P1("port %_ {" % [name(p)])
       P2("label %~" % [string(p)])
       P1("}")
@@ -269,7 +240,6 @@ public defn export-elk (o:OutputStream, topo:SystemTopology) :
     for d in dests(c) do :
       P0("edge E%_: %_ -> %_" % [next(edge-counter), port-name(source(c)), port-name(d)])    
 
-<<<<<<< HEAD
 defn compute-size (inst:Instance,
                    ports:List<ElkPort>,
                    hints:ELKSizingHints) :
@@ -290,8 +260,6 @@ defn compute-size (inst:Instance,
   ;Return computed width and height
   [width, height]
 
-=======
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 defstruct ElkPort :
   name: String
   string: String
@@ -315,7 +283,6 @@ defn add<?K,?V> (t:HashTable<?K,List<?V>>, k:K, v:V) : update(t, cons{v, _}, k)
 ;===================== Main Driver ==========================
 ;============================================================
 
-<<<<<<< HEAD
 public defstruct ELKSizingHints :
   average-character-width: Int
   character-height: Int
@@ -326,21 +293,3 @@ public defn export-system-topology-to-elkt (prog:Collection<TStmt>, filename:Str
   val out = FileOutputStream(filename)
   try : export-elk(out, topo, hints)
   finally : close(out)
-=======
-public defn export-system-topology-to-elkt (prog:Collection<TStmt>, filename:String) -> False :
-  val topo = analyze-system-topology(prog)
-  val out = FileOutputStream("temp.elkt")
-  try : export-elk(out, topo)
-  finally : close(out)
-
-;defn main () :
-;  ;val filename = command-line-arguments()[1]
-;  val filename = "myproject.esir"
-;  val prog = parse-rtm(filename)
-;  val topo = analyze-system-topology(prog)
-;  val out = FileOutputStream("temp.elkt")
-;  export-elk(out, topo)
-;  close(out)
-;
-;main()
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa

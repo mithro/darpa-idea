@@ -364,11 +364,6 @@ defn name? (s:ParamSet) : attempt: One(name(s) as? Symbol) else: None()
 ;<PARAM FILE>
 lower :
   print-post-power-generation = true
-<<<<<<< HEAD
-=======
-export-kicad :
-  preplaced = "asdfkadf.kicad"
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 bom :
   vendors = ("Digi-Key", "Mouser")
   selection = "selection-doc.txt"
@@ -378,11 +373,7 @@ placer :
 prune :
   prune-for = board
   prune-all = (asdf asdf sdaf asdf asdf)
-<<<<<<< HEAD
 prune (ngc-special) :
-=======
-prune (starsky-special) :
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   prune-for = board
   prune-all = (asdf asdf sdaf asdf asdf)
 ;<PARAM FILE>

@@ -47,7 +47,6 @@ add-pass $ new ThruPass :
 ;=================== System Topology ========================
 ;============================================================
 
-<<<<<<< HEAD
 register-parameter-set(`elkt, [
   `average-character-width => IntParam()
   `character-height => IntParam()
@@ -62,13 +61,6 @@ add-pass $ new EndPass :
                   params[`elkt, `padding])
     val output-name = string-join([dir, proj-name, ".elkt"])
     export-system-topology-to-elkt(input, output-name, hints)
-=======
-add-pass $ new EndPass :
-  defmethod name (this) : `elkt
-  defmethod run (this, dir:String, proj-name:String, input:Collection<TStmt>, params:Params) :
-    val output-name = string-join([dir, proj-name, ".elkt"])
-    export-system-topology-to-elkt(input, output-name)
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 ;============================================================
 ;==================== Lower =================================

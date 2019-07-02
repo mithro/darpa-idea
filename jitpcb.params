@@ -5,11 +5,8 @@
 ;
 
 
-<<<<<<< HEAD
 
 elkt :
   average-character-width = 10
   character-height = 20
   padding = 30
-=======
->>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
