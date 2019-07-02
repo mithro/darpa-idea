@@ -277,8 +277,11 @@ public defstruct SupportOption :
   requires: List<RequireStmt> with: (updater => sub-requires)
   properties: List<PinPropertiesStmt> with: (updater => sub-properties)
   mapping: Mapping with: (updater => sub-mapping)
+<<<<<<< HEAD
 with:
   printer => true
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 public defstruct Mapping :
   mappings: List<KeyValue<Ref, Ref>>
@@ -593,6 +596,7 @@ defmethod equal? (a:NamedColor, b:NamedColor) :
   name(a) == name(b)
 
 defmethod compare (a:Ref, b:Ref) :
+<<<<<<< HEAD
   match(a:VarRef, b:VarRef) :
     compare(name(a), name(b))
   else :
@@ -611,6 +615,27 @@ defmethod compare (a:Ref, b:Ref) :
         (a:IndexRef, b:IndexRef) : compare(index(a), index(b))
         (a, b) : compare(rank(a), rank(b))
     else : c
+=======
+  defn rank (a:Ref) :
+    match(a) :
+      (a:VarRef) : 0
+      (a:FieldRef) : 1
+      (a:IndexRef) : 2
+      
+  match(a, b) :
+    (a:VarRef, b:VarRef) :
+      compare(name(a), name(b))
+    (a:FieldRef, b:FieldRef) :
+      val c = compare(ref(a), ref(b))
+      if c == 0 : compare(name(a), name(b))
+      else : c
+    (a:IndexRef, b:IndexRef) :
+      val c = compare(ref(a), ref(b))
+      if c == 0 : compare(index(a), index(b))
+      else : c
+    (a, b) :
+      compare(rank(a), rank(b))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 public defn component (s:InstStmt) :
   name(type(s) as SingleComponent)

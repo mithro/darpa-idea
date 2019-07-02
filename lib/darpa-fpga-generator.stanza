@@ -8,7 +8,10 @@ defpackage darpa-fpga-generator :
   import rtm/ir-utils
   import interfaces
   import components
+<<<<<<< HEAD
   import connections
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   import modules
   import footprints
   import symbols
@@ -20,7 +23,11 @@ defpackage darpa-fpga-generator :
 
 #use-added-syntax(ir-gen)
 
+<<<<<<< HEAD
 jitpcb/repl-lib/clear-user-statements()
+=======
+;jitpcb/repl-lib/clear-user-statements()
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ;==== Parts ===================================================================
 pcb-part analog-ltc2977-prt : 
   manufacturer = "Analog Devices"
@@ -70,6 +77,7 @@ pcb-part xilinx-XCKU060-1FFVA1517I-prt :
   manufacturer = "Xilinx"
   mpn = "XCKU060-1FFVA1517I"
   package = BGA1517C100P39X39-4000X4000X351N
+<<<<<<< HEAD
 
 pcb-part ti-TPS51206-prt : 
   manufacturer = "Texas Instruments"
@@ -85,6 +93,10 @@ pcb-package SON80P400X400X80-11 :
     make-smd-pad(0.9, 1.5)
   pad p[10] : hs-pad at loc(0.0, 0.0)
 
+=======
+; 
+;==== Packages ===================================================================
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-package BGA1517C100P39X39-4000X4000X351N :
   bga-pkg(1.0, 0.5, [39 39], [40.0 40.0], [`A1 `A39 `AW1 `AW39])
 
@@ -161,12 +173,16 @@ pcb-package te-2102772-1-pkg :
 
 ;==== Interfaces ===================================================================
 ; DDR3 SDRAM
+<<<<<<< HEAD
 pcb-bundle ddr3-dat (dim:Int) :
   port dm : pin[dim / 8]
   port dqs : diff-pair[dim / 8]
   port dq : pin[dim] ; data bits
 
 pcb-bundle ddr3-acc :
+=======
+pcb-bundle ddr3 (dim:Int) :
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   ; control signals
   port ck : diff-pair
   pin cke
@@ -175,12 +191,26 @@ pcb-bundle ddr3-acc :
   pin nRAS
   pin nCAS
   pin nWE
+<<<<<<< HEAD
   port ba : pin[3] ;Bank address
   pin nRESET
   port a : pin[15] ;Address bits
 
 defn acc-names () :
   flatten-refs([#R(cke) #R(odt) #R(nCS) #R(nRAS) #R(nCAS) #R(nWE) #R(ba)[0 to 3] #R(a)[0 to 15]])
+=======
+  pin dmu
+  pin dml
+  port ba : pin[3] ;Bank address
+  pin nRESET
+  port a : pin[15] ;Address bits
+  port dq : pin[dim] ; data bits
+  port ldqs : diff-pair
+  port udqs : diff-pair
+
+pcb-capability ddr3-x16 : {ddr3(16)}
+pcb-capability ddr3-x32 : {ddr3(32)}
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 pcb-bundle ddr3-power :
   pin vddq
@@ -191,6 +221,7 @@ pcb-bundle ddr3-power :
   pin vrefca
   pin zq
 
+<<<<<<< HEAD
 pcb-bundle ddr3 :
   port dat : {ddr3-dat(32)}
   port acc : ddr3-acc
@@ -201,6 +232,8 @@ pcb-capability ddr3 : ddr3
 pcb-capability ddr3-x16 : {ddr3-dat(16)}
 pcb-capability ddr3-x32 : {ddr3-dat(32)}
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-bundle power-control :
 ; Bundle for LTC2977
   port vdac : diff-pair
@@ -228,6 +261,7 @@ pcb-bundle LVD-tranceiver-bank (n:Int, dir:True|False) :
   if dir : pin dir
 
 ;==== Components ===================================================================
+<<<<<<< HEAD
 
 pcb-component ti-TPS51206-cmp :
   val ps = PinSpec(
@@ -296,6 +330,63 @@ pcb-component micron-MT41K1G4X-cmp :
     dat.dqs[0].D_N => `G3
     dat.dqs[1].D_P => `C7
     dat.dqs[1].D_N => `B7
+=======
+pcb-component micron-MT41K1G4X-cmp :
+  port mem : {ddr3(16)}
+  port pwr : ddr3-power
+
+  val ps = PinSpec(
+    [mem.ba[0] => `M2
+    mem.ba[1] => `N8
+    mem.ba[2] => `M3
+    mem.a[0] => `N3
+    mem.a[1] => `P7
+    mem.a[2] => `P3
+    mem.a[3] => `N2
+    mem.a[4] => `P8
+    mem.a[5] => `P2
+    mem.a[6] => `R8
+    mem.a[7] => `R2
+    mem.a[8] => `T8
+    mem.a[9] => `R3
+    mem.a[10] => `L7
+    mem.a[11] => `R7
+    mem.a[12] => `N7
+    mem.a[13] => `T3
+    mem.a[14] => `T7
+    mem.ck.D_P => `J7
+    mem.ck.D_N => `K7
+    mem.dmu => `D3
+    mem.dml => `E7
+    mem.cke => `K9
+    mem.nCS => `L2
+    mem.nRAS => `J3
+    mem.nCAS => `K3
+    mem.nWE => `L3
+    mem.odt => `K1
+    mem.nRESET => `T2
+    pwr.zq => `L8]
+    [mem.dq[0] => `E3
+    mem.dq[1] => `F7
+    mem.dq[2] => `F2
+    mem.dq[3] => `F8
+    mem.dq[4] => `H3
+    mem.dq[5] => `H8
+    mem.dq[6] => `G2
+    mem.dq[7] => `H7
+    mem.dq[8] => `D7
+    mem.dq[9] => `C3
+    mem.dq[10] => `C8
+    mem.dq[11] => `C2
+    mem.dq[12] => `A7
+    mem.dq[13] => `A2
+    mem.dq[14] => `B8
+    mem.dq[15] => `A3
+    mem.ldqs.D_P => `F3
+    mem.ldqs.D_N => `G3
+    mem.udqs.D_P => `C7
+    mem.udqs.D_N => `B7
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
     pwr.vrefca => `M8
     pwr.vrefdq => `H1]
     [pwr.vssq => [`B1,`B9,`D1,`D8,`E2,`E8,`F9,`G1,`G9]
@@ -664,7 +755,10 @@ pcb-module ti-SN74LVC8T245DBQ :
   net - (t.VCCA, pd[0].dst.pos)
   net - (t.VCCB, pd[1].dst.pos)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-module ti-SN65LVDM1676DGG :
   port vcc : power
   inst t : ti-SN65LVDM1676DGG-cmp
@@ -672,6 +766,7 @@ pcb-module ti-SN65LVDM1676DGG :
   net - (vcc.neg, t.GND)
   net - (vcc, pd.src)
 
+<<<<<<< HEAD
 pcb-module ddr-termination :
   port vdd : power
   port vtt : power
@@ -716,6 +811,8 @@ pcb-module sdram (type:Symbol, width:Int, size:Int) :
     ddr3.acc => acc
     ddr3.pwr => pwr
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-module vpx-6u :
   port vpx-power : power[6]
   port vpx-pairs : diff-pair[6][32]
@@ -850,6 +947,168 @@ pcb-component xcku-060 :
     c.tx[1].D_P => Ref("B26")
     c.tx[1].D_N => Ref("B27")
 
+<<<<<<< HEAD
+=======
+pcb-capability lvds : diff-pair
+
+val idxr = to-seq(0 to false)
+
+pcb-connection lvds-connection (x:Ref, y:Ref) :
+  net - (x, y)
+when :
+  require?(x) == `lvds and require?(y) == `lvds
+
+pcb-connection level-shift (xs:Tuple<Ref>, ys:Tuple<Ref>) :
+  val xs* = Vector<Ref>()
+  val ys* = Vector<Ref>()
+  for x in xs do : add-all(xs*, expand-pin(x))
+  for y in ys do : add-all(ys*, expand-pin(y))
+
+  val nbanks = (length(xs*) + 7) / 8
+  inst level-shifter : ti-SN74LVC8T245DBQ[nbanks]
+  for i in 0 to nbanks do :
+    val vaio-pin = property(xs*[8 * i].vio-pin)
+    val vbio-pin = property(ys*[8 * i].vio-pin)
+    net - (level-shifter[i].vcca.pos, base(xs*[8 * i]).{vaio-pin})
+    net - (level-shifter[i].vccb.pos, base(ys*[8 * i]).{vbio-pin})
+    val x-base = base(xs*[8 * i])
+    val name = Ref(string-join(["nOE", next(idxr)]))
+    require {name}:dio from x-base
+    net - (x-base.{name}, level-shifter[i].t.nOE)
+    for j in 0 to 8 do :
+      val k = (8 * i) + j
+      if k < length(xs*) :
+        net - (xs*[k], level-shifter[i].t.A[j])
+        net - (level-shifter[i].t.B[j], ys*[k])
+      else :
+        res-strap(vaio-pin, level-shifter[i].t.A[j], 10.0e3)
+        res-strap(vbio-pin, level-shifter[i].t.B[j], 10.0e3)
+when :
+  defn voltage-between? (x:Ref, min:Double, max:Double) :
+    property?(x.voltage) and
+    property?(x.family) and
+    property(x.family) == `LVCMOS and
+    property(x.voltage) >= min and 
+    property(x.voltage) <= max
+  length(xs) == length(ys) and
+  all?(voltage-between?{_, 1.65, 5.5}, xs) and
+  all?(voltage-between?{_, 1.65, 5.5}, ys)
+
+pcb-connection rs485-uart (x:Ref, y:Ref) :
+  ; This connection block will connect a single UART to a single RS485
+  ; It may be expanded later
+  ; Figure out which ref is the uart side and which is the rs485
+  val [uart, rs485] = 
+    if bundle-or-requires?(x,`uart) : [x, y]
+    else : [y, x]
+  val proc :Ref = base(uart)
+  require den : dio from proc
+  inst iface : isl-ISL32458E
+  ;net - (iface.src, proc.src)
+  net - (iface.src.pos, proc.VDD[0])
+  net - (iface.src.neg, proc.VSS[0])
+  net - (iface.rs485, rs485)
+  net - (iface.uart, uart)
+  net - (iface.drive-en, proc.den)
+when :
+  (bundle-or-requires?(x, `uart) and bundle-or-requires?(y, `rs485)) or
+  (bundle-or-requires?(y, `uart) and bundle-or-requires?(x, `rs485))
+
+defn bundle-or-requires? (x:Ref, r-name:Symbol) :
+  if require?(x) == r-name : 
+    true
+  else :
+    match(pin-type?(x)) :
+      (t:PinBundle) : name(t) == r-name
+      (t) : false
+
+defn bundle? (x:Ref, b-name:Symbol) :
+  match(pin-type?(x)) :
+    (t:PinBundle) : name(t) == b-name
+    (t) : false
+
+defn bundle-starts-with? (x:Ref, b-name:Symbol) :
+  match(pin-type?(x)) :
+    (t:PinBundle) : prefix?(name(t), to-string(b-name))
+    (t) : false
+
+defn require-starts-with? (x:Ref, r-name:Symbol) :
+  match(require?(x)) :
+    (r:Symbol) : prefix?(r, to-string(r-name))
+    (r:False) : false
+
+defn pin-array-length (x:Ref) :
+  length(pin-type?(x) as PinArray)
+
+defn dot (rs:Seqable<Ref>, field:Ref) -> Tuple<Ref> :
+  to-tuple(for r in rs seq : r.{field})
+
+pcb-connection uart-rs485-bank (xs:Tuple<Ref>, ys:Tuple<Ref>) :
+  val n = length(xs)
+  inst iface : isl-ISL32458E[n]
+  for i in 0 to n do :
+    net - (iface[i].interface.d+, ys[i].D_P)
+    net - (iface[i].interface.d-, ys[i].D_N)
+  connect (xs.en, iface[0 to n].interface.driver-en)
+  connect (xs.tx, iface[0 to n].interface.receiver-out)
+  connect (xs.rx, iface[0 to n].interface.driver-in)
+
+when :
+  defn diffpair? (x:Ref) : 
+    pin-type?(x) == PinBundle(`diff-pair)
+  all?(require-starts-with?{_, `fullduplex-uart-w-enable}, xs) and
+  ;all?(has-family?{_, `LVCMOS}, xs) and
+  all?(diffpair?,ys) and
+  all?(has-family?{_.D_P, `RS485}, ys)
+
+defn has-family? (x:Ref, name:Symbol) :
+  property?(x.family) and property(x.family) == name
+
+pcb-connection dio-lvds-bank (xs:Tuple<Ref>, ys:Tuple<Ref>) :
+  val nbanks = (length(xs) + 15) / 16
+  inst t : ti-SN65LVDM1676DGG[nbanks]
+  
+when :
+  all?(has-family?{_, `LVCMOS}, xs) and
+  all?(bundle-or-requires?{_, `lvds}, ys)
+
+
+pcb-connection infiniband (x:Ref, y:Ref) :
+  for i in 0 to pin-array-length(x.tx) do :
+    connect (x.tx[i], y.rx[i])
+    connect (y.tx[i], x.rx[i])
+when :
+  require-starts-with?(x, `infiniband) and
+  require-starts-with?(y, `infiniband) and
+  bundle-starts-with?(x, `multi-diff-pair-lane) and
+  bundle-starts-with?(y, `multi-diff-pair-lane)
+
+pcb-connection infiniband (x:Ref, y:Ref) :
+  inst cc : {gen-cap-cmp(0.1)}[2]
+  net - (x.D_P cc[0].p[0])
+  net - (x.D_N cc[1].p[0])
+  net - (y.D_P cc[0].p[1])
+  net - (y.D_N cc[1].p[1])
+when :
+  val result = 
+    require-starts-with?(y, `infiniband) and
+    bundle?(x, `diff-pair) and
+    bundle?(y, `diff-pair) and
+    not property?(y.D_P.external) and
+    not property?(y.D_N.external)
+  result
+
+pcb-connection infiniband (x:Ref, y:Ref) :
+  net - (x y)
+when :
+  require-starts-with?(x, `infiniband) and
+  require-starts-with?(y, `infiniband) and
+  bundle?(x, `diff-pair) and
+  bundle?(y, `diff-pair) and
+  property?(y.D_P.external) and
+  property?(y.D_N.external)
+
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 defn flatten-refs (x:Ref|Tuple) -> Tuple<Ref> :
   val rs = Vector<Ref>()
   let loop (r:Ref|Tuple = x) :
@@ -857,9 +1116,12 @@ defn flatten-refs (x:Ref|Tuple) -> Tuple<Ref> :
     else : add(rs, r as Ref)
   to-tuple(rs)
 
+<<<<<<< HEAD
 defn dot (rs:Seqable<Ref>, field:Ref) -> Tuple<Ref> :
   to-tuple(for r in rs seq : r.{field})
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-module power-controller (rs:Tuple<RegulatorInterface>) :
   port src : power
   pin gnd
@@ -879,6 +1141,7 @@ pcb-module power-controller (rs:Tuple<RegulatorInterface>) :
     net - (src.pos, l-ref.VDD33[0], l-ref.VDD33[1], m-ref.VCC)
 
 ;==== Main Module ===================================================================
+<<<<<<< HEAD
 defn bypass-xcku060ffva1517 (cmp:Ref):
   inside pcb-module:
     for i in 0 to 6 do: cap-strap(cmp.vccaux,    cmp.gnd, 4.7)
@@ -920,6 +1183,8 @@ defn bypass-xcku060ffva1517 (cmp:Ref):
     cap-strap(cmp.vref-68,   cmp.gnd, 47.0)
 
 pcb-capability lvds : diff-pair
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 val brd-outline = rectangle(100.0, 100.0) 
 pcb-module darpa-fpga :
@@ -947,12 +1212,15 @@ pcb-module darpa-fpga :
     net P1P5V (pos(rail))
 
   inst fpga : xilinx-XCKU060-1FFVA1517I-cmp
+<<<<<<< HEAD
   bypass-xcku060ffva1517(fpga)
   inst ram-0 : {sdram(`ddr3, 32, 4)}
   inst ram-1 : {sdram(`ddr3, 32, 4)}
   require ddr3:ddr3 from ram-0
   require ddr3:ddr3 from ram-1
   net - (ram-0.ddr3, ram-1.ddr3)
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
   net P3P3V (fpga.vcco-65, fpga.vcco-64)
   net P1P8V (fpga.vcco-45, fpga.vcco-44, fpga.vcco-68, , fpga.vccaux, fpga.vccaux-io)
@@ -963,9 +1231,15 @@ pcb-module darpa-fpga :
   net gnd (fpga.gnd)
 
   ;Make lvds connection
+<<<<<<< HEAD
   ;require lvds-port : lvds from fpga
   ;require lvds-port : lvds from backplane
   ;connect (fpga.lvds-port, backplane.lvds-port)
+=======
+  require lvds-port : lvds from fpga
+  require lvds-port : lvds from backplane
+  connect (fpga.lvds-port, backplane.lvds-port)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
   ;require internet:{infiniband(2)} from fpga
   ;require internet:{infiniband(2)} from backplane
@@ -977,6 +1251,7 @@ pcb-module darpa-fpga :
       voltage => 5.0
       family => `LVCMOS 
       vio-pin => #R(E3)
+<<<<<<< HEAD
 ;
   ;;require sys-i2c:i2c from fpga
   ;;require reset:dio from fpga
@@ -992,6 +1267,23 @@ pcb-module darpa-fpga :
   ;require pod:fullduplex-uart-w-enable[40] from fpga
   ;connect (fpga.pod[0 to 40], flatten-refs([backplane.vpx-pairs[0][0 to 20]
   ;                                             backplane.vpx-pairs[1][0 to 20]]))
+=======
+
+  ;require sys-i2c:i2c from fpga
+  ;require reset:dio from fpga
+  ;connect ([fpga.sys-i2c.sda, fpga.sys-i2c.scl, fpga.reset],
+  ;          [backplane.P0.F6, backplane.P0.G6, backplane.P0.A4])
+
+  for i in 0 to 20 do :
+    for j in 0 to 2 do :
+      properties(backplane.vpx-pairs[j][i]) :
+        family => `RS485
+  
+  ;;POD bus: 40 RS-485 connections on backplane.vpx-pairs[0] and [1]
+  require pod:fullduplex-uart-w-enable[40] from fpga
+  connect (fpga.pod[0 to 40], flatten-refs([backplane.vpx-pairs[0][0 to 20]
+                                                backplane.vpx-pairs[1][0 to 20]]))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
   ;Aux I/O: 12 RS-485 connections on backplane.vpx-pairs[5] 
   ; Connect to any I/O pins on FPGA
@@ -1032,5 +1324,9 @@ defn make-darpa-fpga-project () :
 
 make-darpa-fpga-project()
   
+<<<<<<< HEAD
 jitpcb/repl-lib/dump-esir("myproject", [`prune-lower])
 ;jitpcb/repl-lib/dump-esir("myproject", [`kicad-notplaced])
+=======
+;jitpcb/repl-lib/dump-esir("myproject", [`prune-lower])
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa

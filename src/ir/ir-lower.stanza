@@ -1019,10 +1019,13 @@ defn undot-refs (ir-table:IRTable, ss:Seqable<MStmt>, f:RefFlattener) :
   ;Stores the flattened version of each reference
   val ref-table = HashTable<Ref, VarRef>()
 
+<<<<<<< HEAD
   ;Add to rename table
   defn rename-to (r:Ref, r2:VarRef) :
     ref-table[r] = r2
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   ;Rename using the ref table
   defn rename (r:Ref) :
     if key?(ref-table, r) :
@@ -1070,18 +1073,27 @@ defn undot-refs (ir-table:IRTable, ss:Seqable<MStmt>, f:RefFlattener) :
       match(flatten-inlined(s0)) :
         (s:NetStmt) :
           match(inlined-ref?(s0)) :
+<<<<<<< HEAD
             (ref:Ref) : rename-to(ref, Ref(name(s)))
+=======
+            (ref:Ref) : ref-table[ref] = Ref(name(s))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
             (ref:False) : false
           yield(sub-refs(s, map(rename, refs(s))))
         (s:NodeStmt) :
           val ref = inlined-ref!(s0)
+<<<<<<< HEAD
           rename-to(ref, Ref(name(s)))
+=======
+          ref-table[ref] = Ref(name(s))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
           yield(s)
         (s:InstStmt) :
           val insts = expand(inlined-ref!(s0), type(s))
           val base-t = base(type(s))
           for inst in insts do :
             val name = flatten(f, inst)
+<<<<<<< HEAD
             rename-to(inst, Ref(name))
             yield(InstStmt(name, base-t))
         (s:InstSupportsStmt) :
@@ -1089,6 +1101,10 @@ defn undot-refs (ir-table:IRTable, ss:Seqable<MStmt>, f:RefFlattener) :
           rename-to(inst(s), inst*)
           val s* = map-scope-refs(rename, s) as InstSupportsStmt
           yield(sub-inst(s*, inst*))
+=======
+            ref-table[inst] = Ref(name)
+            yield(InstStmt(name, base-t))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
         (s) :
           yield(map-scope-refs(rename, s))
 

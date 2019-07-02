@@ -227,11 +227,16 @@ defn add (ps:PinSet, name:Symbol|False) :
 ;============================================================
 
 public defstruct ReqPort :
+<<<<<<< HEAD
   parent-option: Ref|False
   ref:Ref
   port?:True|False
 with:
   printer => true
+=======
+  ref:Ref
+  port?:True|False
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 public defstruct PinSolverInput :
   pins:Tuple<Ref>
@@ -241,6 +246,7 @@ public defstruct PinSolverInput :
   options:Vector<KeyValue<Ref,Option>>
   preassigned:Tuple<KeyValue<Int,Int>>
 
+<<<<<<< HEAD
 defmethod print (o:OutputStream, p:PinSolverInput) :
   val o2 = IndentedStream(o)
   val o3 = IndentedStream(o2)
@@ -261,6 +267,8 @@ defmethod print (o:OutputStream, p:PinSolverInput) :
   NP("preassigned:")
   do(NP2, preassigned(p))  
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
   ;Retrieve module table
   val mtable = mtable(ir-table, name(m))
@@ -315,7 +323,11 @@ public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
 
   ;Build the requests
   val port-requests = IntTable<ReqPort>()
+<<<<<<< HEAD
   defn form-requests (r:RequireStmt, parent-option:Ref|False, src-table:HashTable<Ref,PinSource>|False) -> Seqable<ClassReq> :
+=======
+  defn form-requests (r:RequireStmt, src-table:HashTable<Ref,PinSource>|False) -> Seqable<ClassReq> :
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
     val class-ref = dot(inst(r), Ref(name(base(capability(r)))))
     val class-index = class-index-table[class-ref]
     val pinmap = to-hashtable<Ref,Ref>(mappings(mapping(r)))
@@ -335,13 +347,21 @@ public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
               (p:Ref) : pin-index-table[p]
               (p:False) : p
           val req-id = genid()
+<<<<<<< HEAD
           port-requests[req-id] = ReqPort(parent-option, ref, true)
+=======
+          port-requests[req-id] = ReqPort(ref, true)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
           ClassReq(req-id, class-index, to-tuple(srcs), to-tuple(tgts))
       (rname:False) :
         val ref = FieldRef(inst(r), name(base(capability(r))))
         for r in expand(ref, capability(r)) seq :
           val req-id = genid()
+<<<<<<< HEAD
           port-requests[req-id] = ReqPort(parent-option, r, false)
+=======
+          port-requests[req-id] = ReqPort(r, false)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
           ClassReq(req-id, class-index, [], [])
 
   ;Create class group
@@ -365,10 +385,17 @@ public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
           val tgt = pinmap[r]
           if forwarded?(tgt) : src-table[tgt] = ArgInput(argi)
           else : pin-index-table[tgt]
+<<<<<<< HEAD
         val option-id = dot(inst(support), id(option) as Ref)
         val reqs = to-tuple $ for r in requires(option) seq-cat :
           form-requests(r, option-id, src-table)
         val o = Option(pins, reqs)
+=======
+        val reqs = to-tuple $ for r in requires(option) seq-cat :
+          form-requests(r, src-table)
+        val o = Option(pins, reqs)
+        val option-id = dot(inst(support), id(option) as Ref)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
         add(options, option-id => o)
         o
     class-groups[class] = cons(group, class-groups[class])
@@ -376,16 +403,25 @@ public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
   ;Create classes
   val classes = to-tuple $
     for (groups in class-groups, id in 0 to false) seq :
+<<<<<<< HEAD
       Class(id, to-tuple(reverse(groups)))
+=======
+      Class(id, to-tuple(groups))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
   ;Create class requests
   val class-reqs = to-tuple $
     for r in requires(mtable) seq-cat :
+<<<<<<< HEAD
       form-requests(r, false, false)
+=======
+      form-requests(r, false)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
   ;Create pre-assigned solution
   val pre-assigned = Vector<KeyValue<Int,Int>>()
   val option-index-table = to-hashtable(key{options[_]}, 0 to length(options))
+<<<<<<< HEAD
   val request-req-table = to-hashtable<[Ref|False, Ref],Int> $
     for entry in port-requests seq :
       [parent-option(value(entry)), ref(value(entry))] => key(entry)
@@ -395,6 +431,15 @@ public defn construct-input (ir-table:IRTable, m:DefModule) -> PinSolverInput :
       val req-id = request-req-table[[parent-option, ref(s)]]
       add(pre-assigned, req-id => option-index-table[option-id(s)])
       do(loop{_, option-id(s)}, nested-supports(s))
+=======
+  val request-req-table = to-hashtable<Ref,Int> $
+    for entry in port-requests seq : ref(value(entry)) => key(entry)
+  for s in supported-bys(mtable) do :
+    let loop (s:SupportedByStmt = s) :
+      val req-id = request-req-table[ref(s)]
+      add(pre-assigned, req-id => option-index-table[option-id(s)])
+      do(loop, nested-supports(s))
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
       
   ;Return constructed input
   PinSolverInput(to-tuple(all-pins),

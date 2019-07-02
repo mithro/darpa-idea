@@ -49,8 +49,11 @@ pcb-bundle rs485 :
   pin d-
   pin d+
 
+<<<<<<< HEAD
 pcb-capability rs485:rs485
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-bundle can :
   pin rx
   pin tx
@@ -59,6 +62,7 @@ pcb-bundle i2c :
   pin sda
   pin scl
 
+<<<<<<< HEAD
 val spi-bundles = HashTable<Symbol, Seqable>()
 defn generate-spi-bundles ():
   val prefix = `spi-
@@ -79,6 +83,8 @@ defn generate-spi-bundles ():
         pin {Ref(pname)}
 generate-spi-bundles()
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-bundle spi :
   pin mosi
   pin miso
@@ -121,6 +127,7 @@ pcb-bundle jtag :
   pin tms
   pin trstn
 
+<<<<<<< HEAD
 pcb-bundle jtag-no-rst :
   pin tck
   pin tdi
@@ -159,6 +166,8 @@ pcb-capability ethernet-1000 : ethernet-1000
 pcb-capability rgmii : rgmii
 pcb-capability lvds : lvds
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ;==== Capabilities =============================================================
 
 public val CAPABILITY-TABLE = HashTable<Symbol, Symbol>()
@@ -195,20 +204,29 @@ CAPABILITY-TABLE[`fullduplex-uart-w-enable] = `fullduplex-uart-w-enable
 ;CAPABILITY-TABLE[`rs485] = `rs485
 CAPABILITY-TABLE[`sd] = `sd
 CAPABILITY-TABLE[`jtag] = `jtag
+<<<<<<< HEAD
 CAPABILITY-TABLE[`jtag-no-rst] = `jtag-no-rst
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 CAPABILITY-TABLE[`can] = `can
 CAPABILITY-TABLE[`i2c] = `i2c
 CAPABILITY-TABLE[`i2c-0] = `i2c
 CAPABILITY-TABLE[`spi] = `spi
+<<<<<<< HEAD
 for spi-name in keys $ spi-bundles do:
   CAPABILITY-TABLE[spi-name] = spi-name
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 CAPABILITY-TABLE[`usb-2] = `usb-2
 CAPABILITY-TABLE[`swd] = `swd
 CAPABILITY-TABLE[`diff-pair] = `diff-pair
 CAPABILITY-TABLE[`edp] = `edp
+<<<<<<< HEAD
 ;CAPABILITY-TABLE[`lvds] = `lvds
 CAPABILITY-TABLE[`lvds-clk] = `lvds-clk
 CAPABILITY-TABLE[`pcie-lane] = `pcie-lane
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ; Dummy capabiltiy for crossbar use
 CAPABILITY-TABLE[`bar-pin] = `pin
 

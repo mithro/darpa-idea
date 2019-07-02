@@ -4,7 +4,10 @@ defpackage xcku060-cmp :
   import components
   import symbols
   import math
+<<<<<<< HEAD
   import input-spec/ir
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   import rtm/ir
   import rtm/ir-gen
   import rtm/ir-connections
@@ -83,7 +86,10 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   port xcvr-spare-10 : fullduplex-uart-w-enable
   port xcvr-spare-11 : fullduplex-uart-w-enable
   port xcvr-spare-12 : fullduplex-uart-w-enable
+<<<<<<< HEAD
   port fpga-i2c : i2c
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin alt-xmit-tag-rx
   pin audio-anlg-mcp-fail
   pin audio-anlg-rcd-fail
@@ -122,8 +128,11 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin cb-data-strb
   pin cb-frq-stb-tx-rx-n
   pin cb-frq-strb
+<<<<<<< HEAD
   pin cclk-0
   pin cfgbvs-0
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin clk-in-10mhz
   pin clk-in-25mhz
   pin config-done
@@ -143,10 +152,13 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin cpld-spare-io-13
   pin cpld-spare-io-14
   pin cpld-spare-io-15
+<<<<<<< HEAD
   pin d00-mosi-0
   pin d01-din-0
   pin d02-0
   pin d03-0
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin ddr3-addr-0
   pin ddr3-addr-1
   pin ddr3-addr-2
@@ -242,9 +254,14 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin dmu3-pdw-data-p-1
   pin dmu3-pdw-data-p-2
   pin dmu3-pdw-data-p-3
+<<<<<<< HEAD
   pin done-0
   pin dxn
   pin dxp
+=======
+  pin fpga-i2c-scl
+  pin fpga-i2c-sda
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin fpga-reset-n
   pin fpga-test-dwell-en
   pin fpga-test-points-0
@@ -263,6 +280,7 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin fpga-test-points-13
   pin fpga-test-points-14
   pin fpga-test-points-15
+<<<<<<< HEAD
   pin gnd
   pin gndadc
   pin iff-xmit-tag-rx
@@ -469,6 +487,11 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin io-t3u-n12-46
   pin io-t3u-n12-67
   pin io-t3u-n12-68
+=======
+  pin iff-xmit-tag-rx
+  pin init-clk-m
+  pin init-clk-p
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin lbdr-ctrl-0
   pin lbdr-ctrl-1
   pin lbdr-ctrl-2
@@ -488,6 +511,7 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin lbdr0-aur-p
   pin lbdr1-aur-m
   pin lbdr1-aur-p
+<<<<<<< HEAD
   pin m0-0
   pin m1-0
   pin m2-0
@@ -655,6 +679,11 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin pudc-b-0
   pin radar-xmit-tag-rx
   pin rdwr-fcs-b-0
+=======
+  pin mids-blank-rx
+  pin pcie-rst-n
+  pin radar-xmit-tag-rx
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin sei-int-n
   pin spare-lvds-out-8
   pin spare-lvds-out-9
@@ -663,11 +692,15 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin sys-clk-m
   pin sys-clk-p
   pin tacan-xmit-tag-rx
+<<<<<<< HEAD
   pin tck-0
   pin tdi-0
   pin tdo-0
   pin therm-out-sig
   pin tms-0
+=======
+  pin therm-out-sig
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin toa-sync-rx
   pin toa-sync-tx-0
   pin toa-sync-tx-1
@@ -691,6 +724,7 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin ueu-pod-cfg-2
   pin ueu-pod-cfg-3
   pin ueu-pod-cfg-4
+<<<<<<< HEAD
   pin vbatt
   pin vccadc
   pin vccaux
@@ -711,6 +745,8 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin vcco-66
   pin vcco-67
   pin vcco-68
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin video-in-0
   pin video-in-1
   pin video-in-2
@@ -723,6 +759,7 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin video-sel-0
   pin video-sel-1
   pin video-sel-en
+<<<<<<< HEAD
   pin vn
   pin vp
   pin vref-24
@@ -739,6 +776,8 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin vref-68
   pin vrefn
   pin vrefp
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   pin wra6-alt-blank-rx-n
   pin wra6-alt-blank-tx-n
   pin wra6-iff-blank-rx-n
@@ -754,6 +793,41 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   pin wra6-ttnt-xmt-tag-rx-n
   pin wra6-ttnt-xmt-tag-tx-n
   pin wra8-cold-temp-n
+<<<<<<< HEAD
+=======
+  pin vcco-65
+  pin vccaux-io
+  pin mgtvccaux-rs
+  pin vcco-44
+  pin gnd
+  pin vcco-45
+  pin mgtavtt-l
+  pin vcco-24
+  pin gndadc
+  pin mgtavtt-rn
+  pin mgtavttrcal-l
+  pin vcco-46
+  pin vcco-64
+  pin vcco-68
+  pin vcco-48
+  pin mgtavcc-rs
+  pin vcco-25
+  pin vcco-0
+  pin mgtavtt-rs
+  pin mgtavttrcal-rs
+  pin vccadc
+  pin vcco-66
+  pin vccint-io
+  pin vccbram
+  pin mgtavcc-l
+  pin mgtvccaux-l
+  pin vcco-67
+  pin mgtvccaux-rn
+  pin vccaux
+  pin vccint
+  pin vcco-47
+  pin mgtavcc-rn
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   supports dio:
     dio => alt-xmit-tag-rx
   supports dio:
@@ -831,10 +905,13 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   supports dio:
     dio => cb-frq-strb
   supports dio:
+<<<<<<< HEAD
     dio => cclk-0
   supports dio:
     dio => cfgbvs-0
   supports dio:
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
     dio => clk-in-10mhz
   supports dio:
     dio => clk-in-25mhz
@@ -873,6 +950,7 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   supports dio:
     dio => cpld-spare-io-15
   supports dio:
+<<<<<<< HEAD
     dio => d00-mosi-0
   supports dio:
     dio => d01-din-0
@@ -881,6 +959,8 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   supports dio:
     dio => d03-0
   supports dio:
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
     dio => ddr3-addr-0
   supports dio:
     dio => ddr3-addr-1
@@ -1071,11 +1151,17 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   supports dio:
     dio => dmu3-pdw-data-p-3
   supports dio:
+<<<<<<< HEAD
     dio => done-0
   supports dio:
     dio => dxn
   supports dio:
     dio => dxp
+=======
+    dio => fpga-i2c-scl
+  supports dio:
+    dio => fpga-i2c-sda
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   supports dio:
     dio => fpga-reset-n
   supports dio:
@@ -1113,6 +1199,7 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   supports dio:
     dio => fpga-test-points-15
   supports dio:
+<<<<<<< HEAD
     dio => gnd
   supports dio:
     dio => gndadc
@@ -1121,10 +1208,15 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
   supports dio:
     dio => init-b-0
   supports dio:
+=======
+    dio => iff-xmit-tag-rx
+  supports dio:
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
     dio => init-clk-m
   supports dio:
     dio => init-clk-p
   supports dio:
+<<<<<<< HEAD
     dio => io-l10n-t1u-n7-qbc-ad4n-45
   supports dio:
     dio => io-l10n-t1u-n7-qbc-ad4n-66
@@ -3210,6 +3302,898 @@ pcb-component xilinx-XCKU060-1FFVA1517I-cmp :
     [#R(wra6-ttnt-xmt-tag-rx-n), `AW26, [`voltage => 1.8 `family => `LVCMOS ]]
     [#R(wra6-ttnt-xmt-tag-tx-n), `AU25, [`voltage => 1.8 `family => `LVCMOS ]]
     [#R(wra8-cold-temp-n), `AD18, [`voltage => 3.3 `family => `LVCMOS ]]
+=======
+    dio => lbdr-ctrl-0
+  supports dio:
+    dio => lbdr-ctrl-1
+  supports dio:
+    dio => lbdr-ctrl-2
+  supports dio:
+    dio => lbdr-ctrl-3
+  supports dio:
+    dio => lbdr-ctrl-4
+  supports dio:
+    dio => lbdr-ctrl-5
+  supports dio:
+    dio => lbdr-ctrl-6
+  supports dio:
+    dio => lbdr-ctrl-7
+  supports dio:
+    dio => lbdr-ctrl-8
+  supports dio:
+    dio => lbdr-ctrl-9
+  supports dio:
+    dio => lbdr-ctrl-10
+  supports dio:
+    dio => lbdr-ctrl-11
+  supports dio:
+    dio => lbdr-ctrl-12
+  supports dio:
+    dio => lbdr-ctrl-13
+  supports dio:
+    dio => lbdr-ctrl-14
+  supports dio:
+    dio => lbdr0-aur-m
+  supports dio:
+    dio => lbdr0-aur-p
+  supports dio:
+    dio => lbdr1-aur-m
+  supports dio:
+    dio => lbdr1-aur-p
+  supports dio:
+    dio => mids-blank-rx
+  supports dio:
+    dio => pcie-rst-n
+  supports dio:
+    dio => radar-xmit-tag-rx
+  supports dio:
+    dio => sei-int-n
+  supports dio:
+    dio => spare-lvds-out-8
+  supports dio:
+    dio => spare-lvds-out-9
+  supports dio:
+    dio => spare-lvds-out-10
+  supports dio:
+    dio => spare-lvds-out-11
+  supports dio:
+    dio => sys-clk-m
+  supports dio:
+    dio => sys-clk-p
+  supports dio:
+    dio => tacan-xmit-tag-rx
+  supports dio:
+    dio => therm-out-sig
+  supports dio:
+    dio => toa-sync-rx
+  supports dio:
+    dio => toa-sync-tx-0
+  supports dio:
+    dio => toa-sync-tx-1
+  supports dio:
+    dio => toa-sync-tx-2
+  supports dio:
+    dio => toa-sync-tx-3
+  supports dio:
+    dio => toa-sync-tx-4
+  supports dio:
+    dio => toa-sync-tx-5
+  supports dio:
+    dio => ttnt-rcvr-blank
+  supports dio:
+    dio => ttnt-xmt-blank
+  supports dio:
+    dio => ueu-clk-1pps-fpga
+  supports dio:
+    dio => ueu-clock-1pps-cpld
+  supports dio:
+    dio => ueu-clock-2mhz
+  supports dio:
+    dio => ueu-clock-rx-1
+  supports dio:
+    dio => ueu-clock-rx-2
+  supports dio:
+    dio => ueu-clock-rx-3
+  supports dio:
+    dio => ueu-clock-rx-4
+  supports dio:
+    dio => ueu-clock-rx-5
+  supports dio:
+    dio => ueu-clock-test
+  supports dio:
+    dio => ueu-pod-cfg-0
+  supports dio:
+    dio => ueu-pod-cfg-1
+  supports dio:
+    dio => ueu-pod-cfg-2
+  supports dio:
+    dio => ueu-pod-cfg-3
+  supports dio:
+    dio => ueu-pod-cfg-4
+  supports dio:
+    dio => video-in-0
+  supports dio:
+    dio => video-in-1
+  supports dio:
+    dio => video-in-2
+  supports dio:
+    dio => video-in-3
+  supports dio:
+    dio => video-in-4
+  supports dio:
+    dio => video-in-5
+  supports dio:
+    dio => video-in-6
+  supports dio:
+    dio => video-in-7
+  supports dio:
+    dio => video-otr
+  supports dio:
+    dio => video-sel-0
+  supports dio:
+    dio => video-sel-1
+  supports dio:
+    dio => video-sel-en
+  supports dio:
+    dio => wra6-alt-blank-rx-n
+  supports dio:
+    dio => wra6-alt-blank-tx-n
+  supports dio:
+    dio => wra6-iff-blank-rx-n
+  supports dio:
+    dio => wra6-iff-blank-tx-n
+  supports dio:
+    dio => wra6-mids-blank-rx-n
+  supports dio:
+    dio => wra6-mids-blank-tx-n
+  supports dio:
+    dio => wra6-radar-blank-rx-n
+  supports dio:
+    dio => wra6-radar-blank-tx-n
+  supports dio:
+    dio => wra6-tacan-blank-rx-n
+  supports dio:
+    dio => wra6-tacan-blank-tx-n
+  supports dio:
+    dio => wra6-ttnt-spare-rx-n
+  supports dio:
+    dio => wra6-ttnt-spare-tx-n
+  supports dio:
+    dio => wra6-ttnt-xmt-tag-rx-n
+  supports dio:
+    dio => wra6-ttnt-xmt-tag-tx-n
+  supports dio:
+    dio => wra8-cold-temp-n
+  supports lvds:
+    lvds.D_P => ddr3-dqs-2.D_P
+    lvds.D_N => ddr3-dqs-2.D_N
+  supports lvds:
+    lvds.D_N => ddr3-clk.D_N
+    lvds.D_P => ddr3-clk.D_P
+  supports lvds:
+    lvds.D_N => lbdr-bus-0-0.D_N
+    lvds.D_P => lbdr-bus-0-0.D_P
+  supports lvds:
+    lvds.D_N => lvds-fpga-cpld-0.D_N
+    lvds.D_P => lvds-fpga-cpld-0.D_P
+  supports lvds:
+    lvds.D_P => lvds-fpga-cpld-3.D_P
+    lvds.D_N => lvds-fpga-cpld-3.D_N
+  supports lvds:
+    lvds.D_N => dmu-pdw-clk-3.D_N
+    lvds.D_P => dmu-pdw-clk-3.D_P
+  supports lvds:
+    lvds.D_N => pci-exp-rx.D_N
+    lvds.D_P => pci-exp-rx.D_P
+  supports lvds:
+    lvds.D_N => dmu-pdw-dval-0.D_N
+    lvds.D_P => dmu-pdw-dval-0.D_P
+  supports lvds:
+    lvds.D_P => lbdr-bus-0-1.D_P
+    lvds.D_N => lbdr-bus-0-1.D_N
+  supports lvds:
+    lvds.D_N => ddr3-dqs-0.D_N
+    lvds.D_P => ddr3-dqs-0.D_P
+  supports lvds:
+    lvds.D_N => lvds-fpga-cpld-2.D_N
+    lvds.D_P => lvds-fpga-cpld-2.D_P
+  supports lvds:
+    lvds.D_P => fpga-aurora-rx0.D_P
+    lvds.D_N => fpga-aurora-rx0.D_N
+  supports lvds:
+    lvds.D_P => ddr3-dqs-3.D_P
+    lvds.D_N => ddr3-dqs-3.D_N
+  supports lvds:
+    lvds.D_P => dmu0-pdw-data-0.D_P
+    lvds.D_N => dmu0-pdw-data-0.D_N
+  supports lvds:
+    lvds.D_P => dmu-pdw-clk-0.D_P
+    lvds.D_N => dmu-pdw-clk-0.D_N
+  supports lvds:
+    lvds.D_N => fpga-aurora-rx1.D_N
+    lvds.D_P => fpga-aurora-rx1.D_P
+  supports lvds:
+    lvds.D_P => lbdr-bus-1-2.D_P
+    lvds.D_N => lbdr-bus-1-2.D_N
+  supports lvds:
+    lvds.D_P => lvds-cpld-fpga-3.D_P
+    lvds.D_N => lvds-cpld-fpga-3.D_N
+  supports lvds:
+    lvds.D_P => lbdr-bus-0-2.D_P
+    lvds.D_N => lbdr-bus-0-2.D_N
+  supports lvds:
+    lvds.D_P => pci-exp-tx.D_P
+    lvds.D_N => pci-exp-tx.D_N
+  supports lvds:
+    lvds.D_P => lvds-fpga-cpld-1.D_P
+    lvds.D_N => lvds-fpga-cpld-1.D_N
+  supports lvds:
+    lvds.D_P => dmu0-pdw-data-1.D_P
+    lvds.D_N => dmu0-pdw-data-1.D_N
+  supports lvds:
+    lvds.D_P => dmu-pdw-clk-1.D_P
+    lvds.D_N => dmu-pdw-clk-1.D_N
+  supports lvds:
+    lvds.D_P => aurora-0-clk.D_P
+    lvds.D_N => aurora-0-clk.D_N
+  supports lvds:
+    lvds.D_P => lbdr-bus-1-1.D_P
+    lvds.D_N => lbdr-bus-1-1.D_N
+  supports lvds:
+    lvds.D_P => lvds-cpld-fpga-0.D_P
+    lvds.D_N => lvds-cpld-fpga-0.D_N
+  supports lvds:
+    lvds.D_P => lvds-cpld-fpga-1.D_P
+    lvds.D_N => lvds-cpld-fpga-1.D_N
+  supports lvds:
+    lvds.D_N => ddr3-dqs-1.D_N
+    lvds.D_P => ddr3-dqs-1.D_P
+  supports lvds:
+    lvds.D_N => lvds-cpld-fpga-2.D_N
+    lvds.D_P => lvds-cpld-fpga-2.D_P
+  supports lvds:
+    lvds.D_P => lbdr-bus-1-0.D_P
+    lvds.D_N => lbdr-bus-1-0.D_N
+  supports lvds:
+    lvds.D_N => aurora-1-clk.D_N
+    lvds.D_P => aurora-1-clk.D_P
+  supports lvds:
+    lvds.D_N => dmu-pdw-clk-2.D_N
+    lvds.D_P => dmu-pdw-clk-2.D_P
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => xcvr-spare-2.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-2.rx
+    fullduplex-uart-w-enable.tx => xcvr-spare-2.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-11.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-11.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-11.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-6.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-6.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-6.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-aft-4.rx
+    fullduplex-uart-w-enable.tx => pod-ab-aft-4.tx
+    fullduplex-uart-w-enable.en => pod-ab-aft-4.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => xcvr-spare-10.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-10.rx
+    fullduplex-uart-w-enable.tx => xcvr-spare-10.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-a-blank-1.rx
+    fullduplex-uart-w-enable.tx => pod-a-blank-1.tx
+    fullduplex-uart-w-enable.en => pod-a-blank-1.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-1.rx
+    fullduplex-uart-w-enable.tx => xcvr-spare-1.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-1.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-aft-3.rx
+    fullduplex-uart-w-enable.en => pod-ab-aft-3.en
+    fullduplex-uart-w-enable.tx => pod-ab-aft-3.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-3.rx
+    fullduplex-uart-w-enable.en => pod-exciter-sync-3.en
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-3.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-a-blank-5.en
+    fullduplex-uart-w-enable.rx => pod-a-blank-5.rx
+    fullduplex-uart-w-enable.tx => pod-a-blank-5.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => xcvr-spare-5.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-5.rx
+    fullduplex-uart-w-enable.tx => xcvr-spare-5.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-4.rx
+    fullduplex-uart-w-enable.en => pod-ab-fwd-4.en
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-4.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-f-blank-1.rx
+    fullduplex-uart-w-enable.en => pod-f-blank-1.en
+    fullduplex-uart-w-enable.tx => pod-f-blank-1.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-blank-a.en
+    fullduplex-uart-w-enable.rx => pod-blank-a.rx
+    fullduplex-uart-w-enable.tx => pod-blank-a.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => mids-int.rx
+    fullduplex-uart-w-enable.en => mids-int.en
+    fullduplex-uart-w-enable.tx => mids-int.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-fwd-1.en
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-1.rx
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-1.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-f-blank-5.en
+    fullduplex-uart-w-enable.tx => pod-f-blank-5.tx
+    fullduplex-uart-w-enable.rx => pod-f-blank-5.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-ab-aft-2.tx
+    fullduplex-uart-w-enable.en => pod-ab-aft-2.en
+    fullduplex-uart-w-enable.rx => pod-ab-aft-2.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-4.rx
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-4.tx
+    fullduplex-uart-w-enable.en => pod-exciter-sync-4.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-a-blank-4.rx
+    fullduplex-uart-w-enable.en => pod-a-blank-4.en
+    fullduplex-uart-w-enable.tx => pod-a-blank-4.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-4.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-4.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-4.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-f-blank-4.tx
+    fullduplex-uart-w-enable.rx => pod-f-blank-4.rx
+    fullduplex-uart-w-enable.en => pod-f-blank-4.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-exciter-sync-2.en
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-2.tx
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-2.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-5.rx
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-5.tx
+    fullduplex-uart-w-enable.en => pod-ab-fwd-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-8.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-8.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-8.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => xcvr-spare-9.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-9.en
+    fullduplex-uart-w-enable.tx => xcvr-spare-9.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-a-blank-3.rx
+    fullduplex-uart-w-enable.tx => pod-a-blank-3.tx
+    fullduplex-uart-w-enable.en => pod-a-blank-3.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-ab-fwd-2.en
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-2.tx
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-2.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-12.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-12.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-12.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-exciter-sync-5.en
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-5.rx
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-5.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-3.tx
+    fullduplex-uart-w-enable.en => xcvr-spare-3.en
+    fullduplex-uart-w-enable.rx => xcvr-spare-3.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-ab-aft-1.rx
+    fullduplex-uart-w-enable.en => pod-ab-aft-1.en
+    fullduplex-uart-w-enable.tx => pod-ab-aft-1.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-exciter-sync-1.rx
+    fullduplex-uart-w-enable.tx => pod-exciter-sync-1.tx
+    fullduplex-uart-w-enable.en => pod-exciter-sync-1.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-blank-b.tx
+    fullduplex-uart-w-enable.en => pod-blank-b.en
+    fullduplex-uart-w-enable.rx => pod-blank-b.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => xcvr-spare-7.tx
+    fullduplex-uart-w-enable.rx => xcvr-spare-7.rx
+    fullduplex-uart-w-enable.en => xcvr-spare-7.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-a-blank-2.en
+    fullduplex-uart-w-enable.tx => pod-a-blank-2.tx
+    fullduplex-uart-w-enable.rx => pod-a-blank-2.rx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.en => pod-f-blank-2.en
+    fullduplex-uart-w-enable.rx => pod-f-blank-2.rx
+    fullduplex-uart-w-enable.tx => pod-f-blank-2.tx
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-ab-aft-5.tx
+    fullduplex-uart-w-enable.rx => pod-ab-aft-5.rx
+    fullduplex-uart-w-enable.en => pod-ab-aft-5.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.tx => pod-ab-fwd-3.tx
+    fullduplex-uart-w-enable.rx => pod-ab-fwd-3.rx
+    fullduplex-uart-w-enable.en => pod-ab-fwd-3.en
+  supports fullduplex-uart-w-enable:
+    fullduplex-uart-w-enable.rx => pod-f-blank-3.rx
+    fullduplex-uart-w-enable.tx => pod-f-blank-3.tx
+    fullduplex-uart-w-enable.en => pod-f-blank-3.en
+  val xcku-060-cmp-pins = [
+    [#R(aurora-0-clk.D_P), `AE8, []]
+    [#R(aurora-0-clk.D_N), `AE7, []]
+    [#R(aurora-1-clk.D_N), `AC7, []]
+    [#R(aurora-1-clk.D_P), `AC8, []]
+    [#R(ddr3-clk.D_N), `N29, []]
+    [#R(ddr3-clk.D_P), `P29, []]
+    [#R(ddr3-dqs-0.D_N), `D31, []]
+    [#R(ddr3-dqs-0.D_P), `E31, []]
+    [#R(ddr3-dqs-1.D_N), `A32, []]
+    [#R(ddr3-dqs-1.D_P), `B32, []]
+    [#R(ddr3-dqs-2.D_P), `L38, []]
+    [#R(ddr3-dqs-2.D_N), `K38, []]
+    [#R(ddr3-dqs-3.D_P), `H37, []]
+    [#R(ddr3-dqs-3.D_N), `H38, []]
+    [#R(dmu-pdw-clk-0.D_P), `K18, []]
+    [#R(dmu-pdw-clk-0.D_N), `J18, []]
+    [#R(dmu-pdw-clk-1.D_P), `J20, []]
+    [#R(dmu-pdw-clk-1.D_N), `J19, []]
+    [#R(dmu-pdw-clk-2.D_N), `G19, []]
+    [#R(dmu-pdw-clk-2.D_P), `H19, []]
+    [#R(dmu-pdw-clk-3.D_N), `H17, []]
+    [#R(dmu-pdw-clk-3.D_P), `H18, []]
+    [#R(dmu-pdw-dval-0.D_N), `A17, []]
+    [#R(dmu-pdw-dval-0.D_P), `A18, []]
+    [#R(dmu0-pdw-data-0.D_P), `D18, []]
+    [#R(dmu0-pdw-data-0.D_N), `C18, []]
+    [#R(dmu0-pdw-data-1.D_P), `D19, []]
+    [#R(dmu0-pdw-data-1.D_N), `C19, []]
+    [#R(fpga-aurora-rx0.D_P), `AG4, []]
+    [#R(fpga-aurora-rx0.D_N), `AG3, []]
+    [#R(fpga-aurora-rx1.D_N), `AD1, []]
+    [#R(fpga-aurora-rx1.D_P), `AD2, []]
+    [#R(lbdr-bus-0-0.D_N), `AV22, []]
+    [#R(lbdr-bus-0-0.D_P), `AU21, []]
+    [#R(lbdr-bus-0-1.D_P), `AV23, []]
+    [#R(lbdr-bus-0-1.D_N), `AW23, []]
+    [#R(lbdr-bus-0-2.D_P), `AV21, []]
+    [#R(lbdr-bus-0-2.D_N), `AW21, []]
+    [#R(lbdr-bus-1-0.D_P), `AN24, []]
+    [#R(lbdr-bus-1-0.D_N), `AP24, []]
+    [#R(lbdr-bus-1-1.D_P), `AT22, []]
+    [#R(lbdr-bus-1-1.D_N), `AU22, []]
+    [#R(lbdr-bus-1-2.D_P), `AT23, []]
+    [#R(lbdr-bus-1-2.D_N), `AT24, []]
+    [#R(lvds-cpld-fpga-0.D_P), `D21, []]
+    [#R(lvds-cpld-fpga-0.D_N), `C21, []]
+    [#R(lvds-cpld-fpga-1.D_P), `C22, []]
+    [#R(lvds-cpld-fpga-1.D_N), `B22, []]
+    [#R(lvds-cpld-fpga-2.D_N), `A22, []]
+    [#R(lvds-cpld-fpga-2.D_P), `B21, []]
+    [#R(lvds-cpld-fpga-3.D_P), `B24, []]
+    [#R(lvds-cpld-fpga-3.D_N), `A24, []]
+    [#R(lvds-fpga-cpld-0.D_N), `E22, []]
+    [#R(lvds-fpga-cpld-0.D_P), `E21, []]
+    [#R(lvds-fpga-cpld-1.D_P), `F23, []]
+    [#R(lvds-fpga-cpld-1.D_N), `E23, []]
+    [#R(lvds-fpga-cpld-2.D_N), `C24, []]
+    [#R(lvds-fpga-cpld-2.D_P), `D24, []]
+    [#R(lvds-fpga-cpld-3.D_P), `D23, []]
+    [#R(lvds-fpga-cpld-3.D_N), `C23, []]
+    [#R(pci-exp-rx.D_N), `AM1, []]
+    [#R(pci-exp-rx.D_P), `AM2, []]
+    [#R(pci-exp-tx.D_P), `AM6, []]
+    [#R(pci-exp-tx.D_N), `AM5, []]
+    [#R(mids-int.rx), `AP23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(mids-int.en), `AP21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(mids-int.tx), `AN23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-a-blank-1.rx), `AP35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-1.tx), `AR36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-1.en), `AP36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-2.en), `AP39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-2.tx), `AN37, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-2.rx), `AN36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-3.rx), `AV38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-3.tx), `AW38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-3.en), `AW36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-4.rx), `AM35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-4.en), `AM36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-4.tx), `AN39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-5.en), `AT33, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-5.rx), `AW35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-a-blank-5.tx), `AU34, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-1.rx), `AR33, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-1.en), `AT34, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-1.tx), `AM34, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-2.tx), `AK37, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-2.en), `AJ39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-2.rx), `AK36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-3.rx), `AR38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-3.en), `AT39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-3.tx), `AT37, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-4.rx), `AP38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-4.tx), `AM39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-4.en), `AN38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-5.tx), `AU35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-5.rx), `AR37, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-aft-5.en), `AV36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-1.en), `AW34, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-1.rx), `AW33, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-1.tx), `AV34, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-2.en), `AU39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-2.tx), `AT38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-2.rx), `AU37, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-3.tx), `AV39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-3.rx), `AV37, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-3.en), `AU36, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-4.rx), `AK35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-4.en), `AL39, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-4.tx), `AK38, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-5.rx), `AV33, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-5.tx), `AR35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-ab-fwd-5.en), `AT35, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-25")]]
+    [#R(pod-blank-a.en), `AN22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-blank-a.rx), `AR21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-blank-a.tx), `AM22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-blank-b.tx), `AM20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-blank-b.en), `AP20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-blank-b.rx), `AJ20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pod-exciter-sync-1.rx), `AT30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-1.tx), `AP29, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-1.en), `AT29, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-2.en), `AU29, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-2.tx), `AR31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-2.rx), `AU30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-3.rx), `AP33, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-3.en), `AT32, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-3.tx), `AW31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-4.rx), `AV31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-4.tx), `AU31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-4.en), `AR32, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-5.en), `AP31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-5.rx), `AP30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-exciter-sync-5.tx), `AN33, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-1.rx), `AM30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-1.en), `AN32, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-1.tx), `AN31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-2.en), `AR30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-2.rx), `AM29, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-2.tx), `AN29, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-3.rx), `AJ30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-3.tx), `AJ31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-3.en), `AK30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-4.tx), `AL30, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-4.rx), `AM31, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-4.en), `AM32, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-5.en), `AL29, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-5.tx), `AK32, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(pod-f-blank-5.rx), `AL32, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-24")]]
+    [#R(xcvr-spare-1.rx), `C28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-1.tx), `J26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-1.en), `M24, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-2.en), `M27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-2.rx), `E25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-2.tx), `H26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-3.tx), `F27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-3.en), `L27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-3.rx), `E26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-4.tx), `E27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-4.en), `L25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-4.rx), `C26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-5.en), `K25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-5.rx), `C27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-5.tx), `G25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-6.rx), `D25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-6.en), `K28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-6.tx), `F25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-7.tx), `F28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-7.rx), `D26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-7.en), `J28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-8.tx), `E28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-8.en), `K26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-8.rx), `B26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-9.rx), `B27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-9.en), `K27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-9.tx), `G26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-10.en), `L28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-10.rx), `B25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-10.tx), `G27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-11.rx), `A27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-11.en), `H27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-11.tx), `J25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-12.tx), `D28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-12.en), `H28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(xcvr-spare-12.rx), `A25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-48")]]
+    [#R(alt-xmit-tag-rx), `AR23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(audio-anlg-mcp-fail), `AT19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-anlg-rcd-fail), `AU19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-clr-n), `AL17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-cs-n), `AT17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-ldac-n), `AM17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-0), `AR17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-1), `AP19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-2), `AN17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-3), `AN18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-4), `AL18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-5), `AM19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-6), `AL19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-out-7), `AP18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-pd-n), `AN19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(audio-wr-n), `AR16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(cb-ad-0), `AV12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-1), `AT14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-2), `AT13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-3), `AV13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-4), `AW16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-5), `AU14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-6), `AW15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-7), `AU12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-8), `AR13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-9), `AR15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-10), `AT12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-11), `AU15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-12), `AT15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-13), `AJ13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-14), `AK12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-15), `AR12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-stb-tx-rx-n), `AK13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-ad-tx-rx-n), `AW13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-addr-strb), `AH14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-data-strb), `AH13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-frq-stb-tx-rx-n), `AP15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(cb-frq-strb), `AJ14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(clk-in-10mhz), `AL13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(clk-in-25mhz), `AL14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(config-done), `K21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(cpld-spare-io-0), `E13, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-1), `E12, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-2), `G12, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-3), `A13, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-4), `A12, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-5), `C16, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-6), `B14, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-7), `C14, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-8), `B15, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-9), `B16, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-10), `B12, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-11), `C12, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-12), `A14, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-13), `A15, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-14), `C13, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(cpld-spare-io-15), `D13, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-66")]]
+    [#R(ddr3-addr-0), `M31, []]
+    [#R(ddr3-addr-1), `M32, []]
+    [#R(ddr3-addr-2), `R30, []]
+    [#R(ddr3-addr-3), `P30, []]
+    [#R(ddr3-addr-4), `L32, []]
+    [#R(ddr3-addr-5), `L33, []]
+    [#R(ddr3-addr-6), `M29, []]
+    [#R(ddr3-addr-7), `L29, []]
+    [#R(ddr3-addr-8), `M30, []]
+    [#R(ddr3-addr-9), `L30, []]
+    [#R(ddr3-addr-10), `J30, []]
+    [#R(ddr3-addr-11), `J31, []]
+    [#R(ddr3-addr-12), `J33, []]
+    [#R(ddr3-addr-13), `H33, []]
+    [#R(ddr3-addr-14), `J29, []]
+    [#R(ddr3-ba-0), `H29, []]
+    [#R(ddr3-ba-1), `K31, []]
+    [#R(ddr3-ba-2), `K32, []]
+    [#R(ddr3-cas-n), `A30, []]
+    [#R(ddr3-clk-en), `G32, []]
+    [#R(ddr3-cs-n), `H32, []]
+    [#R(ddr3-dm-0), `F33, []]
+    [#R(ddr3-dm-1), `B30, []]
+    [#R(ddr3-dm-2), `K36, []]
+    [#R(ddr3-dm-3), `G35, []]
+    [#R(ddr3-dq-0), `F32, []]
+    [#R(ddr3-dq-1), `E30, []]
+    [#R(ddr3-dq-2), `G30, []]
+    [#R(ddr3-dq-3), `F30, []]
+    [#R(ddr3-dq-4), `D30, []]
+    [#R(ddr3-dq-5), `F29, []]
+    [#R(ddr3-dq-6), `G29, []]
+    [#R(ddr3-dq-7), `E32, []]
+    [#R(ddr3-dq-8), `A29, []]
+    [#R(ddr3-dq-9), `B31, []]
+    [#R(ddr3-dq-10), `A28, []]
+    [#R(ddr3-dq-11), `C33, []]
+    [#R(ddr3-dq-12), `D29, []]
+    [#R(ddr3-dq-13), `C32, []]
+    [#R(ddr3-dq-14), `C29, []]
+    [#R(ddr3-dq-15), `C31, []]
+    [#R(ddr3-dq-16), `K37, []]
+    [#R(ddr3-dq-17), `J39, []]
+    [#R(ddr3-dq-18), `K35, []]
+    [#R(ddr3-dq-19), `J35, []]
+    [#R(ddr3-dq-20), `L37, []]
+    [#R(ddr3-dq-21), `J34, []]
+    [#R(ddr3-dq-22), `L35, []]
+    [#R(ddr3-dq-23), `J38, []]
+    [#R(ddr3-dq-24), `F37, []]
+    [#R(ddr3-dq-25), `G37, []]
+    [#R(ddr3-dq-26), `H34, []]
+    [#R(ddr3-dq-27), `H39, []]
+    [#R(ddr3-dq-28), `G36, []]
+    [#R(ddr3-dq-29), `G39, []]
+    [#R(ddr3-dq-30), `G34, []]
+    [#R(ddr3-dq-31), `H36, []]
+    [#R(ddr3-int-n), `AF14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(ddr3-odt), `K30, []]
+    [#R(ddr3-ras-n), `D33, []]
+    [#R(ddr3-reset-n), `E33, []]
+    [#R(ddr3-we-n), `B29, []]
+    [#R(dmc-int-n), `AF12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-alt-blank), `AJ15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-en-0), `AH12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-en-1), `AP13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-en-2), `AE13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-en-3), `AN12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-iff-blank), `AL15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-int-n-0), `AK16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(dmu-int-n-1), `AJ16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(dmu-int-n-2), `AK17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(dmu-int-n-3), `AK18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(dmu-mids-blank), `AG12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-pdw-dval-p-1), `B20, []]
+    [#R(dmu-pdw-dval-p-2), `C17, []]
+    [#R(dmu-pdw-dval-p-3), `B19, []]
+    [#R(dmu-radar-blank), `AG15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-rxa-blank), `AF13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-rxb-blank), `AF15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu-tacan-blank), `AM15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(dmu0-pdw-data-p-2), `F18, []]
+    [#R(dmu0-pdw-data-p-3), `F20, []]
+    [#R(dmu1-pdw-data-p-0), `F17, []]
+    [#R(dmu1-pdw-data-p-1), `G20, []]
+    [#R(dmu1-pdw-data-p-2), `K16, []]
+    [#R(dmu1-pdw-data-p-3), `L19, []]
+    [#R(dmu2-pdw-data-p-0), `M17, []]
+    [#R(dmu2-pdw-data-p-1), `L17, []]
+    [#R(dmu2-pdw-data-p-2), `R18, []]
+    [#R(dmu2-pdw-data-p-3), `N19, []]
+    [#R(dmu3-pdw-data-p-0), `T18, []]
+    [#R(dmu3-pdw-data-p-1), `R16, []]
+    [#R(dmu3-pdw-data-p-2), `P19, []]
+    [#R(dmu3-pdw-data-p-3), `N17, []]
+    [#R(fpga-i2c-scl), `AU20, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-i2c-sda), `AN16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-reset-n), `L24, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(fpga-test-dwell-en), `AG14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(fpga-test-points-0), `AF19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-1), `AG19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-2), `AE17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-3), `AF17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-4), `AE18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-5), `AF18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-6), `AD16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-7), `AE16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-8), `AH19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-9), `AH18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-10), `AH16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-11), `AH17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-12), `AG16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-13), `AJ18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-14), `AG17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(fpga-test-points-15), `AJ19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(iff-xmit-tag-rx), `AK23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(init-clk-m), `AN21, []]
+    [#R(init-clk-p), `AM21, []]
+    [#R(lbdr-ctrl-0), `AJ21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-1), `AF22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-2), `AG21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-3), `AG20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-4), `AF20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-5), `AE22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-6), `AE20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-7), `AE21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-8), `AK20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-9), `AE23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-10), `AH23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-11), `AG22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-12), `AJ23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-13), `AH22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr-ctrl-14), `AK21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(lbdr0-aur-m), `AG7, []]
+    [#R(lbdr0-aur-p), `AG8, []]
+    [#R(lbdr1-aur-m), `AE3, []]
+    [#R(lbdr1-aur-p), `AE4, []]
+    [#R(mids-blank-rx), `AR22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(pcie-rst-n), `AE15, [`PULLUP => `true`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(radar-xmit-tag-rx), `AL22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(sei-int-n), `AE12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(spare-lvds-out-8), `AV14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(spare-lvds-out-9), `AP14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(spare-lvds-out-10), `AV16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(spare-lvds-out-11), `AW14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(sys-clk-m), `G31, []]
+    [#R(sys-clk-p), `H31, []]
+    [#R(tacan-xmit-tag-rx), `AV24, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(therm-out-sig), `AM16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(toa-sync-rx), `AP16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(toa-sync-tx-0), `AN14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(toa-sync-tx-1), `AM14, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(toa-sync-tx-2), `AN13, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(toa-sync-tx-3), `AM12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(toa-sync-tx-4), `AK15, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(toa-sync-tx-5), `AL12, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-65")]]
+    [#R(ttnt-rcvr-blank), `AK22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(ttnt-xmt-blank), `AL23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-44")]]
+    [#R(ueu-clk-1pps-fpga), `P23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-1pps-cpld), `H24, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-2mhz), `K23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-rx-1), `H22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-rx-2), `H21, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-rx-3), `K22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-rx-4), `J24, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-rx-5), `J23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-clock-test), `H23, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-pod-cfg-0), `F22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-pod-cfg-1), `R20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-pod-cfg-2), `P20, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-pod-cfg-3), `L22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(ueu-pod-cfg-4), `M22, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-68")]]
+    [#R(video-in-0), `AU16, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-1), `AV18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-2), `AW20, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-3), `AR20, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-4), `AV17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-5), `AW18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-6), `AW19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-in-7), `AT20, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-otr), `AV19, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-sel-0), `AT18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-sel-1), `AR18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(video-sel-en), `AU17, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(wra6-alt-blank-rx-n), `AT25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-alt-blank-tx-n), `AR26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-iff-blank-rx-n), `AR27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-iff-blank-tx-n), `AV26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-mids-blank-rx-n), `AV27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-mids-blank-tx-n), `AW28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-radar-blank-rx-n), `AT27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-radar-blank-tx-n), `AU27, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-tacan-blank-rx-n), `AU26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-tacan-blank-tx-n), `AW25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-ttnt-spare-rx-n), `AR28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-ttnt-spare-tx-n), `AT28, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-ttnt-xmt-tag-rx-n), `AW26, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra6-ttnt-xmt-tag-tx-n), `AU25, [`family => `LVCMOS, `voltage => 1.8, `vio-pin => Ref("vcco-45")]]
+    [#R(wra8-cold-temp-n), `AD18, [`family => `LVCMOS, `voltage => 3.3, `vio-pin => Ref("vcco-64")]]
+    [#R(vcco-65), [`AE14, `AH15, `AJ12, `AM13, `AR14, `AV15, `AW12], []]
+    [#R(vccaux-io), [`AB27, `T27, `U28, `V27, `Y27, `AA28, `AB29, `AC28, `AD29, `V29, `W28, `Y29], []]
+    [#R(mgtvccaux-rs), [`AB8, `AD8], []]
+    [#R(vcco-44), [`AF21, `AJ22, `AM23, `AN20, `AR24, `AT21, `AW22], []]
+    [#R(gnd), [`A2, `A5, `A6, `A9, `A10, `A11, `A21, `A31, `AA1, `AA5, `AA13, `AA17, `AA19, `AA21, `AA23, `AA25, `AA27, `AA29, `AA31, `AA33, `AA37, `AB3, `AB7, `AB10, `AB12, `AB14, `AB18, `AB20, `AB22, `AB24, `AB26, `AB28, `AB30, `AB31, `AB35, `AB39, `AC1, `AC5, `AC13, `AC15, `AC17, `AC19, `AC21, `AC23, `AC25, `AC27, `AC29, `AC31, `AC33, `AC37, `AD3, `AD7, `AD12, `AD22, `AD30, `AD31, `AD35, `AD39, `AE1, `AE5, `AE9, `AE10, `AE19, `AE29, `AE31, `AE33, `AE37, `AF3, `AF7, `AF16, `AF26, `AF31, `AF35, `AF39, `AG1, `AG5, `AG9, `AG10, `AG13, `AG23, `AG31, `AG32, `AG33, `AG37, `AH3, `AH7, `AH11, `AH20, `AH30, `AH33, `AH34, `AH35, `AH38, `AH39, `AJ1, `AJ5, `AJ9, `AJ10, `AJ11, `AJ17, `AJ27, `AJ35, `AJ36, `AJ37, `AJ38, `AK3, `AK7, `AK11, `AK14, `AK24, `AK34, `AL1, `AL5, `AL9, `AL10, `AL11, `AL21, `AL31, `AM3, `AM7, `AM11, `AM18, `AM28, `AM38, `AN1, `AN5, `AN9, `AN10, `AN11, `AN15, `AN25, `AN35, `AP3, `AP7, `AP11, `AP12, `AP22, `AP32, `AR1, `AR5, `AR9, `AR10, `AR11, `AR19, `AR29, `AR39, `AT3, `AT7, `AT11, `AT16, `AT26, `AT36, `AU1, `AU5, `AU9, `AU10, `AU11, `AU13, `AU23, `AU33, `AV3, `AV7, `AV11, `AV20, `AV30, `AW2, `AW5, `AW6, `AW9, `AW10, `AW11, `AW17, `AW27, `AW37, `B3, `B7, `B11, `B18, `B28, `B38, `C1, `C5, `C9, `C10, `C11, `C15, `C25, `C35, `D3, `D7, `D11, `D12, `D22, `D32, `E1, `E5, `E9, `E10, `E11, `E19, `E29, `E39, `F3, `F7, `F11, `F16, `F26, `F36, `G1, `G5, `G9, `G10, `G11, `G13, `G23, `G33, `H3, `H7, `H11, `H20, `H30, `J1, `J5, `J9, `J10, `J11, `J17, `J27, `J37, `K3, `K7, `K11, `K14, `K24, `K34, `L1, `L5, `L9, `L10, `L11, `L21, `L31, `M3, `M7, `M11, `M18, `M28, `M33, `M34, `M35, `M36, `M37, `M38, `M39, `N1, `N5, `N9, `N10, `N11, `N15, `N25, `N31, `N32, `N33, `N37, `P3, `P7, `P12, `P22, `P31, `P35, `P39, `R1, `R5, `R9, `R10, `R19, `R29, `R31, `R33, `R37, `T3, `T7, `T12, `T14, `T16, `T26, `T31, `T35, `T39, `U1, `U5, `U13, `U15, `U17, `U19, `U21, `U23, `U25, `U27, `U29, `U31, `U33, `U37, `V3, `V7, `V10, `V12, `V14, `V16, `V18, `V20, `V22, `V24, `V26, `V28, `V30, `V31, `V35, `V39, `W1, `W5, `W13, `W17, `W19, `W21, `W23, `W25, `W27, `W29, `W31, `W33, `W37, `Y3, `Y7, `Y8, `Y10, `Y12, `Y14, `Y18, `Y20, `Y22, `Y24, `Y26, `Y28, `Y30, `Y31, `Y35, `Y38, `Y39], []]
+    [#R(vcco-45), [`AD27, `AE24, `AH25, `AL26, `AP27, `AU28, `AV25], []]
+    [#R(mgtavtt-l), [`AA36, `AB38, `AC36, `AD38, `AE36, `AF38, `AG36, `N36, `P38, `R36, `T38, `U36, `V38, `W36], []]
+    [#R(vcco-24), [`AG28, `AJ32, `AK29, `AM33, `AN30, `AT31, `AW32], []]
+    [#R(gndadc), [`W15], []]
+    [#R(mgtavtt-rn), [`B4, `C2, `D4, `E2, `F4, `G2, `H4, `J2, `K4, `L2, `M4, `N2, `P4, `R2, `T4, `U2], []]
+    [#R(mgtavttrcal-l), [`AF32], []]
+    [#R(vcco-46), [`A36, `D37, `E34, `G38, `H35, `K39, `L36], []]
+    [#R(vcco-64), [`AD17, `AG18, `AK19, `AL16, `AP17, `AU18], []]
+    [#R(vcco-68), [`B23, `E24, `F21, `J22, `M23, `N20, `T21], []]
+    [#R(vcco-48), [`A26, `D27, `G28, `H25, `L26, `P27, `R24], []]
+    [#R(mgtavcc-rs), [`AA6, `AC6, `AE6, `AF8, `AG6, `AH8, `AJ6, `AK8, `AL6, `AM8, `AN6, `AP8, `AR6, `AT8, `AU6, `AV8, `W6], []]
+    [#R(vcco-25), [`AK39, `AL36, `AP37, `AR34, `AU38, `AV35], []]
+    [#R(vcco-0), [`AB11, `AD11], []]
+    [#R(mgtavtt-rs), [`AA2, `AB4, `AC2, `AD4, `AE2, `AF4, `AG2, `AH4, `AJ2, `AK4, `AL2, `AM4, `AN2, `AP4, `AR2, `AT4, `AU2, `AV4, `V4, `W2, `Y4], []]
+    [#R(mgtavttrcal-rs), [`AV10], []]
+    [#R(vccadc), [`W16], []]
+    [#R(vcco-66), [`A16, `B13, `E14, `H15, `J12, `M13, `R14], []]
+    [#R(vccint-io), [`AA26, `AB25, `AC26, `U26, `W26], []]
+    [#R(vccbram), [`AA10, `AC10, `U10, `W10], []]
+    [#R(mgtavcc-l), [`AB34, `AC32, `AD34, `AE32, `AF34, `P34, `R32, `T34, `U32, `V34, `Y34], []]
+    [#R(mgtvccaux-l), [`AA32, `W32], []]
+    [#R(vcco-67), [`C20, `D17, `G18, `K19, `L16, `P17], []]
+    [#R(mgtvccaux-rn), [`T8, `V8], []]
+    [#R(vccaux), [`AA30, `AC30, `T29, `U30, `W30], []]
+    [#R(vccint), [`T11, `AA12, `AA14, `AA18, `AA20, `AA22, `AA24, `AB13, `AB17, `AB19, `AB21, `AB23, `AC12, `AC14, `AC16, `AC18, `AC20, `AC22, `AC24, `T13, `T15, `U12, `U14, `U16, `U18, `U20, `U22, `U24, `V11, `V13, `V15, `V17, `V19, `V21, `V23, `V25, `W12, `W14, `W18, `W20, `W22, `W24, `Y11, `Y13, `Y17, `Y19, `Y21, `Y23, `Y25], []]
+    [#R(vcco-47), [`B33, `C30, `F31, `J32, `K29, `N30], []]
+    [#R(mgtavcc-rn), [`B8, `C6, `D8, `E6, `F8, `G6, `H8, `J6, `K8, `L6, `M8, `N6, `P8, `R6, `U6], []]
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   ]
   for [ref, lnd, props] in xcku-060-cmp-pins do :
     properties(ref) :

@@ -1144,6 +1144,7 @@ pcb-package QFN65P400X400X100-16 :
   pad p[16] : hs-pad at loc(0.0, 0.0)
   ref-label()
 
+<<<<<<< HEAD
 pcb-package QFN50P700X700X85-48 :
   make-qfn-package(0.5, 7.0, 48, 0.3, 0.4)
   pcb-pad hs-pad :
@@ -1151,6 +1152,8 @@ pcb-package QFN50P700X700X85-48 :
   pad p[48] : hs-pad at loc(0.0, 0.0)
   ref-label()
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-package QFP80P900X900X160-32 :
   val x0 = -6.1 / 2.0
   val y0 = -7.3 / 2.0
@@ -2408,6 +2411,7 @@ pcb-package SC70-8N-pkg :
   val c-h = pkg-height
   
   ref-label()
+<<<<<<< HEAD
 
 pcb-package BGA11N50P3X4 :
   bga-pkg(0.5, 0.25, [3 4], [1.44 1.94], [`A1])
@@ -2622,3 +2626,5 @@ pcb-package pulse-J0G-0009NL-pkg :
     symmetric-about-y([
       circle(9.65 / 2.0, 0.0, 3.2 / 2.0)
   ]))
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa

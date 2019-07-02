@@ -64,6 +64,7 @@ pkg-files :
   "src/powergen/treegen.stanza"
   "src/main/repl-driver.stanza"
   "src/main/repl-lib.stanza"
+<<<<<<< HEAD
   "src/clock/clock-check.stanza"
   "src/clock/clock-esir-gen.stanza"
   "src/clock/clock-gen.stanza"
@@ -83,6 +84,8 @@ lib-files :
   "lib/footprints.stanza"
   "lib/symbols.stanza"
   "lib/parts.stanza"
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 linker-flags :
   linux : ("-ldl" "-fPIC")

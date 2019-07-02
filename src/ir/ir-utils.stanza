@@ -512,7 +512,11 @@ public defn grid-locs (rows:Int, cols:Int, d:Point) :
   
 public defn row-locs (anchor:Anchor, n:Int, dx:Double, start-anchor:Anchor) :
   fatal("Illegal horizontal anchor: %_." % [anchor]) when anchor is-not E|C|W
+<<<<<<< HEAD
   fatal("Illegal horizontal start anchor: %_." % [start-anchor]) when start-anchor is-not E|W
+=======
+  fatal("Illegal horizontal start anchor: %_." % [start-anchor]) when anchor is-not E|W
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   val start* = match(start-anchor) :
     (a:E) : NE
     (a:W) : NW
@@ -524,7 +528,11 @@ public defn row-locs (n:Int, dx:Double) :
 
 public defn col-locs (anchor:Anchor, n:Int, dy:Double, start-anchor:Anchor) :
   fatal("Illegal vertical anchor: %_." % [anchor]) when anchor is-not N|C|S
+<<<<<<< HEAD
   fatal("Illegal vertical start anchor: %_." % [start-anchor]) when start-anchor is-not N|S
+=======
+  fatal("Illegal vertical start anchor: %_." % [start-anchor]) when anchor is-not N|S
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
   val start* = match(start-anchor) :
     (a:N) : NW
     (a:S) : SW

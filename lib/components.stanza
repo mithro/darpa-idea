@@ -583,6 +583,7 @@ public pcb-component gen-ptc-cmp (i-hold:Double) :
     package = GENERIC-2920
   else : fatal("Unsupported i-hold: %_" % [i-hold])
 
+<<<<<<< HEAD
 ; ====== Protection ============================================================
 pcb-component stmicro-EMIF02-USB03F2-cmp :
   val ps = PinSpec(
@@ -608,6 +609,10 @@ pcb-component si-SiT8208-cmp :
   symbol = {generic-box-sym(ps, `si-SiT8208)}
   part = si-SiT8208-prt 
   
+=======
+; ====== Crystals, Oscillators =================================================
+
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component txc-7B-12000MAAJ-T-cmp :
   port p : pin[2]
   port g : pin[2]
@@ -642,6 +647,7 @@ pcb-component abracon-ABM12-32-B2X-T3-cmp :
     [g[0] => 1 g[1] => 4])
   part = abracon-ABM12-32-B2X-T3-prt
   package = XTAL-ABM12-pkg(cmp-pad-map(ps))
+<<<<<<< HEAD
 
 pcb-component ndk-NX3225GD-cmp :
   port p : pin[2]
@@ -649,6 +655,8 @@ pcb-component ndk-NX3225GD-cmp :
   package = ndk-NX3225GD-pkg
   reference-prefix = "XTAL"
   
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ; ====== Discrete Semiconductors (Diodes, Transistors) =========================
 
 public pcb-component gen-diode-cmp (d-type:Symbol|False) :
@@ -993,8 +1001,13 @@ public pcb-component ti-LMV3XX-cmp (n:Int) :
   
   val [vs-_idx, vs+_idx, vi-_idxs, vi+_idxs, vo_idxs] = 
     switch(n) : 
+<<<<<<< HEAD
       1: [ 2, 5,           [3],            [1],           [4]]
       2: [ 4, 8,        [2, 6],         [3, 5],        [1, 7]]
+=======
+      1: [2, 5, [3], [1], [4]]
+      2: [4, 8, [2, 6], [3, 5], [1, 7]]
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
       4: [11, 4, [2, 6, 9, 13], [3, 5, 10, 12], [1, 7, 8, 14]]
       else : fatal("Incorrect number of OpAmps for TI LMV3XX:%_." % [n])
 
@@ -1041,7 +1054,10 @@ pcb-component ti-OPA365AQDBVRQ1-cmp :
 ; ====== Logic Gates ===========================================================
 
 ; TI single open-drain buffer
+<<<<<<< HEAD
 ; Buffer, Non-Inverting 1 Element 1 Bit per Element Open Drain Output SC-70-5 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component ti-SN74LVC1G07-cmp :
   val ps = PinSpec(
     [`a => 2]
@@ -1324,8 +1340,12 @@ public pcb-component samtec-tsm-cmp (n-pin:Int) :
   part = {samtec-tsm-prt(n-pin)}
   reference-prefix = "J"
 
+<<<<<<< HEAD
 ; Vertical SMD SMA connector 
 ; SMA Connector Jack, Female Socket 50Ohm Surface Mount Solder 
+=======
+; Right angle SMA
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component molex-732511350-cmp :
   val ps = PinSpec(
     [`sig => 1, `gnd-0 => 2, `gnd-1 => 3, `gnd-2 => 4, `gnd-3 => 5]
@@ -1335,8 +1355,12 @@ pcb-component molex-732511350-cmp :
   package = molex-732511350-pkg(cmp-pad-map(ps))
   reference-prefix = "J"
 
+<<<<<<< HEAD
 ; End-launch SMA edge mount
 ; SMA Connector Jack, Female Socket 50Ohm Board Edge, End Launch Solder 
+=======
+; End-launch SMA
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component johnson-142-0701-801-cmp :
   val ps = PinSpec(
     [`sig => 1, `gnd-0 => 2, `gnd-1 => 3, `gnd-2 => 4, `gnd-3 => 5]
@@ -1497,9 +1521,12 @@ pcb-component ti-LP2985-33DBVR-cmp :
   package = SOT95P280X145-5N(cmp-pad-map(ps))
   part = ti-LP2985-33DBVR-prt
 
+<<<<<<< HEAD
 ; LDK130 30 mA Low Drop Voltage Regulators (LDO)
 ; STMicroelectronics' LDK130 is a 300 mA automotive low quiescent current and low noise LDO in a SOT23-5L package
 ; Max 5.5V in
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 public pcb-component stm-LDK130MXXRY-cmp (voltage:Double) :
   val ps = PinSpec(
     [`vin => 1 `en => 3]
@@ -1562,6 +1589,7 @@ val vreg-ps = PinSpec(
     [`gnd => 2]
 )
 
+<<<<<<< HEAD
 ; IC REG LINEAR 9V 1A DPAK 
 ; Linear Voltage Regulator IC Positive Fixed 1 Output 1A D-Pak 
 pcb-component on-KA7809ERTM-cmp :
@@ -1569,6 +1597,11 @@ pcb-component on-KA7809ERTM-cmp :
 
 ; IC VREF SERIES 2.5V 8SOIC 
 ; Series, Buried Zener Voltage Reference IC ±0.12% 8-SOIC 
+=======
+pcb-component on-KA7809ERTM-cmp :
+  make-pins(vreg-ps)
+
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component maxim-MAX6225BCSA+-cmp :
   val ps = PinSpec(
     [`vin+ => 2 `nr => 3]
@@ -1613,9 +1646,13 @@ pcb-component ti-TPS55340RTER-cmp :
   package = QFN50P300X300X100-16(cmp-pad-map(ps))
   part = ti-TPS55340RTER-prt
 
+<<<<<<< HEAD
 ; TI 3-17V vin, 3A buck regulator
 ; IC REG BUCK ADJUSTABLE 3A 16QFN 
 ; Buck Switching Regulator IC Positive Adjustable 0.9V 1 Output 3A 16-VFQFN Exposed Pad 
+=======
+;TI 3-17V vin, 3A buck regulator
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component ti-TLV62130A-cmp :
   port sw : pin[3]
   port p-gnd : pin[2]
@@ -1686,9 +1723,12 @@ pcb-component omron-G3VM-61FR1-TR05-cmp :
   package = omron-g3vm-pkg(cmp-pad-map(ps))
 
 ; Adjustable linear regulator
+<<<<<<< HEAD
 ; IC REG LIN POS ADJ 3A DDPAK 
 ; Linear Voltage Regulator IC Positive Adjustable 1 Output 3A DDPAK/TO-263-5 
 ; Input up to 5.5V
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component ti-LP38501TSX-ADJ-cmp :
   val ps = PinSpec(
     [`in => 2, `en => 1]
@@ -1701,10 +1741,13 @@ pcb-component ti-LP38501TSX-ADJ-cmp :
   part = ti-LP38501TSX-ADJ-prt
 
 ; Adjustable linear regulator
+<<<<<<< HEAD
 ; IC REG LIN POS ADJ 150MA SOT23-5 
 ; Linear Voltage Regulator IC 1 Output 150mA SOT-23-5 
 ; input up to 16V
 ; output up to 14V
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component microchip-MIC5225YM5-TR-cmp :
   val ps = PinSpec(
     [`in => 1, `en => 3]
@@ -1717,10 +1760,13 @@ pcb-component microchip-MIC5225YM5-TR-cmp :
   part = microchip-MIC5225YM5-TR-prt
 
 ; Adjustable linear regulator
+<<<<<<< HEAD
 ; IC REG LIN POS ADJ 200MA SOT223 
 ; Linear Voltage Regulator IC 1 Output 200mA SOT-223-3 
 ; Input up to 40V
 ; Output up to 38V
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-component linear-LT3082EST-cmp :
   val ps = PinSpec(
     [`in => 3]
@@ -3176,6 +3222,7 @@ pcb-component mcp-MCP9700A-cmp :
   part = microchip-MCP9700A-prt
   package = SOT95P237X95-3(cmp-pad-map(ps))
 
+<<<<<<< HEAD
 pcb-component stmicro-LSM6DSLTR-cmp :
   val ps = PinSpec(
     [`SDO => 1 `CS => 12 `SCL => 13  `SDA => 14]
@@ -3202,6 +3249,8 @@ pcb-component broadcom-APDS-9301-cmp :
   ;[strip]
   package = broadcom-apds-9301-pkg(cmp-pad-map(ps))
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ; TI current sense amplifier
 ; assume the -D model with a SOIC-8
 pcb-component ti-INA240-cmp :
@@ -3448,6 +3497,7 @@ pcb-component melexis-MLX90363-cmp :
   part = melexis-MLX90363-prt
 
 
+<<<<<<< HEAD
 pcb-component stmicro-STM32F103CBT6-cmp :
   pin BOOT0
   pin NRST
@@ -4167,6 +4217,8 @@ pcb-component stmicro-STM32L433RCT6P-cmp :
   package = QFP50P1200X1200X160-64N(cmp-pad-map(ps))
   part = stmicro-STM32L433RCT6P-prt
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 ; STM32 microcontroller
 pcb-component stmicro-STM32F405RG-cmp :
   pin BOOT0
@@ -4503,6 +4555,7 @@ public pcb-component molex-microfit-3-cmp (n:Int) :
   package = {molex-microfit-3-pkg(n)}
   part = {molex-microfit-3-prt(n)}
   reference-prefix = "J"
+<<<<<<< HEAD
 
 
 pcb-component zcu106-cmp:
@@ -5073,3 +5126,5 @@ pcb-component pulse-J0G-0009NL-cmp :
 
   package = pulse-J0G-0009NL-pkg(cmp-pad-map(ps))
   part = pulse-J0G-0009NL-prt
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa

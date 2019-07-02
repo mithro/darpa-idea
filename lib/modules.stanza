@@ -16,6 +16,7 @@ defpackage modules :
 #use-added-syntax(ir-gen)
 
 ;==== Helper functions ===================================================================
+<<<<<<< HEAD
 public defn bypass-caps (power-pin:Ref|Symbol, gnd-pin:Ref|Symbol, voltage:Double, caps:Tuple<Double>, name:Symbol) :
   inside pcb-module:
     val n-caps = length(caps)
@@ -33,6 +34,8 @@ public defn bypass-caps (power-pin:Ref|Symbol, gnd-pin:Ref|Symbol, voltage:Doubl
         (s:Symbol) :
           net {Ref(s)} (c.p[1])
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 public defn res-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, res ) :
   inside pcb-module:
     inst rid : {gen-res-cmp(res)}
@@ -46,6 +49,7 @@ public defn res-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, res ) :
         net - (r, rid.p[1])
       (s:Symbol) :
         net {Ref(s)} (rid.p[1])
+<<<<<<< HEAD
     rid
 
 public defn cap-strap ( proc-pin, power-pin, capacitance ) :
@@ -54,6 +58,12 @@ public defn cap-strap ( proc-pin, power-pin, capacitance ) :
 public defn cap-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, capacitance, pkg:String ) :
   inside pcb-module:
     inst cap : {gen-cap-cmp(capacitance, pkg)}
+=======
+
+public defn cap-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, capacitance ) :
+  inside pcb-module:
+    inst cap : {gen-cap-cmp(capacitance)}
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
     match(power-pin) :
       (r:Ref) :
         net - (r, cap.p[0])
@@ -64,7 +74,10 @@ public defn cap-strap (proc-pin:Ref|Symbol, power-pin:Ref|Symbol, capacitance, p
         net - (r, cap.p[1])
       (s:Symbol) :
         net {Ref(s)} (cap.p[1])
+<<<<<<< HEAD
     cap
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 ; Assign schematic and layout groups
 ; sch-lay-grp([[inst0] [i1 i2]])
@@ -1190,6 +1203,246 @@ pcb-module can-transceiver :
   net s93 (r21.p[1], c14.p[0], join-jpr.p[0])
   net s94 (r25.p[1], r22.p[1], c13.p[0], join-jpr.p[1])
 
+<<<<<<< HEAD
+=======
+; TODO - revise H0 system generator assumptions and factor this module      
+pcb-module starsky-solenoid-controller :
+  ; power 
+  port src-vbat : power
+  port src-12v0 : power
+  port dst-5v0 : power
+  port src-3v3 : power
+  ; serial
+  port i2c : i2c
+  port can : can
+  ; dio
+  pin can-stby-out
+  pin en-int-out
+  pin en-sense-out
+  pin mon-pv-out
+  pin mon-crit-out
+  pin mon-warn-out
+  pin mon-tc-out
+  ; adc
+  pin press-1-sense-out
+  pin press-2-sense-out
+  pin pow-5v0-sense-out
+  pin sol-1-fault-sense-out
+  pin sol-2-fault-sense-out
+  ; pwm
+  pin sol-1-pwm-out
+  pin sol-2-pwm-out
+
+  ; Analog Buffers: pressure-sense-1, pressure-sense-2, solenoid-1, solenoid-2, 5v-sense
+  val pas-list : Tuple<Tuple<Double>> =     
+    [[6800.0, 10000.0, 1000.0, 0.1, 0.0]
+    [6800.0, 10000.0, 1000.0, 0.1, 0.0]
+    [7500.0, 2700.0,  1000.0, 0.1]
+    [7500.0, 2700.0,  1000.0, 0.1]
+    [6800.0, 10000.0, 1000.0, 0.1]]
+  inst buffers : {make-analog-buffers(pas-list)}
+
+  net s01 (src-3v3, buffers.src-pwr)
+  ;net s01 (src-3v3.pos, buffers.quad[0].vs+, buffers.solo[0].vs+)
+  ;net s02 (src-3v3.neg, buffers.quad[0].vs-, buffers.solo[0].vs-)
+
+  ; Digital Buffers
+  inst d-buff : ti-SN74LS07DR-cmp
+  inst c6 : {tdk-cap-cmp(0.1)}
+  net s05 (dst-5v0.pos, d-buff.vcc, c6.p[0])
+  net s06 (dst-5v0.neg, d-buff.gnd, c6.p[1])  
+
+  ; Connectors
+  inst pressure-con : {amphenol-LD-cmp(9, false)}
+  inst pwr-can-con : {amphenol-LD-cmp(9, true)}
+  inst sol-con : te-4-2172079-2-cmp
+  package(pressure-con) at loc(24.0, (50.0 - 11.67), 90.0) on Top
+  
+  net s07 (dst-5v0.neg, src-3v3.neg, pressure-con.p[9], pressure-con.p[10], pressure-con.p[8], pressure-con.p[4])
+  
+  net s08 (dst-5v0.pos, pressure-con.p[6], pressure-con.p[2])
+  package(pwr-can-con) at loc(-45.0, (50.0 - 11.67), 90.0) on Top
+  net s09 (src-vbat.neg, dst-5v0.neg, src-12v0.neg, pwr-can-con.p[9], pwr-can-con.p[10], pwr-can-con.p[5])
+  net s10 (src-vbat.pos, pwr-can-con.p[8])
+  package(sol-con) at loc(-15.0, (50.0 - 10.0), 180.0) on Top
+  net s11 (dst-5v0.neg, sol-con.p[5])
+
+  ; Pressure-sense
+  inst tp9 : keystone-5011-cmp
+  inst tp10 : keystone-5011-cmp
+
+  net press-1 (pressure-con.p[3], buffers.vi[0], tp9.p)
+  net press-1-sense (press-1-sense-out, buffers.vo[0])
+
+  net press-2 (pressure-con.p[7], buffers.vi[1], tp10.p)
+  net press-2-sense (press-2-sense-out, buffers.vo[1])
+
+
+  ; 5V-sense
+  net s12 (buffers.vi[4], dst-5v0.pos)
+  net pow-5v0-sense (pow-5v0-sense-out, buffers.vo[4])
+
+  ; Power monitor
+  inst p-mon : shunt-current-sense
+  net s13 (p-mon.csa.vp, p-mon.csa.vpu, src-3v3.pos)
+  net s14 (p-mon.csa.gnd, src-3v3.neg)
+  net s15 (p-mon.csa.sda, i2c.sda)
+  net s16 (p-mon.csa.scl, i2c.scl)
+  net mon-pv (p-mon.csa.pv, mon-pv-out)
+  net mon-crit (p-mon.csa.crit, mon-crit-out)
+  net mon-warn (p-mon.csa.warn, mon-warn-out)
+  net mon-tc (p-mon.csa.tc, mon-tc-out)
+
+  ; Solenoids
+  inst sol-1 : lo-side-solenoid-driver
+  inst sol-2 : lo-side-solenoid-driver
+  inst tp11 : keystone-5011-cmp
+  inst tp12 : keystone-5011-cmp
+
+  net sol-1-pwm (sol-1-pwm-out, sol-1.fet.g)
+  net s17 (src-12v0.neg, sol-1.fet.s)
+  net s18 (sol-1.d.c, src-12v0.pos)
+  net sol-1- (sol-1.fet.d[0], buffers.vi[2], sol-con.p[1], tp11.p)
+  net sol-1+ (sol-1.rsense.p[1], sol-con.p[0], sol-1.rfilt1.p[0])
+  net sol-1-sense+ (sol-1.cfilt.p[0], p-mon.csa.In1+)
+  net sol-1-sense- (sol-1.cfilt.p[1], p-mon.csa.In1-)
+  net sol-1-fault-sense (sol-1-fault-sense-out, buffers.vo[2])
+
+
+  net sol-2-pwm (sol-2-pwm-out, sol-2.fet.g)
+  net s19 (src-12v0.neg, sol-2.fet.s)
+  net s20 (sol-2.d.c, src-12v0.pos)
+  net sol-2- (sol-2.fet.d[0], buffers.vi[3], sol-con.p[3], tp12.p)
+  net sol-2+ (sol-2.rsense.p[1], sol-con.p[2], sol-2.rfilt1.p[0])
+  net sol-2-sense+ (sol-2.cfilt.p[0], p-mon.csa.In2+)
+  net sol-2-sense- (sol-2.cfilt.p[1], p-mon.csa.In2-)
+  net sol-2-fault-sense (sol-2-fault-sense-out, buffers.vo[3])
+  
+
+  ; CAN Bus
+  inst can-tran : can-transceiver
+  inst r19 : {gen-res-cmp(10000.0, 2.0, 0.1)}
+  inst r22 : {gen-res-cmp(1000.0, 2.0, 0.1)}
+  inst r29 : {gen-res-cmp(10000.0, 2.0, 0.1)}
+  inst r15 : {gen-res-cmp(10000.0, 2.0, 0.1)}
+
+  net s21 (pwr-can-con.p[6], can-tran.fl1.l0[1])
+  net s22 (pwr-can-con.p[1], can-tran.fl1.l1[1])
+  net s23 (dst-5v0.pos, r15.p[0], can-tran.c10.p[0])
+  net s24 (dst-5v0.neg, can-tran.mcp.vss)
+  net can-tx (d-buff.A4, can.tx)
+  net s25 (d-buff.Y4, r15.p[1], can-tran.mcp.txd)
+  net s26 (r19.p[1], d-buff.Y5, r22.p[0])
+  net can-rx (r22.p[1], can.rx)
+  net s27 (r19.p[0], src-3v3.pos)
+  net s28 (d-buff.A5, can-tran.mcp.rxd)
+  net can-stby (d-buff.A6, can-stby-out)
+  net s29 (d-buff.Y6, r29.p[0], can-tran.mcp.stby)
+  net s30 (dst-5v0.pos, r29.p[1])
+
+  ; Power
+  ;; Reverse voltage protection
+  inst d1 : on-SMBJ24A-cmp
+  inst d2 : on-SMBJ14A-cmp
+  inst c3 : {tdk-cap-cmp(0.0001)}
+  inst c2 : {tdk-cap-cmp(2.2)}
+  inst c4 : panasonic-cap-220uf-cmp
+  inst c5 : {tdk-cap-cmp(0.1)}
+  inst q1 : vishay-SQ4850EY-T1-GE3-cmp
+  inst diode-cont : ti-LM74610QDGKRQ1-cmp
+  inst tp1 : keystone-5011-cmp
+  inst tp2 : keystone-5011-cmp
+  inst tp3 : keystone-5011-cmp
+  net s31 (src-vbat.pos, tp1.p, d1.c, c3.p[0], diode-cont.anode, q1.s[0], q1.s[1], q1.s[2])
+  net s32 (d1.a, d2.a)
+  net s33 (src-vbat.neg, d2.c, c3.p[1], c4.c, c5.p[1])
+  net s34 (diode-cont.vcaph, c2.p[0])
+  net s35 (diode-cont.vcapl, c2.p[1])
+  net s36 (diode-cont.drive, diode-cont.pd, q1.g)
+  net s37 (q1.d[0], q1.d[1], q1.d[2], q1.d[3], tp2.p, c4.a, diode-cont.cathode, c5.p[0])
+
+  ;; Shunt
+  inst r1 : bourns-res-0ohm03-cmp
+  inst r2 : {gen-res-cmp(10.0, 2.0, 0.1)}
+  inst r3 : {gen-res-cmp(10.0, 2.0, 0.1)}
+  inst c1 : {tdk-cap-cmp(0.1)}
+  net s38 (c4.a, r1.p[0], r2.p[0])
+  net s39 (r1.p[1], r3.p[0], tp3.p)
+  net s40 (c1.p[0], r2.p[1])
+  net s41 (c1.p[1], r3.p[1])
+  net pwr-sense+ (c1.p[0], p-mon.csa.In3+)
+  net pwr-sense- (c1.p[1], p-mon.csa.In3-)
+
+  ;; 5V rail
+  inst u2 : recom-R-78E5-0-0-5-cmp
+  net s42 (r1.p[1], u2.vin+)
+  net s43 (src-vbat.neg, u2.gnd)
+  net s44 (u2.vout+, dst-5v0.pos)
+
+  ;; DC/DC converter
+  inst r7 : {gen-res-cmp(10000.0, 2.0, 0.1)}
+  inst r8 : {gen-res-cmp(15000.0, 2.0, 0.1)}
+  inst r10 : {gen-res-cmp(10000.0, 2.0, 0.1)}
+  inst q3 : di-2N7002A-7-cmp
+  inst u1 : murata-UEI30-120-Q12P-C-cmp
+  inst tp7 : keystone-5011-cmp
+  net s45 (r7.p[0], dst-5v0.pos)
+  net en-int (en-int-out, r7.p[1], d-buff.A1)
+  net s46 (d-buff.Y1, r8.p[1], r10.p[0], q3.g, tp7.p)
+  net s47 (r8.p[0], r1.p[1], u1.vin+)
+  net s48 (src-vbat.neg, r10.p[1], q3.s, u1.vin-, u1.vout-)
+  net s49 (q3.d, u1.enable)
+
+  ;; Enable switch
+  inst u3 : omron-G3VM-61FR1-TR05-cmp
+  inst c7 : panasonic-cap-4uf7-cmp
+  inst c8 : {tdk-cap-cmp(0.1)}
+  inst tp4 : keystone-5011-cmp
+  inst tp5 : keystone-5011-cmp
+  inst tp6 : keystone-5011-cmp
+  inst tp8 : keystone-5011-cmp
+  net s50 (u1.vout+, u3.outa+, u3.outb+, tp4.p)
+  net s51 (src-12v0.pos, u3.outa-, u3.outb-, c7.a, c8.p[0], tp6.p)
+  net s52 (src-12v0.neg, c7.c, c8.p[1])
+
+  inst d3 : on-SMBJ24A-cmp
+  inst d4 : on-SMBJ14A-cmp
+  inst d5 : on-SD05T1G-cmp
+  inst r6 : {gen-res-cmp(2700.0, 2.0, 0.1)}
+  inst r9 : {gen-res-cmp(1000.0, 2.0, 0.1)}
+  inst r4 : {gen-res-cmp(470.0, 2.0, 0.1)}
+  inst r5 : {gen-res-cmp(10000.0, 2.0, 0.1)}
+  inst r-enpu : {gen-res-cmp(10000.0, 2.0, 0.1)}
+  inst r-enser : {gen-res-cmp(1000.0, 2.0, 0.1)}
+  inst q2 :di-2N7002A-7-cmp
+
+  net en-ext (pwr-can-con.p[3], d3.c, r6.p[0], tp5.p)
+  net s53 (r6.p[1], r9.p[0], d5.c, d-buff.A2)
+  net s54 (d3.a, d4.a)
+  net s55 (src-vbat.neg, d4.c, r9.p[1], d5.a, q2.s)
+  net en-led (q2.d, u3.in-)
+  net s56 (u3.in+, r5.p[1])
+  net s57 (dst-5v0.pos, r5.p[0], r4.p[0])
+  net s58 (d-buff.Y2, d-buff.A3, r4.p[1], q2.g, tp8.p)
+  net s59 (r-enpu.p[0], src-3v3.pos)
+  net s60 (r-enser.p[0], r-enpu.p[1], d-buff.Y3)
+  net en-sense (en-sense-out, r-enser.p[1])
+
+  ;; Indicators
+  inst d6 : dialight-5511109F-cmp
+  inst d7 : dialight-5511109F-cmp
+  inst r11 : {gen-res-cmp(470.0, 2.0, 0.1)}
+  inst r12 : {gen-res-cmp(470.0, 2.0, 0.1)}
+  package(d6) at loc(43.0, 45.94, 180.0) on Top
+  package(d7) at loc(48.0, 45.94, 180.0) on Top
+
+  net s61 (dst-5v0.pos, r11.p[0], r12.p[0])
+  net s62 (d6.a, r11.p[1])
+  net s63 (d7.a, r12.p[1])
+  net s64 (d6.c, dst-5v0.neg)
+  net s65 (d7.c, q2.d)
+
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-module servo-connectors :
   port i2c : i2c
   port src-3v3 : power
@@ -1377,10 +1630,16 @@ public pcb-module microSD (intf:Ref):
   net - (src.neg, uSD.case_gnd3) 
 
 public pcb-module MCP9808-temperature-sensor (A0:Int, A1:Int, A2:Int) :
+<<<<<<< HEAD
   ; TODO: Cleanup
   val a0 = A0 != 0
   val a1 = A1 != 0
   val a2 = A2 != 0
+=======
+  val a0 = if A0 == 0 : 0 else : 1
+  val a1 = if A1 == 0 : 0 else : 1
+  val a2 = if A2 == 0 : 0 else : 1
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
   port src-3v3 : power
   port host_i2c : i2c
@@ -1398,6 +1657,7 @@ public pcb-module MCP9808-temperature-sensor (A0:Int, A1:Int, A2:Int) :
   net - (MCP9808.SDA, host_i2c.sda)
   net - (MCP9808.SCL, host_i2c.scl)
 
+<<<<<<< HEAD
   if a0 :
     net - (MCP9808.A0, pd.dst.pos)
   else :
@@ -1412,6 +1672,22 @@ public pcb-module MCP9808-temperature-sensor (A0:Int, A1:Int, A2:Int) :
     net - (MCP9808.A2, pd.dst.pos)
   else :
     net - (MCP9808.A2, pd.dst.neg)
+=======
+  if a0 == 0 :
+    net - (MCP9808.A0, pd.dst.neg)
+  else :
+    net - (MCP9808.A0, pd.dst.pos)
+
+  if a1 == 0 :
+    net - (MCP9808.A1, pd.dst.neg)
+  else :
+    net - (MCP9808.A1, pd.dst.pos)
+
+  if a2 == 0 :
+    net - (MCP9808.A2, pd.dst.neg)
+  else :
+    net - (MCP9808.A2, pd.dst.pos)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 public pcb-module uart-to-rs485 :
   port src-3v3 : power
@@ -2404,6 +2680,70 @@ public pcb-module digital-buffer (r-pu-val:Double, r-in-val:False|Double) :
 public defn digital-buffer () :
   digital-buffer(1000.0, false)
 
+<<<<<<< HEAD
+=======
+public pcb-module conv-ssr-sense-conn (
+  n-channel:Int
+  source-type:Symbol
+  conv-type:Symbol
+  ssr-type:Symbol
+  sense-type:Symbol
+  conn-type:Symbol
+) :
+  port src-3v3 : power
+  port src-5v0 : power
+  port src-12v0 : power
+  port src-batt : power
+  
+  pin conv-en
+  pin conv-sense
+
+  port channel-en : pin[n-channel]
+  port channel-sense : iv-sense[n-channel]
+  
+  inst conv : {starsky-conv(conv-type)}
+  
+  if conv-type != `none :
+    inst conv-sj : {solder-jumper-pull-low-side-drive()}
+    net - (src-5v0, conv-sj.src)
+    net c-en (conv-en, conv-sj.en)
+    net c-en-drv (conv-sj.ch, conv.en)
+  
+  net v-sen (conv.sense, conv-sense)
+
+  if not contains?([`src-batt, `src-12v0], source-type) :
+    fatal("Unrecognized converter power source:%_." % [source-type])
+
+  net - (Ref(source-type), conv.src)
+  net - (src-5v0, conv.src-5v0)
+  net - (src-3v3, conv.src-3v3)
+
+  inst ssrs : {ssr-array(ssr-type, n-channel)}
+
+  val ssr-sj-gen = if ssr-type == `single :
+    solder-jumper-pull-low-side-drive()
+  else :
+    solder-jumper-pull()
+
+  inst ssr-sj : {ssr-sj-gen}[n-channel]
+
+  net pwr (conv.dst, ssrs.src)
+  net - (src-5v0, ssrs.src-5v0)
+
+  inst sense-array : {chain-power-sense(sense-type)}[n-channel]
+
+  inst conns : {conn-array(conn-type, n-channel)}
+
+  for i in 0 to n-channel do :
+    net - (src-5v0, ssr-sj[i].src)
+    net ch-en-sj (channel-en[i], ssr-sj[i].en)
+    net ch-en (ssr-sj[i].ch, ssrs.en[i])
+    net ch-sen (ssrs.ch[i], sense-array[i].src.pos)
+    net ch-out (sense-array[i].dst.pos, conns.channel[i].pos)
+    if sense-type == `resistive :
+      net ch-iv-sen (sense-array[i].iv-sense[0], channel-sense[i])
+    net - (conv.dst.neg, conns.channel[i].neg)
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 
 public pcb-module chain-power-sense (sense-type:Symbol, voltage:Double, i-ranges:List<Double>) :
   val n-range = length(i-ranges)
@@ -2581,6 +2921,33 @@ public pcb-module wrap-ssr (ssr-type:Symbol) :
     else : 
       fatal("Unrecognized SSR type:%_" % [ssr-type])
 
+<<<<<<< HEAD
+=======
+public pcb-module starsky-conv (conv-type:Symbol) :
+  port src : power
+  port dst : power
+  port src-3v3 : power
+  port src-5v0 : power
+  pin sense
+  pin en
+  
+  val [conv-gen, conv-v] = switch(conv-type) :
+    `mean-well : [external-conv(), 12.0]
+    `none : [pass-conv(), 12.0]
+    else : [wrap-conv(conv-type), 24.0]
+
+  inst conv : {conv-gen}
+  inst plc : {chain-power-led-conn(conv-v)}
+  inst ab : {analog-buffer(3.3 / (conv-v * 1.5))}
+
+  net conv-en (en, conv.en)
+  net - (src, conv.src)
+  net - (src-5v0, conv.src-5v0)
+  net - (conv.dst, dst, plc.src, ab.src-sense)
+  net - (src-3v3, ab.src-power)
+  net sen (ab.sense, sense)
+
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 public pcb-module chain-power-led-conn (voltage:Double) :
   port src : power
   port dst : power
@@ -3192,6 +3559,71 @@ public pcb-module level-shifter-group (n:Int, pts:List<[Double,Double]>, assign-
         net - (a[mod-pin-i], ls-container-ref.a[inst-pin-i])
         net - (b[mod-pin-i], ls-container-ref.b[inst-pin-i])
 
+<<<<<<< HEAD
+=======
+
+public pcb-module power-dist-starsky () :
+  port src-batt : power
+  port src-12v0 : power
+  port src-3v3 : power
+
+  port dst-batt : power
+  port dst-12v0 : power
+  port dst-5v0 : power
+  port dst-3v3 : power
+  port dst-ref : power
+  
+  port signals : pin[5]
+  
+  ; TODO: remove low pass filter from buffer output
+  inst amp-ref : {analog-buffer(0.095)}
+
+  ; Create 0.3135 voltage reference for hall current sense reference
+  net - (dst-3v3, amp-ref.src-power, amp-ref.src-sense)
+  net pwr-ref_pos (amp-ref.sense, dst-ref.pos)
+
+  ; TODO: determine if this is necessary to share common ground
+  net - (src-batt.neg, src-12v0.neg, src-3v3.neg, dst-batt.neg, dst-12v0.neg, dst-5v0.neg, dst-3v3.neg, dst-ref.neg)
+  
+  inst led-3v3 : {chain-power-led-conn(3.3)}
+  net - (src-3v3, led-3v3.src, dst-3v3)
+  
+  val chain-batt = chain-modules([
+    chain-clamp() ; 0
+    chain-ideal-diode() ; 1
+    chain-power-sense(`hall, 12.0, List(50.0)) ; 2
+    chain-power-led-conn(12.0) ; 3
+  ], src-batt, dst-batt)
+  
+  net - (dst-3v3, chain-batt[2].src-3v3)
+  net - (dst-ref, chain-batt[2].src-ref)
+  
+  net batt-v-sense (chain-batt[2].v-sense, signals[0])
+  net batt-i-sense (chain-batt[2].i-sense[0], signals[1])
+
+  val chain-12v0 = chain-modules([
+    chain-fuse(5.0) ; 0
+    chain-clamp() ; 1
+    chain-ideal-diode() ; 2
+    chain-power-sense(`resistive) ; 3
+    chain-power-led-conn(12.0) ; 4
+  ], src-12v0, dst-12v0)
+
+  net pwr-12v0-v-in-sense (chain-12v0[3].iv-sense[0].v-in, signals[2])
+  net pwr-12v0-v-out-sense (chain-12v0[3].iv-sense[0].v-out, signals[3])
+
+  val chain-5v0 = chain-modules([
+    chain-fuse(0.5) ; 0
+    chain-5v0-conv() ; 1
+    chain-v-sense(5.0) ; 2
+    chain-power-led-conn(5.0) ; 3
+  ], dst-12v0, dst-5v0)
+  
+  net pwr-5v0-v-sense (chain-5v0[2].sense, signals[4])
+
+  net - (dst-3v3, chain-5v0[2].src-3v3)
+
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-module t-filter :
   pin in
   pin out
@@ -3358,7 +3790,10 @@ pcb-module broken-out-teensy :
   net t10 (res-p[1].p[0], teensy.gnd[1])
   net t11 (res-p[1].p[1], res-s[1].p[0], teensy.program)
   net PROGRAM (res-s[1].p[1], con-reset-pgm.p[1])
+<<<<<<< HEAD
 
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
 pcb-module reset-button :
   port pow-vio : power
   pin reset
@@ -3370,6 +3805,7 @@ pcb-module reset-button :
   net - (b.p[1], r[0].p[0], r[1].p[0])
   net - (r[1].p[1], c.p[0], reset)
   net - (c.p[1], b.p[0], pow-vio.neg)
+<<<<<<< HEAD
 
 pcb-module stmicro-STM32F103CBT6 :
   port src : power
@@ -3505,3 +3941,5 @@ pcb-module usb-connector :
   supports usb-2 :
     usb-2.dat+ => usb-conn.dat+
     usb-2.dat- => usb-conn.dat-
+=======
+>>>>>>> 91ead84f5ccab218fdb43062b3a1776d4f20afaa
