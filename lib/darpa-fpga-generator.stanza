@@ -161,9 +161,40 @@ pcb-package te-2102772-1-pkg :
 
 ;==== Interfaces ===================================================================
 ; DDR3 SDRAM
+
+pcb-bundle ddr-byte-group :
+  port dqs : diff-pair
+  pin  dm
+  port dq : pin[8]
+
+pcb-bundle ddr-address :
+  port a : pin[15]
+  pin cke
+  port ba : pin[2]
+  pin nRAS
+  pin nCAS
+  pin nWE
+  pin nRESET
+
+pcb-bundle byte-group (dim:Int) :
+  for byte_group in 0 in dim / 8:
+    supports dio :
+      require pin:bar-pin from proc
+
+	# DQS diff-pair
+	#
+  	# DM
+	# DQ i*8, i*8+1
+	# NC
+
+
+
+
 pcb-bundle ddr3-dat (dim:Int) :
   port dm : pin[dim / 8]
+
   port dqs : diff-pair[dim / 8]
+
   port dq : pin[dim] ; data bits
 
 pcb-bundle ddr3-acc :
